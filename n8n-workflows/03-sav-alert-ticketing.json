@@ -1,0 +1,99 @@
+{
+  "id": "shimmer-wf-03",
+  "name": "Shimmer — SAV Alert & Ticketing",
+  "nodes": [
+    {
+      "parameters": { "content": "## 🚨 SAV Alert & Ticketing\n\n**Trigger**: Webhook POST 'sav-alert'\n**Flow**: Réception → Normalize → Create ticket → Build alert → Execute alert", "height": 200, "width": 600 },
+      "id": "note", "name": "Doc", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-100, -200]
+    },
+    {
+      "parameters": { "httpMethod": "POST", "path": "sav-alert", "responseMode": "lastNode", "options": {} },
+      "id": "trigger", "name": "SAV Alert Webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [0, 200], "webhookId": "sav-alert-hook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst i = raw.body || raw;\nreturn [{ json: { store_id: i.store_id||1, customer_id: i.customer_id||i.customerId||null, order_id: i.order_id||i.orderId||null, type: i.type||'GENERAL', severity: i.severity||'normal', description: (i.description||i.message||'').replace(/'/g,\"''\").substring(0,2000), customer_email: i.email||i.customer_email||null } }];"
+      },
+      "id": "normalize", "name": "Normalize", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [260, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO sav_requests (store_id, order_id, customer_id, type, status, description, request_number, created_at) VALUES ({{ $json.store_id }}, {{ $json.order_id || 'NULL' }}, {{ $json.customer_id || 'NULL' }}, '{{ $json.type }}', 'open', '{{ $json.description }}', 'SAV-' || to_char(NOW(), 'YYYYMMDDHH24MISS'), NOW());"
+      },
+      "id": "db-ticket", "name": "Create Ticket", "type": "n8n-nodes-base.postgres", "typeVersion": 2.5, "position": [500, 200],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Normalize').first().json;\nconst severity = d.severity;\nconst store_id = d.store_id;\nconst type = d.type;\nlet alert_sql = '';\nif (severity === 'critical') {\n  alert_sql = `INSERT INTO alerts (store_id, type, severity, message, is_read, is_sent, created_at) VALUES (${store_id}, 'SAV_CRITICAL', 'critical', 'URGENT SAV: ${type}', false, false, NOW());`;\n} else if (severity === 'high') {\n  alert_sql = `INSERT INTO alerts (store_id, type, severity, message, is_read, is_sent, created_at) VALUES (${store_id}, 'SAV_HIGH', 'high', 'SAV High: ${type}', false, false, NOW());`;\n}\nreturn [{ json: { store_id, severity, type, alert_sql, has_alert: alert_sql !== '' } }];"
+      },
+      "id": "build-alert", "name": "Build Alert", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [720, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.alert_sql || 'SELECT 1' }}"
+      },
+      "id": "db-alert", "name": "Execute Alert", "type": "n8n-nodes-base.postgres", "typeVersion": 2.5, "position": [940, 200],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Build Alert').first().json;\nreturn [{ json: { success: true, severity: d.severity, type: d.type, alert_created: d.has_alert } }];"
+      },
+      "id": "resp", "name": "Response", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1160, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 800]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_events (store_id, event_type, payload, created_at) VALUES (1, 'workflow_error', '{\"workflow\": \"sav_alert_ticketing\", \"error\": \"{{ $json.message }}\"}'::jsonb, NOW())"
+      },
+      "id": "log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [260, 800],
+      "credentials": {
+        "postgres": {
+          "id": "cbDqvZTXf93hJtnr",
+          "name": "Shimmer PostgreSQL"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "SAV Alert Webhook": { "main": [[{ "node": "Normalize", "type": "main", "index": 0 }]] },
+    "Normalize": { "main": [[{ "node": "Create Ticket", "type": "main", "index": 0 }]] },
+    "Create Ticket": { "main": [[{ "node": "Build Alert", "type": "main", "index": 0 }]] },
+    "Build Alert": { "main": [[{ "node": "Execute Alert", "type": "main", "index": 0 }]] },
+    "Execute Alert": { "main": [[{ "node": "Response", "type": "main", "index": 0 }]] },
+    "Error Trigger": {
+      "main": [[{ "node": "Log Error", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1", "saveExecutionProgress": true },
+  "active": false,
+  "tags": [{ "name": "shimmer" }, { "name": "sav" }]
+}

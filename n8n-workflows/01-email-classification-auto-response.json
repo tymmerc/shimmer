@@ -1,0 +1,197 @@
+{
+  "id": "shimmer-wf-01",
+  "name": "Shimmer — Email Classification & Auto-Response",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 📧 Email Classification & Auto-Response\n\n**Trigger**: Webhook POST\n**Flow**: Réception → Normalize → Save DB → Classify (Ollama) → Update → Route action\n**DB**: PostgreSQL direct (mail_queue table)\n**LLM**: Ollama local (qwen2.5:3b)",
+        "height": 280,
+        "width": 720
+      },
+      "id": "note-main",
+      "name": "Documentation",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-100, -300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "incoming-email",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "trigger-webhook",
+      "name": "Incoming Email Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 200],
+      "webhookId": "incoming-email-hook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst item = raw.body || raw;\nconst email = {\n  from_addr: item.from || item.sender || item.from_addr || item.email || 'unknown@email.com',\n  subject: (item.subject || item.title || '(sans objet)').replace(/'/g,\"''\"),\n  body: (item.body || item.content || item.text || item.html || '').replace(/'/g,\"''\"),\n  received_at: item.receivedAt || item.date || item.timestamp || new Date().toISOString(),\n  order_id: item.orderId || item.order_id || null,\n  customer_id: item.customerId || item.customer_id || null,\n  store_id: item.store_id || 1\n};\nreturn [{ json: email }];"
+      },
+      "id": "normalize-email",
+      "name": "Normalize Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO mail_queue (store_id, from_addr, subject, body, status, created_at) VALUES ({{ $json.store_id }}, '{{ $json.from_addr }}', '{{ $json.subject }}', '{{ $json.body.substring(0, 5000) }}', 'PENDING', NOW());"
+      },
+      "id": "db-insert-email",
+      "name": "Save to DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [440, 200],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, store_id, from_addr, subject, body FROM mail_queue WHERE from_addr = '{{ $('Normalize Email').first().json.from_addr }}' ORDER BY id DESC LIMIT 1;"
+      },
+      "id": "db-get-email",
+      "name": "Get Email",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [660, 200],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"model\": \"qwen2.5:3b\", \"prompt\": \"Classify this customer email. Respond ONLY with valid JSON.\\n\\nFrom: {{ $json.from_addr }}\\nSubject: {{ $json.subject }}\\nBody: {{ $json.body.substring(0, 1500) }}\\n\\nRespond with JSON:\\n{\\\"category\\\": \\\"ORDER_STATUS\\\" | \\\"RETURN_REQUEST\\\" | \\\"PRODUCT_QUESTION\\\" | \\\"COMPLAINT\\\" | \\\"SHIPPING\\\" | \\\"BILLING\\\" | \\\"SPAM\\\" | \\\"OTHER\\\", \\\"urgency\\\": \\\"low\\\" | \\\"medium\\\" | \\\"high\\\" | \\\"critical\\\", \\\"sentiment\\\": \\\"positive\\\" | \\\"neutral\\\" | \\\"negative\\\" | \\\"angry\\\", \\\"confidence\\\": 0.0-1.0, \\\"summary\\\": \\\"one-line summary in French\\\"}\", \"stream\": false, \"options\": { \"temperature\": 0.1 } }",
+        "options": { "timeout": 30000 }
+      },
+      "id": "ollama-classify",
+      "name": "Ollama Classification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 200],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.response || '';\nlet classification;\ntry {\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  classification = JSON.parse(match ? match[0] : raw);\n} catch(e) {\n  classification = {\n    category: 'OTHER',\n    urgency: 'medium',\n    sentiment: 'neutral',\n    confidence: 0.3,\n    summary: 'Classification echouee'\n  };\n}\nconst validCategories = ['ORDER_STATUS','RETURN_REQUEST','PRODUCT_QUESTION','COMPLAINT','SHIPPING','BILLING','SPAM','OTHER'];\nconst validUrgency = ['low','medium','high','critical'];\nconst validSentiment = ['positive','neutral','negative','angry'];\nif (!validCategories.includes(classification.category)) classification.category = 'OTHER';\nif (!validUrgency.includes(classification.urgency)) classification.urgency = 'medium';\nif (!validSentiment.includes(classification.sentiment)) classification.sentiment = 'neutral';\nclassification.confidence = Math.max(0, Math.min(1, Number(classification.confidence) || 0.5));\nconst emailId = $('Get Email').first().json?.id || null;\nreturn [{ json: { emailId, classification } }];"
+      },
+      "id": "parse-classification",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst c = d.classification;\nconst emailId = d.emailId;\nconst summary = (c.summary||'').replace(/'/g,\"''\").substring(0,200);\nconst from_addr = $('Normalize Email').first().json.from_addr;\n\n// Build update SQL\nlet update_sql = `UPDATE mail_queue SET category = '${c.category}', urgency = '${c.urgency}', sentiment = '${c.sentiment}', confidence = ${c.confidence}, status = 'PENDING', processed_at = NOW() WHERE id = ${emailId};`;\n\n// Build action SQL based on classification\nlet action_sql = '';\nlet route = 'normal';\nif (c.urgency === 'critical') {\n  route = 'critical';\n  action_sql = `INSERT INTO alerts (store_id, type, severity, message, is_read, is_sent, created_at) VALUES (1, 'EMAIL_CRITICAL', 'critical', 'Email critique: ${summary}', false, false, NOW());`;\n} else if (c.category === 'SPAM') {\n  route = 'spam';\n  action_sql = `UPDATE mail_queue SET status = 'REJECTED' WHERE id = ${emailId};`;\n} else if (c.category === 'COMPLAINT') {\n  route = 'complaint';\n  action_sql = `INSERT INTO sav_requests (store_id, type, status, description, request_number, created_at) VALUES (1, 'COMPLAINT', 'open', '${summary}', 'SAV-EMAIL-' || to_char(NOW(), 'YYYYMMDDHH24MISS'), NOW());`;\n}\n\nreturn [{ json: { emailId, classification: c, route, update_sql, action_sql } }];"
+      },
+      "id": "build-route",
+      "name": "Build Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.update_sql }}"
+      },
+      "id": "db-update",
+      "name": "Update Classification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1540, 200],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $('Build Route').first().json.action_sql || 'SELECT 1' }}"
+      },
+      "id": "db-action",
+      "name": "Execute Action",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1760, 200],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Build Route').first().json;\nreturn [{ json: { success: true, emailId: d.emailId, classification: d.classification, route: d.route } }];"
+      },
+      "id": "response",
+      "name": "Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 800]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_events (store_id, event_type, payload, created_at) VALUES (1, 'workflow_error', '{\"workflow\": \"email_classification\", \"error\": \"{{ $json.message }}\"}'::jsonb, NOW())"
+      },
+      "id": "log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [260, 800],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Incoming Email Webhook": { "main": [[{ "node": "Normalize Email", "type": "main", "index": 0 }]] },
+    "Normalize Email": { "main": [[{ "node": "Save to DB", "type": "main", "index": 0 }]] },
+    "Save to DB": { "main": [[{ "node": "Get Email", "type": "main", "index": 0 }]] },
+    "Get Email": { "main": [[{ "node": "Ollama Classification", "type": "main", "index": 0 }]] },
+    "Ollama Classification": { "main": [[{ "node": "Parse Classification", "type": "main", "index": 0 }]] },
+    "Parse Classification": { "main": [[{ "node": "Build Route", "type": "main", "index": 0 }]] },
+    "Build Route": { "main": [[{ "node": "Update Classification", "type": "main", "index": 0 }]] },
+    "Update Classification": { "main": [[{ "node": "Execute Action", "type": "main", "index": 0 }]] },
+    "Execute Action": { "main": [[{ "node": "Response", "type": "main", "index": 0 }]] },
+    "Error Trigger": {
+      "main": [[{ "node": "Log Error", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1", "saveExecutionProgress": true },
+  "active": false,
+  "tags": [{ "name": "shimmer" }, { "name": "email" }, { "name": "sav" }]
+}

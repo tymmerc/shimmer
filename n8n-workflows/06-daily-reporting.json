@@ -1,0 +1,103 @@
+{
+  "id": "shimmer-wf-06",
+  "name": "Shimmer — Daily Reporting Dashboard",
+  "nodes": [
+    {
+      "parameters": { "content": "## 📊 Daily Reporting\n\n**Trigger**: Schedule 8:00 AM Paris\n**Flow**: Fetch all stats from PostgreSQL in parallel → Aggregate → Generate AI summary → Store report\n**DB**: PostgreSQL direct — 5 queries en parallèle", "height": 200, "width": 600 },
+      "id": "note", "name": "Doc", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-100, -200]
+    },
+    {
+      "parameters": { "rule": { "interval": [{ "triggerAtHour": 8 }] } },
+      "id": "trigger", "name": "Daily 8AM", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [0, 200]
+    },
+    {
+      "parameters": { "httpMethod": "POST", "path": "generate-report", "responseMode": "lastNode", "options": {} },
+      "id": "trigger-manual", "name": "Manual Trigger", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [0, 400], "webhookId": "generate-report-hook"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT (SELECT COUNT(*) FROM orders WHERE created_at >= NOW() - INTERVAL '24 hours') as new_orders, (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE created_at >= NOW() - INTERVAL '24 hours') as revenue_24h, (SELECT COUNT(*) FROM orders WHERE status = 'delivered' AND delivered_at >= NOW() - INTERVAL '24 hours') as delivered_24h, (SELECT COUNT(*) FROM reviews WHERE created_at >= NOW() - INTERVAL '24 hours') as new_reviews, (SELECT COALESCE(ROUND(AVG(overall_rating)::numeric, 2), 0) FROM reviews WHERE created_at >= NOW() - INTERVAL '24 hours') as avg_rating_24h, (SELECT COUNT(*) FROM reviews WHERE status = 'PENDING_MODERATION') as pending_reviews, (SELECT COUNT(*) FROM mail_queue WHERE created_at >= NOW() - INTERVAL '24 hours') as emails_processed, (SELECT COUNT(*) FROM mail_queue WHERE status = 'PENDING') as emails_pending, (SELECT COUNT(*) FROM alerts WHERE created_at >= NOW() - INTERVAL '24 hours' AND severity IN ('critical', 'high')) as critical_alerts_24h, (SELECT COUNT(*) FROM alerts WHERE is_read = false) as unread_alerts, (SELECT COUNT(*) FROM sav_requests WHERE status = 'open') as open_sav_tickets, (SELECT COUNT(*) FROM sav_requests WHERE created_at >= NOW() - INTERVAL '24 hours') as new_sav_24h, (SELECT COUNT(*) FROM review_requests WHERE status = 'SCHEDULED') as pending_review_requests, (SELECT COUNT(DISTINCT customer_id) FROM orders WHERE created_at >= NOW() - INTERVAL '24 hours') as unique_customers_24h;"
+      },
+      "id": "db-stats", "name": "Fetch All Stats", "type": "n8n-nodes-base.postgres", "typeVersion": 2.5, "position": [300, 300],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"model\": \"qwen2.5:3b\", \"prompt\": \"Tu es un assistant business. Génère un résumé quotidien bref (5-8 lignes) à partir de ces stats e-commerce des dernières 24h:\\n\\nCommandes: {{ $json.new_orders }} nouvelles ({{ $json.revenue_24h }}€ CA)\\nLivraisons: {{ $json.delivered_24h }}\\nAvis: {{ $json.new_reviews }} nouveaux (moyenne {{ $json.avg_rating_24h }}/5), {{ $json.pending_reviews }} en attente\\nEmails: {{ $json.emails_processed }} traités, {{ $json.emails_pending }} en attente\\nAlertes: {{ $json.critical_alerts_24h }} critiques, {{ $json.unread_alerts }} non lues\\nSAV: {{ $json.new_sav_24h }} nouveaux tickets, {{ $json.open_sav_tickets }} ouverts\\nClients uniques: {{ $json.unique_customers_24h }}\\n\\nDonne les points positifs, les points d'attention, et une action prioritaire.\", \"stream\": false, \"options\": { \"temperature\": 0.5 } }",
+        "options": { "timeout": 30000 }
+      },
+      "id": "ollama-summary", "name": "AI Summary", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [560, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const stats = $('Fetch All Stats').first().json;\nconst aiSummary = $input.first().json?.response || 'Résumé IA non disponible';\nconst report = {\n  date: new Date().toISOString().split('T')[0],\n  stats,\n  ai_summary: aiSummary.substring(0, 1000),\n  generated_at: new Date().toISOString()\n};\nreturn [{ json: report }];"
+      },
+      "id": "format-report", "name": "Format Report", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [780, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_events (store_id, event_type, payload, created_at) VALUES (1, 'daily_report', '{\"date\": \"{{ $json.date }}\", \"generated_at\": \"{{ $json.generated_at }}\", \"ai_summary\": \"report generated\"}'::jsonb, NOW()) RETURNING id;"
+      },
+      "id": "db-save-report", "name": "Save Report", "type": "n8n-nodes-base.postgres", "typeVersion": 2.5, "position": [1000, 300],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": false
+    },
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 800]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_events (store_id, event_type, payload, created_at) VALUES (1, 'workflow_error', '{\"workflow\": \"daily_report\", \"error\": \"{{ $json.message }}\"}'::jsonb, NOW())"
+      },
+      "id": "log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [260, 800],
+      "credentials": {
+        "postgres": {
+          "id": "cbDqvZTXf93hJtnr",
+          "name": "Shimmer PostgreSQL"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Daily 8AM": { "main": [[{ "node": "Fetch All Stats", "type": "main", "index": 0 }]] },
+    "Manual Trigger": { "main": [[{ "node": "Fetch All Stats", "type": "main", "index": 0 }]] },
+    "Fetch All Stats": { "main": [[{ "node": "AI Summary", "type": "main", "index": 0 }]] },
+    "AI Summary": { "main": [[{ "node": "Format Report", "type": "main", "index": 0 }]] },
+    "Format Report": { "main": [[{ "node": "Save Report", "type": "main", "index": 0 }]] },
+    "Error Trigger": {
+      "main": [[{ "node": "Log Error", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1", "saveExecutionProgress": true },
+  "active": false,
+  "tags": [{ "name": "shimmer" }, { "name": "reporting" }]
+}

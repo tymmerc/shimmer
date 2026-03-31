@@ -1,0 +1,11 @@
+export { BM25Index, type BM25Hit } from './bm25.js';
+export { embed, healthCheck } from './embeddings.js';
+export { VectorIndex, computeChecksum } from './vector-index.js';
+export { detectSearchType, fuzzyScore } from './search-types.js';
+export { loadTaxonomy, matchUsages, getByCode, getChildren, invalidateTaxonomyCache } from './taxonomy.js';
+export { detectBudget, isInBudget, resolveQualitativeBudget } from './budget.js';
+export { applyDeductions, selectQuestions, computeQualificationScore } from './qualification.js';
+export { scoreProducts } from './scoring.js';
+export { ConversationStateMachine, detectSignal } from './state-machine.js';
+export { computeDistance, findSimilar } from './similarity.js';
+export { search, initializeIndexes, isIndexReady } from './hybrid-search.js';

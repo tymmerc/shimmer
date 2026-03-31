@@ -1,0 +1,34 @@
+{
+  "name": "shimmer",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -F api dev",
+    "build": "pnpm -r build",
+    "lint": "eslint . --ext .ts",
+    "test": "vitest",
+    "db:migrate": "pnpm -F @shimmer/core prisma migrate dev",
+    "db:seed": "pnpm -F @shimmer/core prisma db seed",
+    "db:studio": "pnpm -F @shimmer/core prisma studio",
+    "workers": "tsx apps/api/src/workers/worker-runner.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^2.0.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "hnswlib-node",
+      "esbuild",
+      "msgpackr-extract"
+    ]
+  }
+}

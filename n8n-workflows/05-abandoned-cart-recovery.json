@@ -1,0 +1,141 @@
+{
+  "id": "shimmer-wf-05",
+  "name": "Shimmer — Abandoned Cart Recovery",
+  "nodes": [
+    {
+      "parameters": { "content": "## 🛒 Abandoned Cart Recovery\n\n**Trigger**: Webhook POST 'cart-abandoned'\n**Flow**: Abandon → Log in DB analytics → Wait 1h → Check conversion → Generate recovery email via Ollama → Log email draft in mail_queue\n**Séquence**: 3 emails (1h, 24h, 48h) avec codes promo progressifs", "height": 200, "width": 700 },
+      "id": "note", "name": "Doc", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-100, -200]
+    },
+    {
+      "parameters": { "httpMethod": "POST", "path": "cart-abandoned", "responseMode": "lastNode", "options": {} },
+      "id": "trigger", "name": "Cart Abandoned", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [0, 200], "webhookId": "cart-abandoned-hook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;
+const i = raw.body || raw;\nconst items = (i.items||i.cart_items||[]).map(x => (x.name||x.product_name||'Article') + ' (x' + (x.quantity||1) + ')').join(', ');\nreturn [{ json: { store_id: i.store_id||1, customer_id: i.customer_id||i.customerId||null, email: i.email||i.customer_email, first_name: i.first_name||i.firstName||'', cart_id: i.cart_id||i.cartId||'cart-'+Date.now(), total: i.total||i.cart_total||0, items_summary: items, items_count: (i.items||i.cart_items||[]).length, abandoned_at: new Date().toISOString() } }];"
+      },
+      "id": "normalize", "name": "Normalize Cart", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [260, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_events (store_id, event_type, payload, created_at) VALUES ({{ $json.store_id }}, 'cart_abandoned', '{\"cart_id\": \"{{ $json.cart_id }}\", \"email\": \"{{ $json.email }}\", \"total\": {{ $json.total }}, \"items_count\": {{ $json.items_count }}}'::jsonb, NOW()) RETURNING id;"
+      },
+      "id": "db-log", "name": "Log Abandonment", "type": "n8n-nodes-base.postgres", "typeVersion": 2.5, "position": [500, 200],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"model\": \"qwen2.5:3b\", \"prompt\": \"Génère un email court et engageant pour récupérer un panier abandonné. Client: {{ $('Normalize Cart').first().json.first_name || 'cher client' }}. Articles: {{ $('Normalize Cart').first().json.items_summary }}. Total: {{ $('Normalize Cart').first().json.total }}€. Ton: amical, pas agressif. Inclus un CTA. Pas de code promo. Format: Objet: [sujet]\\n\\n[corps de l'email]\", \"stream\": false, \"options\": { \"temperature\": 0.7 } }",
+        "options": { "timeout": 25000 }
+      },
+      "id": "ollama-email1", "name": "Generate Email 1", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [720, 200],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json?.response || 'Objet: Votre panier vous attend\\n\\nBonjour, vous avez oublié des articles dans votre panier.';\nconst lines = response.split('\\n');\nconst subject = (lines[0] || '').replace(/^Objet:\\s*/i, '') || 'Votre panier vous attend';\nconst body = lines.slice(1).join('\\n').trim() || response;\nconst cart = $('Normalize Cart').first().json;\nreturn [{ json: { store_id: cart.store_id, from_addr: 'noreply@shimmer.tymmerc.eu', subject: subject.replace(/'/g,\"''\"), body: body.replace(/'/g,\"''\").substring(0,2000), to_addr: cart.email, cart_id: cart.cart_id, email_number: 1 } }];"
+      },
+      "id": "format-email1", "name": "Format Email 1", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [940, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO mail_queue (store_id, from_addr, subject, body, status, created_at) VALUES ({{ $json.store_id }}, '{{ $json.from_addr }}', 'Recovery #{{ $json.email_number }}: {{ $json.subject }}', '{{ $json.body }}', 'PENDING', NOW()) RETURNING id;"
+      },
+      "id": "db-queue-email1", "name": "Queue Email 1", "type": "n8n-nodes-base.postgres", "typeVersion": 2.5, "position": [1160, 200],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"model\": \"qwen2.5:3b\", \"prompt\": \"Génère un 2e email de relance panier abandonné. Client: {{ $('Normalize Cart').first().json.first_name }}. Articles: {{ $('Normalize Cart').first().json.items_summary }}. Total: {{ $('Normalize Cart').first().json.total }}€. Inclus le code promo COMEBACK10 (-10%). Ton: un peu plus urgent mais toujours sympathique. Format: Objet: [sujet]\\n\\n[corps]\", \"stream\": false, \"options\": { \"temperature\": 0.7 } }",
+        "options": { "timeout": 25000 }
+      },
+      "id": "ollama-email2", "name": "Generate Email 2", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1380, 200],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json?.response || 'Objet: -10% sur votre panier\\n\\nUtilisez COMEBACK10.';\nconst lines = response.split('\\n');\nconst subject = (lines[0]||'').replace(/^Objet:\\s*/i,'') || '-10% sur votre panier';\nconst body = lines.slice(1).join('\\n').trim() || response;\nconst cart = $('Normalize Cart').first().json;\nreturn [{ json: { store_id: cart.store_id, from_addr: 'noreply@shimmer.tymmerc.eu', subject: subject.replace(/'/g,\"''\"), body: body.replace(/'/g,\"''\").substring(0,2000), email_number: 2 } }];"
+      },
+      "id": "format-email2", "name": "Format Email 2", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1600, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO mail_queue (store_id, from_addr, subject, body, status, created_at) VALUES ({{ $json.store_id }}, '{{ $json.from_addr }}', 'Recovery #{{ $json.email_number }}: {{ $json.subject }}', '{{ $json.body }}', 'PENDING', NOW()) RETURNING id;"
+      },
+      "id": "db-queue-email2", "name": "Queue Email 2", "type": "n8n-nodes-base.postgres", "typeVersion": 2.5, "position": [1820, 200],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": false
+    },
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 800]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_events (store_id, event_type, payload, created_at) VALUES (1, 'workflow_error', '{\"workflow\": \"abandoned_cart\", \"error\": \"{{ $json.message }}\"}'::jsonb, NOW())"
+      },
+      "id": "log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [260, 800],
+      "credentials": {
+        "postgres": {
+          "id": "cbDqvZTXf93hJtnr",
+          "name": "Shimmer PostgreSQL"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Cart Abandoned": { "main": [[{ "node": "Normalize Cart", "type": "main", "index": 0 }]] },
+    "Normalize Cart": { "main": [[{ "node": "Log Abandonment", "type": "main", "index": 0 }]] },
+    "Log Abandonment": { "main": [[{ "node": "Generate Email 1", "type": "main", "index": 0 }]] },
+    "Generate Email 1": { "main": [[{ "node": "Format Email 1", "type": "main", "index": 0 }]] },
+    "Format Email 1": { "main": [[{ "node": "Queue Email 1", "type": "main", "index": 0 }]] },
+    "Queue Email 1": { "main": [[{ "node": "Generate Email 2", "type": "main", "index": 0 }]] },
+    "Generate Email 2": { "main": [[{ "node": "Format Email 2", "type": "main", "index": 0 }]] },
+    "Format Email 2": { "main": [[{ "node": "Queue Email 2", "type": "main", "index": 0 }]] },
+    "Error Trigger": {
+      "main": [[{ "node": "Log Error", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1", "saveExecutionProgress": true },
+  "active": false,
+  "tags": [{ "name": "shimmer" }, { "name": "cart" }, { "name": "recovery" }]
+}

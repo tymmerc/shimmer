@@ -1,0 +1,1331 @@
+/**
+ * Search Assist — Vendeur IA conversationnel.
+ * Implémente les 3 types de recherche :
+ *   TYPE 1 : Recherche produit exact ("Dyson V15")
+ *   TYPE 2 : Recherche par besoin fonctionnel ("aspirateur poils de chat")
+ *   HYBRIDE : Marque + besoin ("Dyson pour poils de chat")
+ * + Gestion des objections et retours en arrière (Annexe B)
+ */
+
+import { Router, type Request, type Response, type NextFunction } from 'express';
+import { z } from 'zod';
+import { ClaudeClient, getPrisma, logger } from '@shimmer/core';
+import type { ClaudeMessage, ScoredProduct } from '@shimmer/core';
+import { search, applyDeductions, detectBudget } from '@shimmer/smart-search';
+import { loadStoreUniverses } from './universe-gen.js';
+
+// ── TYPE 1: Exact product matching ──────────────
+
+interface ExactMatch {
+  type: 'exact';
+  product: any;
+  confidence: number; // 0-1
+}
+
+async function detectExactProduct(query: string, storeId: number): Promise<ExactMatch | null> {
+  const q = query.toLowerCase().trim();
+  if (q.length < 3) return null;
+
+  const prisma = getPrisma();
+
+  // 1. Try exact name match (case-insensitive)
+  const exact = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT *, 1.0 as match_score FROM products
+     WHERE store_id = $1 AND is_active = true
+     AND (LOWER(name) = $2 OR LOWER(sku) = $2)
+     LIMIT 1`,
+    storeId, q,
+  );
+  if (exact.length > 0) return { type: 'exact', product: exact[0], confidence: 1.0 };
+
+  // 2. Try fuzzy name match (product name contains query or query contains product name)
+  const fuzzy = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT *,
+       CASE
+         WHEN LOWER(name) LIKE '%' || $2 || '%' THEN 0.9
+         WHEN LOWER(brand) || ' ' || LOWER(name) LIKE '%' || $2 || '%' THEN 0.85
+         ELSE 0.7
+       END as match_score
+     FROM products
+     WHERE store_id = $1 AND is_active = true
+     AND (
+       LOWER(name) LIKE '%' || $2 || '%'
+       OR LOWER(brand) || ' ' || LOWER(name) LIKE '%' || $2 || '%'
+       OR $2 LIKE '%' || LOWER(name) || '%'
+     )
+     ORDER BY match_score DESC
+     LIMIT 3`,
+    storeId, q,
+  );
+
+  // Only return exact match if the query is specific enough (not a generic category term)
+  // Generic terms like "eye-liner", "shampoing", "crème" should qualify, not exact-match
+  const isGenericTerm = q.split(/\s+/).length <= 2 && fuzzy.length >= 1;
+  const topScore = fuzzy.length > 0 ? Number(fuzzy[0].match_score) : 0;
+  if (fuzzy.length === 1 && topScore >= 0.9 && !isGenericTerm) {
+    return { type: 'exact', product: fuzzy[0], confidence: topScore };
+  }
+  // Exact name match only (score 1.0 from step 1) for very short/generic queries
+  if (fuzzy.length === 1 && topScore >= 0.9 && isGenericTerm) {
+    // Check if the match is on the FULL name (not just a substring)
+    const productName = String(fuzzy[0].name).toLowerCase();
+    if (productName === q || productName.startsWith(q + ' ')) {
+      return { type: 'exact', product: fuzzy[0], confidence: topScore };
+    }
+    // Otherwise, let it go through qualification
+    return null;
+  }
+
+  // 3. Try brand + model pattern: "Dyson V15", "Bosch PSB", "Makita 18V"
+  const words = q.split(/\s+/);
+  if (words.length >= 2) {
+    const brandMatch = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT *, 0.8 as match_score FROM products
+       WHERE store_id = $1 AND is_active = true
+       AND LOWER(brand) = $2
+       AND LOWER(name) LIKE '%' || $3 || '%'
+       ORDER BY price ASC LIMIT 3`,
+      storeId, words[0], words.slice(1).join(' '),
+    );
+    if (brandMatch.length === 1) {
+      return { type: 'exact', product: brandMatch[0], confidence: 0.8 };
+    }
+  }
+
+  return null;
+}
+
+// ── HYBRID: Detect brand + need pattern ──────────────
+
+interface HybridMatch {
+  type: 'hybrid';
+  brand: string;
+  needQuery: string; // The need part without brand
+}
+
+async function detectHybrid(query: string, storeId: number): Promise<HybridMatch | null> {
+  const q = query.toLowerCase().trim();
+
+  const prisma = getPrisma();
+  // Get all active brands for this store
+  const brands = await prisma.$queryRawUnsafe<{ brand: string }[]>(
+    `SELECT DISTINCT LOWER(brand) as brand FROM products WHERE store_id = $1 AND is_active = true AND brand IS NOT NULL`,
+    storeId,
+  );
+
+  // Sort brands longest first (avoid "opi" matching before "opium")
+  const sortedBrands = brands.sort((a, b) => b.brand.length - a.brand.length);
+
+  for (const { brand } of sortedBrands) {
+    // Short brands (< 4 chars) must match as whole word to avoid "opi" in "copine"
+    const isShort = brand.length < 4;
+    const regex = isShort
+      ? new RegExp(`\\b${brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+      : new RegExp(brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+    if (regex.test(q)) {
+      const needPart = q.replace(regex, '').replace(/\s+/g, ' ').trim();
+      if (needPart.length >= 3) {
+        return { type: 'hybrid', brand, needQuery: needPart };
+      }
+    }
+  }
+
+  return null;
+}
+
+// ── Objection detection ──────────────
+
+type Objection =
+  | { type: 'price'; direction: 'cheaper' | 'pricier' }
+  | { type: 'change_criteria'; criterion: string; newValue: string }
+  | { type: 'backtrack'; signal: string }
+  | null;
+
+function detectObjection(message: string, known: Record<string, string>): Objection {
+  const m = message.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  // Price objections — cheaper
+  if (/trop cher|trop couteux|moins cher|plus abordable|budget serre|hors budget|c.?est trop|cher|reduc|promo|moins de \d/.test(m)) {
+    return { type: 'price', direction: 'cheaper' };
+  }
+
+  // Price objections — pricier
+  if (/plus haut de gamme|meilleure qualite|plus performant|mets plus cher|si je mets plus|premium|haut de gamme|investir/.test(m)) {
+    return { type: 'price', direction: 'pricier' };
+  }
+
+  // Rejection — client doesn't want this product
+  if (/autre chose|pas celui|pas celui.?la|non merci|pas interesse|nul|bof|pas convaincu|un autre|t.?as pas (mieux|autre)/.test(m)) {
+    return { type: 'backtrack', signal: 'rejected_product' };
+  }
+
+  // Backtracking: "en fait", "finalement", "plutôt", "j'ai changé d'avis"
+  if (/en fait|finalement|j.?ai change|plutot|au lieu de|prefere/.test(m)) {
+    if (/sans fil|batterie/.test(m) && known['SANS_FIL'] !== 'true') {
+      return { type: 'change_criteria', criterion: 'SANS_FIL', newValue: 'true' };
+    }
+    if (/filaire|avec fil|secteur/.test(m) && known['SANS_FIL'] !== 'false') {
+      return { type: 'change_criteria', criterion: 'SANS_FIL', newValue: 'false' };
+    }
+    if (/occasion|temps en temps/.test(m) && known['USAGE'] !== 'Occasionnel') {
+      return { type: 'change_criteria', criterion: 'USAGE', newValue: 'Occasionnel' };
+    }
+    if (/regulier|souvent/.test(m) && known['USAGE'] !== 'Régulier') {
+      return { type: 'change_criteria', criterion: 'USAGE', newValue: 'Régulier' };
+    }
+    return { type: 'backtrack', signal: m.slice(0, 50) };
+  }
+
+  // Positive close
+  if (/merci|parfait|je prends|ok|c.?est bon|genial|super|top/.test(m)) {
+    return null; // Not an objection, positive signal
+  }
+
+  return null;
+}
+
+// ── Qualification criteria per universe (Annexe C) ──────────────
+
+interface QualCriterion {
+  id: string;
+  label: string;
+  weight: number;
+  required: boolean;
+  type: 'closed' | 'open' | 'deduced';
+  values?: string[];
+  question: string;
+  fallback: string;
+}
+
+interface UniverseConfig {
+  id: string;
+  label: string;
+  keywords: string[];
+  scoreProfile: { usage: number; criteria: number; history: number };
+  criteria: QualCriterion[];
+  deductions: { patterns: string[]; criterion: string; value: string }[];
+}
+
+const UNIVERSES: UniverseConfig[] = [
+  {
+    id: 'BRICOLAGE',
+    label: 'Bricolage / Perceuse',
+    keywords: ['perceuse', 'percer', 'visser', 'visseuse', 'drill', 'mur', 'beton', 'béton', 'brique', 'placo', 'cheville', 'étagère', 'etagere', 'fixer', 'accrocher', 'trou', 'bricolage', 'meuble', 'ikea', 'monter', 'assembler'],
+    scoreProfile: { usage: 30, criteria: 55, history: 15 },
+    criteria: [
+      { id: 'PERC_MATERIAU', label: 'Matériau à percer', weight: 30, required: true, type: 'closed', values: ['Bois', 'Métal', 'Béton', 'Brique', 'Placo', 'Mixte'], question: 'Tu veux percer dans quoi ? Béton, brique, placo, bois ?', fallback: 'Mixte' },
+      { id: 'PERC_FREQUENCE', label: 'Fréquence', weight: 20, required: false, type: 'closed', values: ['Occasionnel', 'Régulier', 'Intensif'], question: "C'est pour un usage occasionnel ou régulier ?", fallback: 'Occasionnel' },
+      { id: 'PERC_ALIM', label: 'Alimentation', weight: 15, required: false, type: 'closed', values: ['Filaire', 'Batterie', 'Peu importe'], question: 'Filaire ou sans fil ?', fallback: 'Peu importe' },
+      { id: 'PERC_VISS', label: 'Vissage aussi', weight: 10, required: false, type: 'deduced', question: '', fallback: 'Non' },
+      { id: 'PERC_BUDGET', label: 'Budget', weight: 15, required: false, type: 'open', question: '', fallback: 'Milieu de gamme' },
+      { id: 'PERC_NIVEAU', label: 'Niveau', weight: 10, required: false, type: 'deduced', question: '', fallback: 'Débutant' },
+    ],
+    deductions: [
+      { patterns: ['béton', 'beton', 'mur porteur'], criterion: 'PERC_MATERIAU', value: 'Béton (percussion obligatoire)' },
+      { patterns: ['placo', 'cloison', 'plaque'], criterion: 'PERC_MATERIAU', value: 'Placo (pas de percussion)' },
+      { patterns: ['bois', 'planche', 'parquet'], criterion: 'PERC_MATERIAU', value: 'Bois' },
+      { patterns: ['meuble', 'ikea', 'monter', 'assembler'], criterion: 'PERC_VISS', value: 'Oui' },
+      { patterns: ['renovation', 'chantier', 'gros travaux'], criterion: 'PERC_FREQUENCE', value: 'Intensif' },
+      { patterns: ['première', 'premier', 'debuter', 'débutant', 'jamais'], criterion: 'PERC_NIVEAU', value: 'Débutant' },
+      { patterns: ['pro', 'professionnel', 'sds', 'mandrin'], criterion: 'PERC_NIVEAU', value: 'Expert' },
+      { patterns: ['sans fil', 'batterie', 'cordless'], criterion: 'PERC_ALIM', value: 'Batterie' },
+      { patterns: ['filaire', 'secteur'], criterion: 'PERC_ALIM', value: 'Filaire' },
+      { patterns: ['étagère', 'etagere', 'fixer', 'accrocher', 'tableau'], criterion: 'PERC_FREQUENCE', value: 'Occasionnel' },
+    ],
+  },
+  {
+    id: 'ASPIRATEUR',
+    label: 'Aspirateur',
+    keywords: ['aspirateur', 'aspirer', 'poils', 'poussiere', 'poussière', 'nettoyer', 'sol', 'tapis', 'moquette', 'parquet', 'chat', 'chien', 'animal', 'robot', 'roomba', 'dyson'],
+    scoreProfile: { usage: 60, criteria: 30, history: 10 },
+    criteria: [
+      { id: 'ASP_USAGE', label: 'Usage principal', weight: 25, required: false, type: 'deduced', question: '', fallback: 'Polyvalent' },
+      { id: 'ASP_SOL', label: 'Type de sol', weight: 20, required: false, type: 'closed', values: ['Parquet', 'Carrelage', 'Tapis/moquette', 'Mixte'], question: 'Quel type de sol principalement ?', fallback: 'Tous sols' },
+      { id: 'ASP_ANIMAUX', label: 'Animaux', weight: 15, required: false, type: 'closed', values: ['Oui (chat)', 'Oui (chien)', 'Oui (autre)', 'Non'], question: 'Tu as des animaux ?', fallback: 'Non' },
+      { id: 'ASP_SURFACE', label: 'Surface', weight: 15, required: false, type: 'open', question: 'Pour quelle surface à peu près ?', fallback: 'Moyen (~60m²)' },
+      { id: 'ASP_FIL', label: 'Avec/sans fil', weight: 10, required: false, type: 'closed', values: ['Filaire', 'Sans fil', 'Peu importe'], question: 'Avec ou sans fil ?', fallback: 'Sans fil' },
+      { id: 'ASP_BUDGET', label: 'Budget', weight: 15, required: false, type: 'open', question: '', fallback: 'Milieu de gamme' },
+    ],
+    deductions: [
+      { patterns: ['appartement', 'appart', 'studio', 'f1', 'f2', 'f3'], criterion: 'ASP_SURFACE', value: 'Petit (≤60m²)' },
+      { patterns: ['maison', 'villa', 'pavillon'], criterion: 'ASP_SURFACE', value: 'Grand (>80m²)' },
+      { patterns: ['chat', 'félin'], criterion: 'ASP_ANIMAUX', value: 'Oui (chat)' },
+      { patterns: ['chien', 'labrador', 'golden', 'caniche', 'berger'], criterion: 'ASP_ANIMAUX', value: 'Oui (chien)' },
+      { patterns: ['poils', 'poil', 'animal', 'animaux'], criterion: 'ASP_USAGE', value: 'Poils animaux' },
+      { patterns: ['parquet', 'bois'], criterion: 'ASP_SOL', value: 'Parquet' },
+      { patterns: ['carrelage', 'carreaux', 'dalle'], criterion: 'ASP_SOL', value: 'Carrelage' },
+      { patterns: ['tapis', 'moquette'], criterion: 'ASP_SOL', value: 'Tapis/moquette' },
+      { patterns: ['sans fil', 'batterie', 'cordless'], criterion: 'ASP_FIL', value: 'Sans fil' },
+      { patterns: ['voiture', 'auto', 'véhicule'], criterion: 'ASP_USAGE', value: 'Voiture' },
+      { patterns: ['allergi'], criterion: 'ASP_USAGE', value: 'Allergènes (HEPA)' },
+    ],
+  },
+  {
+    id: 'CUISINE',
+    label: 'Cuisine / Electroménager',
+    keywords: ['cuisine', 'cuire', 'mixer', 'blender', 'robot', 'four', 'casserole', 'poele', 'couteau', 'cuisson', 'patisserie', 'gateau', 'smoothie', 'jus', 'café', 'cafetière', 'bouilloire', 'grille-pain'],
+    scoreProfile: { usage: 60, criteria: 30, history: 10 },
+    criteria: [
+      { id: 'CUI_USAGE', label: 'Ce que tu veux faire', weight: 30, required: false, type: 'deduced', question: '', fallback: 'Polyvalent' },
+      { id: 'CUI_FREQUENCE', label: 'Fréquence', weight: 20, required: false, type: 'closed', values: ['Occasionnel', 'Quotidien', 'Intensif'], question: "C'est pour un usage quotidien ou occasionnel ?", fallback: 'Quotidien' },
+      { id: 'CUI_NB', label: 'Nombre de personnes', weight: 15, required: false, type: 'open', question: 'Pour combien de personnes ?', fallback: '2-4 personnes' },
+      { id: 'CUI_CONTRAINTE', label: 'Contraintes', weight: 15, required: false, type: 'open', question: '', fallback: 'Aucune' },
+      { id: 'CUI_BUDGET', label: 'Budget', weight: 20, required: false, type: 'open', question: '', fallback: 'Milieu de gamme' },
+    ],
+    deductions: [
+      { patterns: ['smoothie', 'jus', 'soupe'], criterion: 'CUI_USAGE', value: 'Mixer/blender' },
+      { patterns: ['gâteau', 'gateau', 'pâtisserie', 'patisserie'], criterion: 'CUI_USAGE', value: 'Pâtisserie' },
+      { patterns: ['café', 'espresso', 'cappuccino'], criterion: 'CUI_USAGE', value: 'Café' },
+    ],
+  },
+  {
+    id: 'JARDIN',
+    label: 'Jardin / Extérieur',
+    keywords: ['jardin', 'pelouse', 'tondre', 'tondeuse', 'tailler', 'taille-haie', 'arroser', 'arrosage', 'terrasse', 'exterieur', 'extérieur', 'plante', 'herbe', 'gazon'],
+    scoreProfile: { usage: 55, criteria: 35, history: 10 },
+    criteria: [
+      { id: 'JAR_USAGE', label: 'Ce que tu veux faire', weight: 30, required: false, type: 'deduced', question: '', fallback: 'Entretien général' },
+      { id: 'JAR_SURFACE', label: 'Surface', weight: 25, required: false, type: 'open', question: 'Quelle surface de jardin à peu près ?', fallback: 'Moyen' },
+      { id: 'JAR_ALIM', label: 'Alimentation', weight: 15, required: false, type: 'closed', values: ['Électrique', 'Thermique', 'Batterie', 'Peu importe'], question: 'Électrique, thermique ou batterie ?', fallback: 'Peu importe' },
+      { id: 'JAR_BUDGET', label: 'Budget', weight: 15, required: false, type: 'open', question: '', fallback: 'Milieu de gamme' },
+      { id: 'JAR_NIVEAU', label: 'Niveau', weight: 15, required: false, type: 'deduced', question: '', fallback: 'Débutant' },
+    ],
+    deductions: [
+      { patterns: ['tondre', 'pelouse', 'gazon'], criterion: 'JAR_USAGE', value: 'Tonte pelouse' },
+      { patterns: ['tailler', 'haie', 'arbuste'], criterion: 'JAR_USAGE', value: 'Taille haie' },
+      { patterns: ['petit jardin', 'terrasse'], criterion: 'JAR_SURFACE', value: 'Petit (<100m²)' },
+      { patterns: ['grand jardin', 'terrain'], criterion: 'JAR_SURFACE', value: 'Grand (>500m²)' },
+    ],
+  },
+];
+
+// ── Load universes: DB first, fallback to hardcoded ──────────────
+
+// Cache per store (5 min TTL)
+const universeCache = new Map<number, { data: UniverseConfig[]; ts: number }>();
+const CACHE_TTL = 5 * 60 * 1000;
+
+async function getUniverses(storeId: number): Promise<UniverseConfig[]> {
+  const cached = universeCache.get(storeId);
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
+
+  try {
+    const dbUniverses = await loadStoreUniverses(storeId);
+    if (dbUniverses.length > 0) {
+      // Map DB format to UniverseConfig
+      const configs: UniverseConfig[] = dbUniverses.map(u => ({
+        id: u.id,
+        label: u.label,
+        keywords: u.keywords,
+        scoreProfile: u.scoreProfile,
+        criteria: u.criteria.map(c => ({
+          id: c.id,
+          label: c.label,
+          weight: c.weight,
+          required: c.required,
+          type: c.type,
+          values: c.values,
+          question: c.question,
+          fallback: c.fallback,
+        })),
+        deductions: u.deductions.map(d => ({
+          patterns: d.patterns,
+          criterion: d.criterion,
+          value: d.value,
+        })),
+      }));
+      universeCache.set(storeId, { data: configs, ts: Date.now() });
+      logger.info({ storeId, count: configs.length, source: 'db' }, 'universes.loaded');
+      return configs;
+    }
+  } catch (err) {
+    logger.warn({ err, storeId }, 'universes.db.load.failed');
+  }
+
+  // Fallback to hardcoded
+  universeCache.set(storeId, { data: UNIVERSES, ts: Date.now() });
+  return UNIVERSES;
+}
+
+// ── Detect universe from query ──────────────
+
+function detectUniverse(query: string, universes: UniverseConfig[]): UniverseConfig | null {
+  const q = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const scores: { u: UniverseConfig; score: number }[] = [];
+
+  for (const u of universes) {
+    let score = 0;
+    const kwArr = Array.isArray(u.keywords) ? u.keywords : [];
+    for (const kw of kwArr) {
+      if (typeof kw !== 'string') continue;
+      const nkw = kw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (nkw.length < 2) continue;
+      // Longer keyword matches are worth more (avoid "opi" matching in "copine")
+      if (q.includes(nkw)) {
+        score += nkw.length >= 5 ? 2 : 1;
+      }
+    }
+    if (score > 0) scores.push({ u, score });
+  }
+
+  if (scores.length === 0) return null;
+
+  scores.sort((a, b) => b.score - a.score);
+
+  // If top 2 scores are tied or very close, the query is ambiguous (e.g. brand name "Dior")
+  // In that case, prefer PARFUM for beauty brands, or return the one with most products
+  if (scores.length >= 2 && scores[1]!.score >= scores[0]!.score * 0.8) {
+    // Ambiguous - prefer PARFUM > MAQUILLAGE > SOIN_VISAGE > others (natural priority for beauty)
+    const priority = ['PARFUM', 'PARFUMERIE', 'MAQUILLAGE', 'SOIN_VISAGE', 'ELECTROMENAGER', 'BRICOLAGE', 'JARDIN'];
+    const tied = scores.filter(s => s.score >= scores[0]!.score * 0.8);
+    for (const pref of priority) {
+      const match = tied.find(s => s.u.id === pref);
+      if (match) return match.u;
+    }
+  }
+
+  return scores[0]!.u;
+}
+
+// ── Universal language patterns (work across all universes) ──────────────
+
+const UNIVERSAL_PATTERNS: { patterns: string[]; criterion: string; value: string }[] = [
+  // Usage frequency
+  { patterns: ['occasionnel', 'temps en temps', 'rarement', 'une fois'], criterion: 'USAGE', value: 'Occasionnel' },
+  { patterns: ['regulier', 'souvent', 'tous les jours', 'quotidien', 'frequent'], criterion: 'USAGE', value: 'Régulier' },
+  { patterns: ['professionnel', 'chantier', 'metier', 'intensif', 'pro'], criterion: 'USAGE', value: 'Professionnel' },
+  // Sans fil / filaire — "peu importe" skips the criterion (marks it as answered)
+  { patterns: ['sans fil', 'batterie', 'cordless', 'portable', 'autonomie'], criterion: 'SANS_FIL', value: 'true' },
+  { patterns: ['filaire', 'secteur', 'cable', 'branche'], criterion: 'SANS_FIL', value: 'false' },
+  // "peu importe" is handled contextually above, not as a fixed pattern
+  // Budget
+  { patterns: ['pas cher', 'pas trop cher', 'economique', 'petit budget', 'entree de gamme', 'abordable', 'moins de 100', 'serr'], criterion: 'BUDGET', value: 'Entrée de gamme' },
+  { patterns: ['milieu de gamme', 'correct', 'raisonnable', 'bon rapport', 'moyen', '200 euros', '300 euros'], criterion: 'BUDGET', value: 'Milieu de gamme' },
+  { patterns: ['haut de gamme', 'premium', 'meilleur', 'top', 'qualite', 'prix pas un probleme', 'le mieux'], criterion: 'BUDGET', value: 'Haut de gamme' },
+  // Occasion (beauty)
+  { patterns: ['cadeau', 'offrir', 'anniversaire', 'noel', 'fete', 'saint valentin'], criterion: 'OCCASION', value: 'Cadeau' },
+  { patterns: ['pour moi', 'moi-meme', 'personnel'], criterion: 'OCCASION', value: 'Pour moi' },
+  // Genre
+  { patterns: ['femme', 'feminine', 'pour elle', 'madame', 'copine', 'mere', 'maman', 'fille'], criterion: 'GENRE', value: 'Femme' },
+  { patterns: ['homme', 'masculin', 'pour lui', 'monsieur', 'copain', 'pere', 'papa', 'mari'], criterion: 'GENRE', value: 'Homme' },
+  // Surface/espace
+  { patterns: ['salon', 'sejour', 'chambre', 'appartement', 'studio', 'interieur'], criterion: 'TYPE', value: 'Intérieur' },
+  { patterns: ['jardin', 'terrasse', 'exterieur', 'balcon', 'dehors'], criterion: 'TYPE', value: 'Extérieur' },
+  // Animaux
+  { patterns: ['chat', 'chien', 'animal', 'animaux', 'poils', 'poil'], criterion: 'ANIMAUX', value: 'true' },
+  // Matériaux (bricolage)
+  { patterns: ['beton', 'parpaing', 'pierre', 'brique'], criterion: 'MATERIAUX', value: 'Béton/Pierre' },
+  { patterns: ['bois', 'parquet', 'planche', 'meuble'], criterion: 'MATERIAUX', value: 'Bois' },
+  { patterns: ['placo', 'platre', 'cloison', 'mur'], criterion: 'MATERIAUX', value: 'Plâtre/Cloison' },
+  { patterns: ['metal', 'acier', 'fer', 'alu'], criterion: 'MATERIAUX', value: 'Métal' },
+];
+
+// ── Apply deductions from query text ──────────────
+
+function applyUniverseDeductions(query: string, universe: UniverseConfig): Record<string, string> {
+  const q = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const deduced: Record<string, string> = {};
+
+  // 1. Apply universal patterns first (always apply — enriches context even without matching criterion)
+  const qWords = new Set(q.split(/\s+/));
+  for (const d of UNIVERSAL_PATTERNS) {
+    for (const p of d.patterns) {
+      const np = p.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      // Short patterns (<=4 chars) match as whole word only, longer ones as substring
+      const matched = np.length <= 4
+        ? qWords.has(np)
+        : q.includes(np);
+      if (matched) {
+        deduced[d.criterion] = d.value;
+        break;
+      }
+    }
+  }
+
+  // 2. Apply universe-specific deductions (from DB)
+  for (const d of universe.deductions) {
+    if (deduced[d.criterion]) continue; // Universal already matched
+    for (const p of d.patterns) {
+      const np = p.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (q.includes(np)) {
+        deduced[d.criterion] = d.value;
+        break;
+      }
+    }
+  }
+
+  return deduced;
+}
+
+// ── Compute qualification score & find missing criteria ──────────────
+
+function computeQualification(
+  universe: UniverseConfig,
+  known: Record<string, string>,
+) {
+  let totalWeight = 0;
+  let filledWeight = 0;
+  const missing: QualCriterion[] = [];
+
+  for (const c of universe.criteria) {
+    totalWeight += c.weight;
+    if (known[c.id]) {
+      filledWeight += c.weight;
+    } else if (c.type !== 'deduced' || c.required) {
+      missing.push(c);
+    }
+  }
+
+  // Count all known criteria (both from universe and universal patterns, exclude internal keys)
+  const realKnown = Object.keys(known).filter(k => !k.startsWith('_'));
+  const totalKnown = realKnown.length;
+  const definedIds = new Set(universe.criteria.map(c => c.id));
+  const universalKnown = realKnown.filter(k => !definedIds.has(k)).length;
+
+  // Score = percentage of defined criteria filled + bonus for universal knowledge
+  // Each universal criterion adds 15 points to both filled and total
+  const universalWeight = universalKnown * 15;
+  const adjustedFilled = filledWeight + universalWeight;
+  const adjustedTotal = totalWeight + universalWeight;
+  let score = adjustedTotal > 0 ? Math.min(100, Math.round((adjustedFilled / adjustedTotal) * 100)) : 0;
+
+  // Fast-track: 2 answered criteria = enough to recommend (3 tours max)
+  if (totalKnown >= 2) {
+    score = Math.max(score, 65);
+  }
+
+  // Sort missing by weight descending, required first
+  missing.sort((a, b) => {
+    if (a.required && !b.required) return -1;
+    if (!a.required && b.required) return 1;
+    return b.weight - a.weight;
+  });
+
+  // Only keep askable questions (not deduced-only, have a question text)
+  const askable = missing.filter(c => c.question && c.type !== 'deduced');
+
+  return { score, missing, askable, filledWeight, totalWeight };
+}
+
+// ── Build the system prompt with Tome 3 rules ──────────────
+
+function buildSystemPrompt(
+  universe: UniverseConfig | null,
+  qualScore: number,
+  known: Record<string, string>,
+  questionsToAsk: QualCriterion[],
+  objection: Objection,
+  requiredMissing: boolean,
+  productContext: string,
+  suggestions: string[],
+): string {
+  // Build known criteria display with human-readable labels
+  const knownLines = Object.entries(known).map(([k, v]) => {
+    const criterion = universe?.criteria.find(c => c.id === k);
+    return `- ${criterion?.label || k}: ${v}`;
+  });
+
+  let directive: string;
+  let showProducts = false;
+
+  if (objection?.type === 'price') {
+    const dir = objection.direction === 'cheaper' ? 'moins cher' : 'plus haut de gamme';
+    directive = `MISSION: Le client trouve le produit trop ${objection.direction === 'cheaper' ? 'cher' : 'basique'}. Propose une alternative ${dir} parmi les produits ci-dessous. Montre que tu comprends sa contrainte.
+Exemple: "Je comprends, c'est un budget ! Regarde le **Modèle X** à XXX€, il fait très bien le job pour ton besoin."`;
+    showProducts = true;
+  } else if (objection?.type === 'change_criteria' || objection?.type === 'backtrack') {
+    directive = `MISSION: Le client a changé d'avis sur un critère. Confirme le changement et propose un nouveau produit adapté.
+Exemple: "Pas de souci, on passe en sans fil ! Dans ce cas, le **Modèle Y** serait top pour toi."`;
+    showProducts = true;
+  } else if (qualScore >= 65) {
+    directive = `MISSION: Recommande un produit parmi ceux ci-dessous. Dis son nom exact en gras et UN argument concret.
+Exemple: "Le **Perforateur Makita SDS-Plus 18V** serait parfait pour toi. Il a la puissance pour le béton et tu seras libre de tes mouvements en sans fil."`;
+    showProducts = true;
+  } else {
+    const suggText = suggestions.filter(s => s !== 'Pas sûr').join(', ');
+    directive = `MISSION: Reformule ce que le client cherche en 1 phrase, puis pose UNE question dont les réponses possibles sont: ${suggText}.
+Ta question DOIT correspondre à ces choix. Si les choix sont "Occasionnel, Régulier, Pro" → demande la fréquence d'usage. Si c'est "Sans fil, Avec fil" → demande fil ou sans fil. Etc.
+INTERDIT: Ne cite AUCUN nom de produit, AUCUNE marque, AUCUN prix. Tu poses juste la question.
+Exemple pour "Occasionnel, Régulier, Pro": "Un aspirateur pour les poils de chat, top ! C'est pour un usage occasionnel ou plus régulier ?"
+Exemple pour "Sans fil, Avec fil": "OK ! Tu préfères avec fil (plus puissant) ou sans fil (plus pratique) ?"
+Exemple pour "Pas cher, Milieu de gamme, Haut de gamme": "Super ! Tu as un budget en tête ? Plutôt entrée de gamme ou tu veux investir ?"`;
+  }
+
+  const productsBlock = showProducts && productContext
+    ? `\n## PRODUITS DISPONIBLES (utilise UNIQUEMENT ces données)\n${productContext}`
+    : '';
+
+  const knownStr = knownLines.length > 0 ? knownLines.join('. ') : 'Rien connu encore';
+
+  return `Vendeur expert ${universe?.label || 'commerce'}. Tutoie le client. 2 phrases max.
+CLIENT: ${knownStr}
+${directive}
+${productsBlock}`;
+}
+
+// ── Search query enrichment ──────────────
+
+function buildSearchQuery(
+  userMessage: string,
+  known: Record<string, string>,
+  universe: UniverseConfig | null,
+): string {
+  const parts = [userMessage];
+  if (universe) parts.push(universe.label);
+
+  // Add criteria-based terms for better product matching
+  const mat = known['MATERIAUX'] || '';
+  if (mat.includes('Béton') || mat.includes('Pierre')) parts.push('perforateur percussion béton');
+  if (known['ANIMAUX'] === 'true') parts.push('poils animaux');
+  if (known['SANS_FIL'] === 'true') parts.push('sans fil batterie');
+  if (known['GENRE']) parts.push(known['GENRE']);
+
+  return parts.join(' ');
+}
+
+// ── Product filtering by criteria ──────────────
+
+function filterByKnownCriteria(
+  products: ScoredProduct[],
+  known: Record<string, string>,
+  universe: UniverseConfig | null,
+): ScoredProduct[] {
+  if (!universe || products.length === 0) return products;
+
+  const mat = known['PERC_MATERIAU'] || '';
+  const needsPercussion = mat.includes('Béton') || mat.includes('percussion') || mat.includes('Brique');
+  const wantsSansFil = known['PERC_ALIM'] === 'Batterie' || known['ASP_FIL'] === 'Sans fil';
+  const wantsFilaire = known['PERC_ALIM'] === 'Filaire' || known['ASP_FIL'] === 'Filaire';
+
+  return products.filter((sp) => {
+    const specs = sp.product.specs as Record<string, unknown> | null;
+    if (!specs) return true;
+
+    // Filter out non-percussion products when béton is needed
+    if (needsPercussion && specs['mode_percussion'] === false) return false;
+
+    // Filter by wired/wireless preference
+    if (wantsSansFil && specs['sans_fil'] === false) return false;
+    if (wantsFilaire && specs['sans_fil'] === true) return false;
+
+    return true;
+  });
+}
+
+// ── Direct DB product fetch for recommendation ──────────────
+
+async function fetchMatchingProducts(
+  known: Record<string, string>,
+  universe: UniverseConfig,
+  storeId: number,
+  originalQuery?: string,
+): Promise<ScoredProduct[]> {
+  const { getPrisma } = await import('@shimmer/core');
+  const prisma = getPrisma();
+
+  // Use universe label as DB category (matches exactly)
+  const dbCategory = universe.label;
+
+  const conditions: string[] = [
+    `store_id = ${storeId}`,
+    `is_active = true`,
+    `category = '${dbCategory}'`,
+  ];
+
+  // Apply universal criteria as SOFT filters (only if the spec field exists in the catalog)
+  // This prevents filtering on fields that don't exist for this store's products
+  const mat = known['MATERIAUX'] || known['PERC_MATERIAU'] || '';
+  if (mat.includes('Béton') || mat.includes('Pierre') || mat.includes('Brique')) {
+    conditions.push(`(specs ? 'mode_percussion' AND (specs->>'mode_percussion')::boolean = true)`);
+  }
+
+  const sansFil = known['SANS_FIL'];
+  if (sansFil === 'true') {
+    conditions.push(`(NOT specs ? 'sans_fil' OR (specs->>'sans_fil')::boolean = true)`);
+  } else if (sansFil === 'false') {
+    conditions.push(`(NOT specs ? 'sans_fil' OR (specs->>'sans_fil')::boolean = false)`);
+  }
+  // 'indifferent' = no filter
+
+  if (known['ANIMAUX'] === 'true') {
+    conditions.push(`(NOT specs ? 'animaux' OR (specs->>'animaux')::boolean = true)`);
+  }
+
+  const budget = known['BUDGET'];
+
+  // Genre filter — soft (only if field exists)
+  const genre = known['GENRE'];
+  if (genre) {
+    conditions.push(`(NOT specs ? 'genre' OR specs->>'genre' ILIKE '%${genre}%')`);
+  }
+
+  // Brand filter (from hybrid TYPE 1+2 detection)
+  const brandFilter = known['_BRAND'];
+  if (brandFilter) {
+    conditions.push(`LOWER(brand) = '${brandFilter.toLowerCase()}'`);
+  }
+
+  try {
+    // Score products by usage + name match (higher score = better fit for client's need)
+    const userTerms = [originalQuery || '', ...Object.values(known).filter(v => !v.startsWith('_'))].join(' ').toLowerCase();
+
+    const products = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT *,
+        COALESCE((
+          SELECT MAX((u->>'score')::int)
+          FROM jsonb_array_elements(usages) u
+          WHERE EXISTS (
+            SELECT 1 FROM unnest(ARRAY(SELECT jsonb_array_elements_text(u->'keywords'))) kw
+            WHERE $2 ILIKE '%' || kw || '%'
+          )
+        ), 50)
+        + CASE WHEN LOWER(name) ILIKE '%' || $3 || '%' THEN 30 ELSE 0 END
+        as usage_score
+       FROM products
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY usage_score DESC, ${budget === 'Haut de gamme' ? 'price DESC' : 'price ASC'}
+       LIMIT 5`,
+      storeId, userTerms, (originalQuery || '').toLowerCase().split(/\s+/)[0] || '',
+    );
+
+    return products.map((p: any) => ({
+      product: p,
+      score: Number(p.usage_score) || 50,
+      usageScores: {},
+    }));
+  } catch (err) {
+    logger.warn({ err, conditions }, 'fetchMatchingProducts failed');
+    return [];
+  }
+}
+
+// ── Route ──────────────
+
+const assistSchema = z.object({
+  message: z.string().trim().min(1).max(1000),
+  sessionToken: z.string().optional(),
+  history: z.array(z.object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string(),
+  })).optional(),
+  knownCriteria: z.record(z.string()).optional(),
+});
+
+const client = new ClaudeClient();
+
+// ── Instant qualification templates (no LLM, < 5ms) ──────────────
+
+const ACKNOWLEDGMENTS = [
+  'Très bien !', 'Compris !', 'Parfait !', 'OK !', 'Super !', 'Noté !', 'D\'accord !',
+];
+
+const QUESTION_TEMPLATES: Record<string, Record<string, string>> = {
+  USAGE: {
+    default: 'C\'est pour un usage occasionnel ou plus régulier ?',
+    BRICOLAGE: 'Tu bricoles de temps en temps ou c\'est plus régulier ?',
+    ELECTROMENAGER: 'C\'est pour un usage quotidien ou plutôt occasionnel ?',
+    JARDIN: 'Tu jardines souvent ou juste de temps en temps ?',
+  },
+  OCCASION: {
+    default: 'C\'est pour toi ou c\'est un cadeau ?',
+    PARFUM: 'C\'est un parfum pour toi ou pour offrir ?',
+    MAQUILLAGE: 'C\'est pour toi ou c\'est un cadeau ?',
+    SOIN_VISAGE: 'C\'est pour toi ou pour offrir ?',
+    CHEVEUX: 'C\'est pour tes cheveux ou c\'est un cadeau ?',
+    CORPS_BAIN: 'C\'est pour toi ou pour offrir ?',
+  },
+  SANS_FIL: {
+    default: 'Tu préfères avec fil (plus puissant) ou sans fil (plus libre) ?',
+    BRICOLAGE: 'Avec fil pour la puissance ou sans fil pour la liberté de mouvement ?',
+    ELECTROMENAGER: 'Un modèle filaire ou tu préfères sans fil, plus pratique ?',
+  },
+  BUDGET: {
+    default: 'Tu as un budget en tête ? Entrée de gamme, milieu, ou haut de gamme ?',
+    BRICOLAGE: 'Côté budget, tu cherches un bon rapport qualité-prix ou du haut de gamme pro ?',
+    ELECTROMENAGER: 'Niveau budget, tu vises plutôt l\'essentiel ou du premium ?',
+    PARFUM: 'Tu cherches plutôt un petit prix ou tu veux te faire plaisir ?',
+    MAQUILLAGE: 'Budget serré ou tu veux de la qualité premium ?',
+    SOIN_VISAGE: 'Un soin abordable ou tu investis dans du haut de gamme ?',
+    CHEVEUX: 'Tu cherches l\'essentiel ou du soin premium ?',
+    CORPS_BAIN: 'Petit plaisir ou produit de luxe ?',
+  },
+  ANIMAUX: {
+    default: 'Tu as des animaux à la maison ? Ça change le modèle à choisir.',
+  },
+  GENRE: {
+    default: 'C\'est pour une femme, un homme, ou mixte ?',
+    PARFUM: 'Plutôt un parfum femme, homme, ou unisexe ?',
+    MAQUILLAGE: 'C\'est pour une femme ou un homme ?',
+    CORPS_BAIN: 'Pour femme, homme, ou mixte ?',
+  },
+  MATERIAUX: {
+    default: 'Tu perces dans quoi ? Béton, bois, placo ?',
+  },
+  TYPE: {
+    default: 'C\'est pour l\'extérieur, l\'intérieur, ou les deux ?',
+  },
+};
+
+function buildQualificationTemplate(
+  userMessage: string,
+  universe: UniverseConfig | null,
+  known: Record<string, string>,
+  suggestions: string[],
+): string {
+  const ack = ACKNOWLEDGMENTS[Math.floor(Math.random() * ACKNOWLEDGMENTS.length)]!;
+  const uid = universe?.id || 'default';
+
+  // Find which criterion maps to the current suggestions
+  let questionKey = 'USAGE'; // default
+  if (suggestions.includes('Pour moi') || suggestions.includes('Cadeau')) questionKey = 'OCCASION';
+  else if (suggestions.includes('Sans fil') || suggestions.includes('Avec fil')) questionKey = 'SANS_FIL';
+  else if (suggestions.includes('Pas cher') || suggestions.includes('Milieu de gamme')) questionKey = 'BUDGET';
+  else if (suggestions.includes('Oui, animaux')) questionKey = 'ANIMAUX';
+  else if (suggestions.includes('Femme') || suggestions.includes('Homme')) questionKey = 'GENRE';
+  else if (suggestions.includes('Béton/Pierre') || suggestions.includes('Bois')) questionKey = 'MATERIAUX';
+  else if (suggestions.includes('Extérieur') || suggestions.includes('Intérieur')) questionKey = 'TYPE';
+
+  const templates = QUESTION_TEMPLATES[questionKey] || QUESTION_TEMPLATES['USAGE']!;
+  const question = templates[uid] || templates['default']!;
+
+  // For first message, rephrase what the client wants
+  const knownKeys = Object.keys(known).filter(k => !k.startsWith('_'));
+  if (knownKeys.length <= 1) {
+    // First turn — acknowledge + question
+    // Extract just the product noun (1-3 words), not the full sentence
+    const query = userMessage.toLowerCase().trim();
+    const isFullSentence = query.split(/\s+/).length > 4 || /^(je |j'|il |un |une |du |des |pour |faut |quelque|cadeau|le |la |les )/.test(query);
+    let rephrase: string;
+    if (isFullSentence) {
+      rephrase = `${ack} `;
+    } else {
+      // Short query — just acknowledge naturally without Un/Une (avoids gender issues)
+      rephrase = `${ack} `;
+    }
+    return `${rephrase}${question}`;
+  }
+
+  // Subsequent turns — acknowledge answer + next question
+  return `${ack} ${question}`;
+}
+
+function buildRecommendationTemplate(
+  products: ScoredProduct[],
+  known: Record<string, string>,
+  objection: Objection,
+): string {
+  if (products.length === 0) {
+    return 'Hmm, je n\'ai pas trouvé de produit qui correspond exactement. Tu peux me donner plus de détails ?';
+  }
+
+  const top = products[0]!.product;
+  const name = top.name;
+  const brand = top.brand || '';
+  const price = top.price;
+  const specs = top.specs as Record<string, unknown> | null;
+
+  // Build personalized highlights based on what the CLIENT asked for
+  const reasons: string[] = [];
+  if (specs) {
+    if (known['SANS_FIL'] === 'true' && specs['sans_fil'] === true) {
+      reasons.push(specs['autonomie'] ? `sans fil avec ${specs['autonomie']} d'autonomie` : 'sans fil');
+    } else if (known['SANS_FIL'] === 'false' && specs['sans_fil'] === false) {
+      reasons.push(specs['puissance'] ? `filaire ${specs['puissance']}` : 'filaire, puissance constante');
+    }
+    if (known['ANIMAUX'] === 'true' && specs['animaux'] === true) reasons.push('conçu pour les poils d\'animaux');
+    if (known['MATERIAUX']?.includes('Béton') && specs['mode_percussion'] === true) reasons.push('mode percussion pour le béton');
+    if (known['MATERIAUX']?.includes('Bois') && specs['mode_percussion'] !== true) reasons.push('idéal pour le bois');
+    if (specs['poids'] && known['USAGE'] === 'Occasionnel') reasons.push(`seulement ${specs['poids']}`);
+    if (specs['modes'] && Number(specs['modes']) > 1) reasons.push(`${specs['modes']} modes de vitesse`);
+    if (specs['surface_cuisson']) reasons.push(`grande surface de cuisson (${specs['surface_cuisson']})`);
+    if (specs['contenance'] && !reasons.length) reasons.push(`${specs['contenance']}`);
+    if (specs['autonomie'] && !reasons.some(r => r.includes('autonomie'))) reasons.push(`autonomie ${specs['autonomie']}`);
+  }
+
+  const reasonStr = reasons.length > 0 ? reasons.slice(0, 2).join(' et ') : '';
+
+  if (objection?.type === 'price' && objection.direction === 'cheaper') {
+    return reasonStr
+      ? `Plus abordable : le **${name}** (${brand}) à ${price}€. ${reasonStr.charAt(0).toUpperCase() + reasonStr.slice(1)}, et un super rapport qualité-prix.`
+      : `Plus abordable : le **${name}** de ${brand} à ${price}€. Un excellent rapport qualité-prix !`;
+  }
+
+  if (objection?.type === 'price' && objection.direction === 'pricier') {
+    return reasonStr
+      ? `Montée en gamme : le **${name}** (${brand}) à ${price}€. ${reasonStr.charAt(0).toUpperCase() + reasonStr.slice(1)}.`
+      : `En haut de gamme, le **${name}** de ${brand} à ${price}€ est une référence.`;
+  }
+
+  if (objection?.type === 'backtrack' && objection.signal === 'rejected_product') {
+    // Client rejected previous product — show next one from the list
+    return reasonStr
+      ? `Pas de problème ! Regarde plutôt le **${name}** (${brand}) à ${price}€ : ${reasonStr}.`
+      : `OK, essaie le **${name}** de ${brand} à ${price}€ alors.`;
+  }
+
+  if (objection?.type === 'change_criteria' || objection?.type === 'backtrack') {
+    return reasonStr
+      ? `J'ai ajusté ! Le **${name}** (${brand}) à ${price}€ : ${reasonStr}.`
+      : `Pas de souci ! Le **${name}** de ${brand} à ${price}€ correspond mieux.`;
+  }
+
+  // Standard recommendation — personalized
+  if (reasonStr) {
+    const intros = [
+      `Je te recommande le **${name}** (${brand}) à ${price}€. ${reasonStr.charAt(0).toUpperCase() + reasonStr.slice(1)}, pile ce qu'il te faut !`,
+      `Le **${name}** de ${brand} à ${price}€ est parfait pour toi : ${reasonStr}.`,
+      `Pour ton besoin, le **${name}** (${brand}) à ${price}€ est top. ${reasonStr.charAt(0).toUpperCase() + reasonStr.slice(1)}.`,
+    ];
+    return intros[Math.floor(Math.random() * intros.length)]!;
+  }
+
+  // Generic fallback
+  const intros = [
+    `Je te recommande le **${name}** de ${brand} à ${price}€. Il coche toutes tes cases !`,
+    `Le **${name}** (${brand}) à ${price}€ serait parfait pour toi.`,
+    `Pour ton besoin, le **${name}** de ${brand} à ${price}€ est un excellent choix.`,
+  ];
+  return intros[Math.floor(Math.random() * intros.length)]!;
+}
+
+export const searchAssistRouter = Router();
+
+searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = assistSchema.parse(req.body);
+    const t0 = performance.now();
+
+    // Combine only USER messages for deduction (avoid false positives from assistant suggestions)
+    const fullConversation = [
+      ...(body.history || []).filter(h => h.role === 'user').map(h => h.content),
+      body.message,
+    ].join(' ');
+
+    // ── TYPE 1: Check for exact product match first ──
+    const exactMatch = await detectExactProduct(body.message, req.storeId!);
+    if (exactMatch && exactMatch.confidence >= 0.8 && !body.history?.length) {
+      // Direct product match — skip qualification, respond immediately
+      const p = exactMatch.product;
+      const specs = p.specs as Record<string, string> | null;
+      const totalMs = Math.round(performance.now() - t0);
+
+      logger.info({ query: body.message, product: p.name, confidence: exactMatch.confidence }, 'search.type1.exact');
+
+      res.json({
+        message: `Le **${p.name}** de ${p.brand} à ${p.price}€ — ${(p.description || '').slice(0, 150)}`,
+        suggestedQuestions: ['Voir les détails', 'Similaire moins cher ?', 'Autre chose'],
+        highlightedProducts: [{
+          name: p.name,
+          brand: p.brand || '',
+          reason: (p.description || '').slice(0, 120),
+          price: `${p.price}€`,
+          sku: p.sku,
+          specs: specs ? Object.fromEntries(Object.entries(specs).slice(0, 5)) : {},
+        }],
+        needsMoreInfo: false,
+        qualificationStep: 'exact_match',
+        sessionToken: null,
+        knownCriteria: {},
+        qualification: { universe: null, score: 100, type: 'TYPE_1' },
+        searchMeta: { totalProducts: 1, stageUsed: 'exact', searchType: 'TYPE_1', totalMs },
+      });
+      return;
+    }
+
+    // ── HYBRID: Brand + need pattern ("Dyson pour poils de chat") ──
+    const hybridMatch = await detectHybrid(body.message, req.storeId!);
+    let brandFilter: string | null = null;
+    let effectiveMessage = body.message;
+    if (hybridMatch) {
+      brandFilter = hybridMatch.brand;
+      effectiveMessage = hybridMatch.needQuery; // Use only the need part for qualification
+      logger.info({ brand: hybridMatch.brand, need: hybridMatch.needQuery }, 'search.hybrid');
+    }
+
+    // ── OBJECTION: Check if client is pushing back ──
+    const known0 = { ...body.knownCriteria };
+    const objection = (body.history?.length || 0) > 0 ? detectObjection(body.message, known0) : null;
+    if (objection) {
+      logger.info({ objection }, 'search.objection');
+      if (objection.type === 'price' && objection.direction === 'cheaper') {
+        known0['BUDGET'] = 'Entrée de gamme';
+      } else if (objection.type === 'price' && objection.direction === 'pricier') {
+        known0['BUDGET'] = 'Haut de gamme';
+      } else if (objection.type === 'change_criteria') {
+        known0[objection.criterion] = objection.newValue;
+      }
+    }
+
+    // 1. Load universes (DB first, fallback hardcoded) then detect
+    const universes = await getUniverses(req.storeId!);
+    const universe = detectUniverse(fullConversation, universes);
+
+    // 2. Apply deductions from full conversation
+    const deduced = universe ? applyUniverseDeductions(fullConversation, universe) : {};
+
+    // 3. Merge with previously known criteria (objection-updated known0 + deduced)
+    const known = { ...known0, ...deduced };
+
+    // Add brand filter from hybrid detection
+    if (brandFilter) known['_BRAND'] = brandFilter;
+
+    // Handle "peu importe" / "indifférent" — fills the NEXT missing criterion
+    const skipMsg = body.message.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const skipPatterns = /^(peu importe|pas de preference|indifferent|egal|les deux|n.?importe|je sais pas|aucune idee|pas sur|je ne sais pas|bof|osef|m.?en fiche|ca m.?est egal)$/i;
+    if (skipPatterns.test(skipMsg)) {
+      // Find which criteria we already have suggestions for (from previous turn)
+      const suggestionCriteria: Record<string, string> = {
+        'Sans fil': 'SANS_FIL', 'Avec fil': 'SANS_FIL', 'Peu importe': 'SANS_FIL',
+        'Occasionnel': 'USAGE', 'Régulier': 'USAGE', 'Pro': 'USAGE',
+        'Pas cher': 'BUDGET', 'Milieu de gamme': 'BUDGET', 'Haut de gamme': 'BUDGET',
+        'Oui, animaux': 'ANIMAUX', 'Femme': 'GENRE', 'Homme': 'GENRE',
+        'Béton/Pierre': 'MATERIAUX', 'Bois': 'MATERIAUX', 'Placo': 'MATERIAUX',
+        'Extérieur': 'TYPE', 'Intérieur': 'TYPE',
+      };
+      // Determine which criterion is "current" based on universe type
+      const uid = universe?.id || '';
+      const isBeauty = ['PARFUM', 'MAQUILLAGE', 'SOIN_VISAGE', 'CHEVEUX', 'CORPS_BAIN', 'PARFUMERIE'].includes(uid);
+      const priorityOrder = isBeauty
+        ? ['OCCASION', 'GENRE', 'BUDGET']
+        : ['USAGE', 'SANS_FIL', 'BUDGET', 'ANIMAUX', 'GENRE', 'MATERIAUX', 'TYPE'];
+      for (const crit of priorityOrder) {
+        if (!known[crit]) {
+          known[crit] = 'indifferent';
+          break;
+        }
+      }
+    }
+
+    // 4. Compute qualification
+    const qual = universe
+      ? computeQualification(universe, known)
+      : { score: 0, missing: [], askable: [], filledWeight: 0, totalWeight: 0 };
+
+    const requiredMissing = universe
+      ? universe.criteria.some(c => c.required && !known[c.id])
+      : false;
+
+    // 5. Run search pipeline
+    const searchQuery = buildSearchQuery(body.message, known, universe);
+    const searchResult = await search({
+      query: searchQuery,
+      sessionToken: body.sessionToken,
+      storeId: req.storeId!,
+    });
+
+    // 6. If recommending (score >= 65%), fetch products directly from DB with criteria filters
+    //    This avoids search ranking issues where the wrong products appear first
+    let topProducts: ScoredProduct[];
+    if (qual.score >= 65 && universe) {
+      const dbProducts = await fetchMatchingProducts(known, universe, req.storeId!, fullConversation);
+      topProducts = dbProducts.length > 0 ? dbProducts : filterByKnownCriteria(searchResult.products, known, universe).slice(0, 5);
+    } else {
+      topProducts = filterByKnownCriteria(searchResult.products, known, universe).slice(0, 5);
+    }
+
+    // 7. Build product context — ULTRA compact for speed on local models
+    // Send only top 2 to LLM prompt (faster, fewer tokens to parse)
+    const productContext = topProducts.slice(0, 2).map((sp: ScoredProduct) => {
+      const p = sp.product;
+      const specs = p.specs as Record<string, unknown> | null;
+      // Build a short spec summary — only the most relevant ones
+      const specParts: string[] = [];
+      if (specs) {
+        if (specs.puissance) specParts.push(`${specs.puissance}`);
+        if (specs.autonomie) specParts.push(`autonomie ${specs.autonomie}`);
+        if (specs.poids) specParts.push(`${specs.poids}`);
+        if (specs.sans_fil === true) specParts.push('sans fil');
+        if (specs.sans_fil === false) specParts.push('filaire');
+        if (specs.mode_percussion === true) specParts.push('percussion');
+        if (specs.animaux === true) specParts.push('spécial animaux');
+        if (specs.type) specParts.push(`${specs.type}`);
+      }
+      const specStr = specParts.length > 0 ? ` (${specParts.join(', ')})` : '';
+      return `- ${p.name} (${p.brand}) ${p.price}€${specStr}`;
+    }).join('\n');
+
+    logger.info({
+      searchQuery,
+      totalResults: searchResult.products.length,
+      matchedProducts: topProducts.length,
+      productContext: productContext.slice(0, 300),
+      qualScore: qual.score,
+    }, 'search.assist.context');
+
+    // 8. Pre-compute suggestions (needed for prompt alignment)
+    const isRecommendingEarly = qual.score >= 65 || objection?.type === 'price' || objection?.type === 'change_criteria' || objection?.type === 'backtrack';
+    let earlySuggestions: string[];
+    if (isRecommendingEarly) {
+      earlySuggestions = ['Voir les détails', 'Moins cher ?', 'Autre chose'];
+    } else {
+      const uid = universe?.id || '';
+      // Beauty universes (no "sans fil" question!)
+      const isBeauty = ['PARFUM', 'MAQUILLAGE', 'SOIN_VISAGE', 'CHEVEUX', 'CORPS_BAIN', 'PARFUMERIE'].includes(uid);
+      // Hardware/tool universes
+      const isHardware = ['BRICOLAGE', 'ELECTROMENAGER', 'JARDIN'].includes(uid);
+
+      const missingSugg: string[][] = [];
+
+      if (isBeauty) {
+        if (!known['OCCASION']) missingSugg.push(['Pour moi', 'Cadeau', 'Peu importe']);
+        if (!known['GENRE'] && uid !== 'CHEVEUX') missingSugg.push(['Femme', 'Homme', 'Mixte']);
+        if (!known['BUDGET']) missingSugg.push(['Pas cher', 'Milieu de gamme', 'Haut de gamme']);
+      } else if (isHardware) {
+        if (!known['USAGE']) missingSugg.push(['Occasionnel', 'Régulier', 'Pro']);
+        if (!known['SANS_FIL']) missingSugg.push(['Sans fil', 'Avec fil', 'Peu importe']);
+        if (!known['BUDGET']) missingSugg.push(['Pas cher', 'Milieu de gamme', 'Haut de gamme']);
+        if (!known['ANIMAUX'] && uid === 'ELECTROMENAGER') missingSugg.push(['Oui, animaux', 'Non', 'Pas sûr']);
+        if (!known['MATERIAUX'] && uid === 'BRICOLAGE') missingSugg.push(['Béton/Pierre', 'Bois', 'Placo']);
+      } else {
+        // Generic
+        if (!known['USAGE']) missingSugg.push(['Occasionnel', 'Régulier', 'Pro']);
+        if (!known['BUDGET']) missingSugg.push(['Pas cher', 'Milieu de gamme', 'Haut de gamme']);
+      }
+      earlySuggestions = missingSugg[0] || ['Pas cher', 'Milieu de gamme', 'Haut de gamme'];
+    }
+
+    // 9. Build system prompt with qualification state + suggestions
+    const systemPrompt = buildSystemPrompt(
+      universe,
+      qual.score,
+      known,
+      qual.askable,
+      objection,
+      requiredMissing,
+      productContext,
+      earlySuggestions,
+    );
+
+    // 8. Generate response — templates for qualifying, LLM only for recommending
+    let cleanMessage: string;
+    const needsLLM = isRecommendingEarly || objection?.type === 'price' || objection?.type === 'change_criteria';
+
+    if (!needsLLM) {
+      // ── INSTANT TEMPLATE (< 5ms) ── No LLM needed for qualification questions
+      cleanMessage = buildQualificationTemplate(body.message, universe, known, earlySuggestions);
+    } else {
+      // ── INSTANT TEMPLATE for recommendations too ── LLM is too slow on CPU
+      cleanMessage = buildRecommendationTemplate(topProducts, known, objection);
+    }
+
+    const totalMs = Math.round(performance.now() - t0);
+
+    logger.info({
+      query: body.message,
+      universe: universe?.id || 'unknown',
+      qualScore: qual.score,
+      productsMatched: topProducts.length,
+      totalMs,
+    }, 'search.assist');
+
+    // Build highlighted products SERVER-SIDE (don't trust LLM for structured data)
+    const isRecommending = qual.score >= 65 || objection?.type === 'price' || objection?.type === 'change_criteria';
+    const serverProducts = isRecommending
+      ? topProducts.slice(0, 3).map((sp) => {
+          const p = sp.product;
+          const specs = p.specs as Record<string, string> | null;
+          return {
+            name: p.name,
+            brand: p.brand || '',
+            reason: p.description?.slice(0, 120) || '',
+            price: `${p.price}€`,
+            sku: p.sku,
+            specs: specs ? Object.fromEntries(
+              Object.entries(specs).filter(([k]) => !['usage', 'materiaux'].includes(k)).slice(0, 5)
+            ) : {},
+          };
+        })
+      : [];
+
+    // Use pre-computed suggestions (aligned with prompt)
+    const serverSuggestions = earlySuggestions;
+
+    res.json({
+      message: cleanMessage,
+      suggestedQuestions: serverSuggestions,
+      highlightedProducts: serverProducts,
+      needsMoreInfo: !isRecommending,
+      qualificationStep: objection ? 'objection' : isRecommending ? 'recommending' : 'qualifying',
+      sessionToken: searchResult.sessionToken,
+      knownCriteria: known,
+      qualification: {
+        universe: universe?.id || null,
+        score: qual.score,
+        missingRequired: requiredMissing,
+        type: hybridMatch ? 'HYBRID' : 'TYPE_2',
+        objection: objection?.type || null,
+      },
+      searchMeta: {
+        totalProducts: searchResult.products.length,
+        stageUsed: searchResult.stageUsed,
+        searchType: searchResult.searchType,
+        totalMs,
+      },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'Validation error', details: err.errors });
+      return;
+    }
+    next(err);
+  }
+});
+
+// ── SSE Streaming endpoint ──────────────────────────────────
+// POST /api/search/assist/stream — same logic but streams the LLM response word by word
+
+searchAssistRouter.post('/stream', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = assistSchema.parse(req.body);
+    const t0 = performance.now();
+
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // nginx: don't buffer SSE
+    res.flushHeaders();
+
+    // Same logic as non-streaming endpoint for context building
+    const fullConversation = [
+      ...(body.history || []).filter(h => h.role === 'user').map(h => h.content),
+      body.message,
+    ].join(' ');
+
+    const universes = await getUniverses(req.storeId!);
+    const universe = detectUniverse(fullConversation, universes);
+    const deduced = universe ? applyUniverseDeductions(fullConversation, universe) : {};
+    const known: Record<string, string> = { ...deduced, ...(body.knownCriteria || {}) };
+    const objection = detectObjection(body.message, known);
+
+    if (objection?.type === 'price') {
+      if (objection.direction === 'cheaper') known['BUDGET'] = 'petit budget';
+      else known['BUDGET'] = 'haut de gamme';
+    }
+    if (objection?.type === 'change_criteria' || objection?.type === 'backtrack') {
+      if (objection.newValue) known[objection.criterion || 'UNKNOWN'] = objection.newValue;
+    }
+
+    const qual = universe
+      ? computeQualification(universe, known)
+      : { score: 0, missing: [] as QualCriterion[], askable: [] as QualCriterion[], filledWeight: 0, totalWeight: 0 };
+    const requiredMissing = qual.missing.some(c => c.required);
+    const hybridMatch = universe && body.message.match(/\b(pour|avec|qui|compatible)\b/i);
+    const searchQuery = buildSearchQuery(body.message, known, universe);
+    const searchResult = await search({
+      query: searchQuery,
+      sessionToken: body.sessionToken,
+      storeId: req.storeId!,
+    });
+
+    let topProducts: ScoredProduct[];
+    if (qual.score >= 65 && universe) {
+      const dbProducts = await fetchMatchingProducts(known, universe, req.storeId!, fullConversation);
+      topProducts = dbProducts.length > 0 ? dbProducts : filterByKnownCriteria(searchResult.products, known, universe).slice(0, 5);
+    } else {
+      topProducts = filterByKnownCriteria(searchResult.products, known, universe).slice(0, 5);
+    }
+
+    const productContext = topProducts.map((sp) => {
+      const p = sp.product;
+      const specs = p.specs as Record<string, unknown> | null;
+      const specParts: string[] = [];
+      if (specs) {
+        if (specs.poids) specParts.push(`${specs.poids}`);
+        if (specs.sans_fil === true) specParts.push('sans fil');
+        if (specs.sans_fil === false) specParts.push('filaire');
+        if (specs.mode_percussion === true) specParts.push('percussion');
+        if (specs.animaux === true) specParts.push('spécial animaux');
+        if (specs.type) specParts.push(`${specs.type}`);
+      }
+      const specStr = specParts.length > 0 ? ` (${specParts.join(', ')})` : '';
+      return `- ${p.name} (${p.brand}) ${p.price}€${specStr}`;
+    }).join('\n');
+
+    // Pre-compute suggestions
+    const isRecommending = qual.score >= 65 || objection?.type === 'price' || objection?.type === 'change_criteria';
+    let earlySuggestions: string[];
+    if (isRecommending) {
+      earlySuggestions = ['Voir les détails', 'Moins cher ?', 'Autre chose'];
+    } else {
+      const missingSugg: string[][] = [];
+      if (!known['USAGE']) missingSugg.push(['Occasionnel', 'Régulier', 'Pro']);
+      if (!known['SANS_FIL']) missingSugg.push(['Sans fil', 'Avec fil', 'Peu importe']);
+      if (!known['BUDGET']) missingSugg.push(['Pas cher', 'Milieu de gamme', 'Haut de gamme']);
+      if (!known['ANIMAUX'] && universe?.id === 'ELECTROMENAGER') missingSugg.push(['Oui, animaux', 'Non', 'Pas sûr']);
+      if (!known['GENRE'] && universe?.id === 'PARFUMERIE') missingSugg.push(['Femme', 'Homme', 'Mixte']);
+      if (!known['MATERIAUX'] && universe?.id === 'BRICOLAGE') missingSugg.push(['Béton/Pierre', 'Bois', 'Placo']);
+      if (!known['TYPE'] && universe?.id === 'JARDIN') missingSugg.push(['Extérieur', 'Intérieur', 'Les deux']);
+      earlySuggestions = missingSugg[0] || ['Occasionnel', 'Régulier', 'Pro'];
+    }
+
+    const systemPrompt = buildSystemPrompt(universe, qual.score, known, qual.askable, objection, requiredMissing, productContext, earlySuggestions);
+
+    // Send metadata first (products, suggestions, qualification)
+    const serverProducts = isRecommending
+      ? topProducts.slice(0, 3).map((sp) => {
+          const p = sp.product;
+          const specs = p.specs as Record<string, string> | null;
+          return {
+            name: p.name, brand: p.brand || '', reason: p.description?.slice(0, 120) || '',
+            price: `${p.price}€`, sku: p.sku,
+            specs: specs ? Object.fromEntries(Object.entries(specs).filter(([k]) => !['usage', 'materiaux'].includes(k)).slice(0, 5)) : {},
+          };
+        })
+      : [];
+
+    const metadata = {
+      suggestedQuestions: earlySuggestions,
+      highlightedProducts: serverProducts,
+      needsMoreInfo: !isRecommending,
+      qualificationStep: objection ? 'objection' : isRecommending ? 'recommending' : 'qualifying',
+      knownCriteria: known,
+      qualification: {
+        universe: universe?.id || null, score: qual.score,
+        missingRequired: requiredMissing, type: hybridMatch ? 'HYBRID' : 'TYPE_2',
+        objection: objection?.type || null,
+      },
+    };
+
+    res.write(`event: metadata\ndata: ${JSON.stringify(metadata)}\n\n`);
+
+    // Stream LLM response
+    const messages: ClaudeMessage[] = [];
+    if (body.history?.length) {
+      for (const h of body.history.slice(-4)) {
+        messages.push({ role: h.role as 'user' | 'assistant', content: h.content });
+      }
+    }
+    messages.push({ role: 'user', content: body.message });
+
+    let fullText = '';
+    for await (const chunk of client.stream(messages, {
+      systemPrompt: systemPrompt + '\n\nRéponds en texte brut, 2-3 phrases max. Pas de JSON. Pas de liste.',
+      temperature: 0.5,
+      maxTokens: qual.score >= 65 ? 120 : 50,
+    })) {
+      if (chunk.text) {
+        fullText += chunk.text;
+        res.write(`event: token\ndata: ${JSON.stringify({ text: chunk.text })}\n\n`);
+      }
+    }
+
+    const totalMs = Math.round(performance.now() - t0);
+    res.write(`event: done\ndata: ${JSON.stringify({ totalMs, fullText })}\n\n`);
+    res.end();
+
+    logger.info({ query: body.message, universe: universe?.id, qualScore: qual.score, totalMs }, 'search.assist.stream');
+  } catch (err) {
+    if (!res.headersSent) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ error: 'Validation error', details: err.errors });
+        return;
+      }
+      next(err);
+    } else {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: (err as Error).message })}\n\n`);
+      res.end();
+    }
+  }
+});

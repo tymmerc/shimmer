@@ -1,0 +1,38 @@
+{
+  "name": "@shimmer/sdk",
+  "version": "1.0.0",
+  "description": "Shimmer SDK — AI e-commerce platform SDK + embeddable widgets",
+  "main": "dist/shimmer-sdk.cjs.js",
+  "module": "dist/shimmer-sdk.esm.js",
+  "browser": "dist/shimmer-sdk.min.js",
+  "types": "dist/shimmer.d.ts",
+  "exports": {
+    ".": {
+      "browser": "./dist/shimmer-sdk.min.js",
+      "import": "./dist/shimmer-sdk.esm.js",
+      "require": "./dist/shimmer-sdk.cjs.js"
+    },
+    "./widget": {
+      "import": "./dist/shimmer.esm.js",
+      "require": "./dist/shimmer.js"
+    }
+  },
+  "scripts": {
+    "build": "node build.js",
+    "dev": "node build.js --watch"
+  },
+  "files": [
+    "dist",
+    "src/shimmer.js"
+  ],
+  "keywords": [
+    "shimmer",
+    "ecommerce",
+    "ai",
+    "search",
+    "sdk"
+  ],
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

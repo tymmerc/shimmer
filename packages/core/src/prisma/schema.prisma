@@ -1,0 +1,658 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// MULTI-TENANT
+// ============================================================
+
+model Store {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(200)
+  apiKey    String   @unique @map("api_key") @db.VarChar(100)
+  config    Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  products       Product[]
+  platforms      Platform[]
+  customers      Customer[]
+  orders         Order[]
+  savRequests    SavRequest[]
+  alerts         Alert[]
+  faq            Faq[]
+  searchSessions  SearchSession[]
+  chatSessions    ChatSession[]
+  mailQueue       MailQueue[]
+  analyticsEvents AnalyticsEvent[]
+  reviewRequests  ReviewRequest[]
+  reviews         Review[]
+
+  @@map("stores")
+}
+
+// ============================================================
+// PRODUCTS
+// ============================================================
+
+model Product {
+  id                Int       @id @default(autoincrement())
+  storeId           Int       @map("store_id")
+  sku               String    @db.VarChar(100)
+  name              String    @db.VarChar(500)
+  description       String?   @db.Text
+  category          String?   @db.VarChar(200)
+  brand             String?   @db.VarChar(200)
+  price             Decimal?  @db.Decimal(10, 2)
+  compareAtPrice    Decimal?  @map("compare_at_price") @db.Decimal(10, 2)
+  currency          String    @default("EUR") @db.VarChar(3)
+  stock             Int       @default(0)
+  stockStatus       String    @default("in_stock") @map("stock_status") @db.VarChar(20)
+  lowStockThreshold Int       @default(5) @map("low_stock_threshold")
+  specs             Json      @default("{}")
+  imageUrl          String?   @map("image_url") @db.VarChar(1000)
+  isActive          Boolean   @default(true) @map("is_active")
+  platformId        Int?      @map("platform_id")
+  platformProductId String?   @map("platform_product_id") @db.VarChar(200)
+  lastSync          DateTime? @map("last_sync")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  store      Store     @relation(fields: [storeId], references: [id])
+  platform   Platform? @relation(fields: [platformId], references: [id])
+  attributes ProductAttribute[]
+  variants   ProductVariant[]
+  usages     ProductUsage[]
+  orderItems OrderItem[]
+  alerts     Alert[]
+  reviews    Review[]
+
+  @@unique([sku, storeId])
+  @@index([storeId])
+  @@index([platformId])
+  @@index([stockStatus])
+  @@map("products")
+}
+
+model ProductAttribute {
+  id             Int     @id @default(autoincrement())
+  productId      Int     @map("product_id")
+  attributeName  String  @map("attribute_name") @db.VarChar(100)
+  attributeValue String  @map("attribute_value") @db.VarChar(500)
+  attributeType  String  @default("text") @map("attribute_type") @db.VarChar(20)
+  unit           String? @db.VarChar(30)
+  isFilterable   Boolean @default(false) @map("is_filterable")
+  sortOrder      Int     @default(0) @map("sort_order")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([attributeName])
+  @@index([isFilterable], map: "idx_product_attrs_filterable")
+  @@map("product_attributes")
+}
+
+model ProductVariant {
+  id           Int     @id @default(autoincrement())
+  productId    Int     @map("product_id")
+  variantType  String  @map("variant_type") @db.VarChar(50)
+  variantValue String  @map("variant_value") @db.VarChar(100)
+  priceModifier Decimal @default(0) @map("price_modifier") @db.Decimal(10, 2)
+  stock        Int     @default(0)
+  skuSuffix    String? @map("sku_suffix") @db.VarChar(20)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, variantType, variantValue])
+  @@index([productId])
+  @@map("product_variants")
+}
+
+// ============================================================
+// USAGE TAXONOMY & PRODUCT USAGES
+// ============================================================
+
+model UsageTaxonomy {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique @db.VarChar(50)
+  label       String   @db.VarChar(200)
+  category    String?  @db.VarChar(200)
+  keywords    String[]
+  description String?  @db.Text
+  parentCode  String?  @map("parent_code") @db.VarChar(50)
+  sortOrder   Int      @default(0) @map("sort_order")
+
+  productUsages ProductUsage[]
+
+  @@index([category])
+  @@index([code])
+  @@map("usage_taxonomy")
+}
+
+model ProductUsage {
+  id           Int    @id @default(autoincrement())
+  productId    Int    @map("product_id")
+  usageId      Int    @map("usage_id")
+  score        Int    // 0-100
+  confidence   String @default("medium") @db.VarChar(20)
+  source       String @default("pim") @db.VarChar(100)
+  sourcesCount Int    @default(1) @map("sources_count")
+
+  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  usage   UsageTaxonomy @relation(fields: [usageId], references: [id])
+
+  @@unique([productId, usageId])
+  @@index([productId])
+  @@index([usageId])
+  @@index([score(sort: Desc)])
+  @@map("product_usages")
+}
+
+// ============================================================
+// SEARCH
+// ============================================================
+
+enum SearchType {
+  EXACT
+  FUNCTIONAL
+  SIMILARITY
+  HYBRID
+}
+
+enum ConversationStateEnum {
+  INIT
+  DETECTION
+  QUALIFICATION
+  RECOMMENDATION
+  OBJECTION
+  PURCHASE
+  CLOSURE
+}
+
+model SearchSession {
+  id               Int        @id @default(autoincrement())
+  storeId          Int        @map("store_id")
+  sessionToken     String     @map("session_token") @db.VarChar(100)
+  query            String?    @db.Text
+  searchType       SearchType? @map("search_type")
+  stageUsed        Int?       @map("stage_used")
+  mappedUsages     String[]   @map("mapped_usages")
+  results          Json       @default("[]")
+  messages         Json       @default("[]")
+  selectedProductId Int?      @map("selected_product_id")
+  converted        Boolean    @default(false)
+  createdAt        DateTime   @default(now()) @map("created_at")
+
+  store             Store              @relation(fields: [storeId], references: [id])
+  conversationState ConversationState?
+  learningFeedback  LearningFeedback[]
+
+  @@index([storeId])
+  @@index([sessionToken])
+  @@index([createdAt(sort: Desc)])
+  @@map("search_sessions")
+}
+
+model ConversationState {
+  id             Int                   @id @default(autoincrement())
+  sessionId      Int                   @unique @map("session_id")
+  state          ConversationStateEnum @default(INIT)
+  context        Json                  @default("{}")
+  budgetSignal   String?               @map("budget_signal") @db.VarChar(200)
+  detectedUsages String[]              @map("detected_usages")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  session SearchSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("conversation_state")
+}
+
+// ============================================================
+// CHAT
+// ============================================================
+
+enum ChatStatus {
+  ACTIVE
+  ESCALATED
+  RESOLVED
+  CLOSED
+}
+
+model ChatSession {
+  id               Int        @id @default(autoincrement())
+  storeId          Int        @map("store_id")
+  sessionToken     String     @map("session_token") @db.VarChar(100)
+  messages         Json       @default("[]")
+  status           ChatStatus @default(ACTIVE)
+  escalated        Boolean    @default(false)
+  escalationReason String?    @map("escalation_reason") @db.Text
+  resolvedAt       DateTime?  @map("resolved_at")
+  createdAt        DateTime   @default(now()) @map("created_at")
+
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@index([storeId])
+  @@index([sessionToken])
+  @@index([status])
+  @@map("chat_sessions")
+}
+
+// ============================================================
+// MAIL
+// ============================================================
+
+enum MailCategory {
+  ORDER_STATUS
+  RETURN_REQUEST
+  PRODUCT_QUESTION
+  COMPLAINT
+  DELIVERY_ISSUE
+  PAYMENT_ISSUE
+  SPAM
+  OTHER
+}
+
+enum MailStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SENT
+}
+
+model MailQueue {
+  id            Int          @id @default(autoincrement())
+  storeId       Int          @map("store_id")
+  externalId    String?      @map("external_id") @db.VarChar(200)
+  fromAddr      String       @map("from_addr") @db.VarChar(255)
+  subject       String       @db.VarChar(500)
+  body          String       @db.Text
+  category      MailCategory?
+  urgency       String?      @db.VarChar(20)
+  sentiment     String?      @db.VarChar(20)
+  extractedData Json?        @map("extracted_data")
+  draftResponse String?      @map("draft_response") @db.Text
+  confidence    Decimal?     @db.Decimal(3, 2)
+  status        MailStatus   @default(PENDING)
+  processedAt   DateTime?    @map("processed_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@index([storeId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("mail_queue")
+}
+
+// ============================================================
+// ANALYTICS & LEARNING
+// ============================================================
+
+model LearningFeedback {
+  id               Int      @id @default(autoincrement())
+  searchSessionId  Int      @map("search_session_id")
+  query            String?  @db.Text
+  stageUsed        Int?     @map("stage_used")
+  mappedUsage      String?  @map("mapped_usage") @db.VarChar(50)
+  clientValidated  Boolean? @map("client_validated")
+  clientCorrection String?  @map("client_correction") @db.VarChar(200)
+  converted        Boolean  @default(false)
+  returned         Boolean  @default(false)
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  searchSession SearchSession @relation(fields: [searchSessionId], references: [id], onDelete: Cascade)
+
+  @@index([searchSessionId])
+  @@index([createdAt(sort: Desc)])
+  @@map("learning_feedback")
+}
+
+model AnalyticsEvent {
+  id        Int      @id @default(autoincrement())
+  storeId   Int      @map("store_id")
+  eventType String   @map("event_type") @db.VarChar(50)
+  payload   Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@index([storeId])
+  @@index([eventType])
+  @@index([createdAt(sort: Desc)])
+  @@map("analytics_events")
+}
+
+// ============================================================
+// CUSTOMERS & ORDERS
+// ============================================================
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  storeId   Int      @map("store_id")
+  email     String   @db.VarChar(255)
+  firstName String   @map("first_name") @db.VarChar(100)
+  lastName  String   @map("last_name") @db.VarChar(100)
+  phone     String?  @db.VarChar(20)
+  address   Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  store          Store           @relation(fields: [storeId], references: [id])
+  orders         Order[]
+  savRequests    SavRequest[]
+  reviewRequests ReviewRequest[]
+  reviews        Review[]
+
+  @@unique([email, storeId])
+  @@index([storeId])
+  @@map("customers")
+}
+
+model Order {
+  id            Int       @id @default(autoincrement())
+  storeId       Int       @map("store_id")
+  orderNumber   String    @unique @map("order_number") @db.VarChar(20)
+  customerId    Int       @map("customer_id")
+  status        String    @default("pending") @db.VarChar(30)
+  totalAmount   Decimal   @map("total_amount") @db.Decimal(10, 2)
+  shippingCost  Decimal   @default(0) @map("shipping_cost") @db.Decimal(10, 2)
+  paymentMethod String    @default("card") @map("payment_method") @db.VarChar(30)
+  orderedAt     DateTime  @default(now()) @map("ordered_at")
+  deliveredAt   DateTime? @map("delivered_at")
+  notes         String?   @db.Text
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  store          Store           @relation(fields: [storeId], references: [id])
+  customer       Customer        @relation(fields: [customerId], references: [id])
+  items          OrderItem[]
+  shipments      Shipment[]
+  savRequests    SavRequest[]
+  reviewRequests ReviewRequest[]
+  reviews        Review[]
+
+  @@index([storeId])
+  @@index([customerId])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id         Int     @id @default(autoincrement())
+  orderId    Int     @map("order_id")
+  productId  Int     @map("product_id")
+  quantity   Int     @default(1)
+  unitPrice  Decimal @map("unit_price") @db.Decimal(10, 2)
+  totalPrice Decimal @map("total_price") @db.Decimal(10, 2)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model Shipment {
+  id                Int       @id @default(autoincrement())
+  orderId           Int       @map("order_id")
+  carrier           String    @db.VarChar(50)
+  trackingNumber    String    @map("tracking_number") @db.VarChar(100)
+  status            String    @default("preparing") @db.VarChar(30)
+  shippedAt         DateTime? @map("shipped_at")
+  estimatedDelivery DateTime? @map("estimated_delivery")
+  deliveredAt       DateTime? @map("delivered_at")
+  lastLocation      String?   @map("last_location") @db.VarChar(200)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status])
+  @@index([trackingNumber])
+  @@map("shipments")
+}
+
+// ============================================================
+// SAV
+// ============================================================
+
+model SavRequest {
+  id            Int       @id @default(autoincrement())
+  storeId       Int       @map("store_id")
+  requestNumber String    @unique @map("request_number") @db.VarChar(20)
+  orderId       Int       @map("order_id")
+  customerId    Int       @map("customer_id")
+  type          String    @db.VarChar(30)
+  status        String    @default("open") @db.VarChar(30)
+  description   String?   @db.Text
+  resolution    String?   @db.Text
+  refundAmount  Decimal?  @map("refund_amount") @db.Decimal(10, 2)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  resolvedAt    DateTime? @map("resolved_at")
+
+  store    Store    @relation(fields: [storeId], references: [id])
+  order    Order    @relation(fields: [orderId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([storeId])
+  @@index([orderId])
+  @@index([customerId])
+  @@map("sav_requests")
+}
+
+// ============================================================
+// PLATFORMS & SYNC
+// ============================================================
+
+model Platform {
+  id            Int       @id @default(autoincrement())
+  storeId       Int       @map("store_id")
+  name          String    @db.VarChar(50)
+  apiUrl        String?   @map("api_url") @db.VarChar(500)
+  apiStatus     String    @default("inactive") @map("api_status") @db.VarChar(20)
+  credentialsOk Boolean   @default(false) @map("credentials_ok")
+  lastSync      DateTime? @map("last_sync")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  store    Store      @relation(fields: [storeId], references: [id])
+  products Product[]
+  syncLogs SyncLog[]
+  alerts   Alert[]
+
+  @@unique([name, storeId])
+  @@index([storeId])
+  @@map("platforms")
+}
+
+model SyncLog {
+  id             Int       @id @default(autoincrement())
+  platformId     Int       @map("platform_id")
+  action         String    @db.VarChar(50)
+  status         String    @db.VarChar(20)
+  productsSynced Int       @default(0) @map("products_synced")
+  productsFailed Int       @default(0) @map("products_failed")
+  errorMsg       String?   @map("error_msg") @db.Text
+  durationMs     Int?      @map("duration_ms")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+
+  platform Platform @relation(fields: [platformId], references: [id])
+
+  @@index([platformId])
+  @@index([startedAt(sort: Desc)])
+  @@map("sync_logs")
+}
+
+// ============================================================
+// REVIEWS
+// ============================================================
+
+enum ReviewRequestStatus {
+  SCHEDULED
+  SENT
+  COMPLETED
+  EXPIRED
+}
+
+enum ReviewStatus {
+  PENDING_MODERATION
+  APPROVED
+  REJECTED
+  PUBLISHED
+}
+
+enum PublicationPlatform {
+  PRODUCT_PAGE
+  GOOGLE
+  TRUSTPILOT
+}
+
+enum PublicationStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+model ReviewRequest {
+  id          Int                 @id @default(autoincrement())
+  storeId     Int                 @map("store_id")
+  orderId     Int                 @map("order_id")
+  customerId  Int                 @map("customer_id")
+  token       String              @unique @db.VarChar(100)
+  status      ReviewRequestStatus @default(SCHEDULED)
+  scheduledAt DateTime            @map("scheduled_at")
+  sentAt      DateTime?           @map("sent_at")
+  completedAt DateTime?           @map("completed_at")
+  expiresAt   DateTime            @map("expires_at")
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  store    Store    @relation(fields: [storeId], references: [id])
+  order    Order    @relation(fields: [orderId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  reviews  Review[]
+
+  @@index([storeId])
+  @@index([orderId])
+  @@index([customerId])
+  @@index([status])
+  @@index([token])
+  @@map("review_requests")
+}
+
+model Review {
+  id              Int          @id @default(autoincrement())
+  storeId         Int          @map("store_id")
+  reviewRequestId Int          @map("review_request_id")
+  customerId      Int          @map("customer_id")
+  productId       Int?         @map("product_id")
+  orderId         Int          @map("order_id")
+  overallRating   Int          @map("overall_rating")
+  productRating   Int?         @map("product_rating")
+  deliveryRating  Int?         @map("delivery_rating")
+  serviceRating   Int?         @map("service_rating")
+  title           String?      @db.VarChar(200)
+  comment         String?      @db.Text
+  pros            String?      @db.Text
+  cons            String?      @db.Text
+  wouldRecommend  Boolean?     @map("would_recommend")
+  status          ReviewStatus @default(PENDING_MODERATION)
+  moderatedAt     DateTime?    @map("moderated_at")
+  moderationNote  String?      @map("moderation_note") @db.Text
+  aiSummary       String?      @map("ai_summary") @db.Text
+  aiSentiment     String?      @map("ai_sentiment") @db.VarChar(20)
+  savTriggered    Boolean      @default(false) @map("sav_triggered")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  store         Store               @relation(fields: [storeId], references: [id])
+  reviewRequest ReviewRequest       @relation(fields: [reviewRequestId], references: [id])
+  customer      Customer            @relation(fields: [customerId], references: [id])
+  product       Product?            @relation(fields: [productId], references: [id])
+  order         Order               @relation(fields: [orderId], references: [id])
+  publications  ReviewPublication[]
+
+  @@index([storeId])
+  @@index([productId])
+  @@index([customerId])
+  @@index([orderId])
+  @@index([status])
+  @@index([overallRating])
+  @@index([createdAt(sort: Desc)])
+  @@map("reviews")
+}
+
+model ReviewPublication {
+  id          Int                 @id @default(autoincrement())
+  reviewId    Int                 @map("review_id")
+  platform    PublicationPlatform
+  status      PublicationStatus   @default(PENDING)
+  externalId  String?             @map("external_id") @db.VarChar(200)
+  externalUrl String?             @map("external_url") @db.VarChar(500)
+  publishedAt DateTime?           @map("published_at")
+  error       String?             @db.Text
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId])
+  @@index([platform])
+  @@index([status])
+  @@map("review_publications")
+}
+
+// ============================================================
+// FAQ & PRODUCT KNOWLEDGE
+// ============================================================
+
+model Faq {
+  id        Int    @id @default(autoincrement())
+  storeId   Int    @map("store_id")
+  question  String @db.Text
+  answer    String @db.Text
+  category  String @db.VarChar(50)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@index([storeId])
+  @@index([category])
+  @@map("faq")
+}
+
+model Alert {
+  id         Int      @id @default(autoincrement())
+  storeId    Int      @map("store_id")
+  type       String   @db.VarChar(50)
+  severity   String   @default("info") @db.VarChar(20)
+  productId  Int?     @map("product_id")
+  platformId Int?     @map("platform_id")
+  message    String   @db.Text
+  isRead     Boolean  @default(false) @map("is_read")
+  isSent     Boolean  @default(false) @map("is_sent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  store    Store     @relation(fields: [storeId], references: [id])
+  product  Product?  @relation(fields: [productId], references: [id])
+  platform Platform? @relation(fields: [platformId], references: [id])
+
+  @@index([storeId])
+  @@index([isRead], map: "idx_alerts_unread")
+  @@map("alerts")
+}
+
+model ProductKnowledge {
+  id            Int      @id @default(autoincrement())
+  category      String   @db.VarChar(100)
+  buyerProfile  String   @map("buyer_profile") @db.VarChar(100)
+  profileLabel  String   @map("profile_label") @db.VarChar(100)
+  criteria      String   @db.Text
+  avoid         String?  @db.Text
+  priceRangeMin Int?     @map("price_range_min")
+  priceRangeMax Int?     @map("price_range_max")
+  keywords      String[]
+
+  @@index([category])
+  @@map("product_knowledge")
+}

@@ -1,0 +1,35 @@
+{
+  "name": "api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts --format esm",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@shimmer/core": "workspace:*",
+    "@shimmer/smart-search": "workspace:*",
+    "@shimmer/chatbot": "workspace:*",
+    "@shimmer/mail-engine": "workspace:*",
+    "@shimmer/reviews": "workspace:*",
+    "express": "^4.21.0",
+    "helmet": "^8.0.0",
+    "compression": "^1.7.0",
+    "cors": "^2.8.0",
+    "express-rate-limit": "^7.0.0",
+    "rate-limit-redis": "^4.0.0",
+    "pino-http": "^10.0.0",
+    "zod": "^3.23.0",
+    "bullmq": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/compression": "^1.7.0",
+    "@types/cors": "^2.8.0",
+    "tsx": "^4.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0"
+  }
+}

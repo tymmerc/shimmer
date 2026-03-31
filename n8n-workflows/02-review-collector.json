@@ -1,0 +1,165 @@
+{
+  "id": "shimmer-wf-02",
+  "name": "Shimmer — Review Collector & Auto-Publish",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## ⭐ Review Collector\n\n**Trigger 1**: Webhook 'order-delivered' → Crée review_request en DB\n**Trigger 2**: Webhook 'review-submitted' → Save review → AI Summary → Route par note\n**DB**: PostgreSQL direct\n**LLM**: Ollama pour résumé IA",
+        "height": 200, "width": 600
+      },
+      "id": "note-main", "name": "Doc", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-100, -200]
+    },
+    {
+      "parameters": { "httpMethod": "POST", "path": "order-delivered", "responseMode": "lastNode", "options": {} },
+      "id": "trigger-delivered", "name": "Order Delivered", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [0, 100], "webhookId": "order-delivered-hook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst i = raw.body || raw;\nreturn [{ json: { order_id: i.order_id || i.orderId } }];"
+      },
+      "id": "norm-delivered", "name": "Normalize Delivered", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [200, 100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO review_requests (store_id, order_id, customer_id, token, status, scheduled_at, expires_at, created_at) SELECT o.store_id, o.id, o.customer_id, md5(random()::text || o.id::text || now()::text), 'SCHEDULED', NOW() + INTERVAL '7 days', NOW() + INTERVAL '30 days', NOW() FROM orders o WHERE o.id = {{ $json.order_id }} AND NOT EXISTS (SELECT 1 FROM review_requests rr WHERE rr.order_id = o.id) RETURNING id, token, order_id, customer_id;"
+      },
+      "id": "db-create-rr", "name": "Create Review Request", "type": "n8n-nodes-base.postgres", "typeVersion": 2.5, "position": [420, 100],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": false
+    },
+    {
+      "parameters": { "jsCode": "return [{ json: { success: true, reviewRequestId: $input.first().json.id, token: $input.first().json.token } }];" },
+      "id": "resp-delivered", "name": "Response", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [640, 100],
+      "continueOnFail": true
+    },
+    {
+      "parameters": { "httpMethod": "POST", "path": "review-submitted", "responseMode": "lastNode", "options": {} },
+      "id": "trigger-review", "name": "Review Submitted", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [0, 400], "webhookId": "review-submitted-hook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst i = raw.body || raw;\nreturn [{ json: { store_id: i.store_id||1, token: i.token, product_id: i.product_id||i.productId||null, overall_rating: i.overall_rating||i.overallRating||i.rating||3, product_rating: i.product_rating||null, delivery_rating: i.delivery_rating||null, service_rating: i.service_rating||null, title: (i.title||'').replace(/'/g,\"''\"), comment: (i.comment||'').replace(/'/g,\"''\"), pros: (i.pros||'').replace(/'/g,\"''\"), cons: (i.cons||'').replace(/'/g,\"''\"), would_recommend: i.would_recommend??true } }];"
+      },
+      "id": "normalize-review", "name": "Normalize", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [260, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst token = d.token;\nconst store_id = d.store_id;\nconst overall_rating = d.overall_rating;\nconst title = (d.title||'').replace(/'/g,\"''\");\nconst comment = (d.comment||'').replace(/'/g,\"''\");\nconst pros = (d.pros||'').replace(/'/g,\"''\");\nconst cons = (d.cons||'').replace(/'/g,\"''\");\nconst would_recommend = d.would_recommend ? 'true' : 'false';\nreturn [{ json: { token, store_id, overall_rating, title, comment, pros, cons, would_recommend, insert_query: `INSERT INTO reviews (store_id, review_request_id, customer_id, product_id, order_id, overall_rating, title, comment, pros, cons, would_recommend, status, created_at) SELECT ${store_id}, rr.id, rr.customer_id, NULL, rr.order_id, ${overall_rating}, '${title}', '${comment}', '${pros}', '${cons}', ${would_recommend}, 'PENDING_MODERATION', NOW() FROM review_requests rr WHERE rr.token = '${token}'`, select_query: `SELECT id, overall_rating, comment FROM reviews WHERE review_request_id = (SELECT id FROM review_requests WHERE token = '${token}') ORDER BY id DESC LIMIT 1` } }];"
+      },
+      "id": "build-query", "name": "Build Query", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [500, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.insert_query }}"
+      },
+      "id": "db-save-review", "name": "Save Review", "type": "n8n-nodes-base.postgres", "typeVersion": 2.5, "position": [720, 400],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $('Build Query').first().json.select_query }}"
+      },
+      "id": "db-get-review", "name": "Get Review", "type": "n8n-nodes-base.postgres", "typeVersion": 2.5, "position": [940, 400],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={ \"model\": \"qwen2.5:3b\", \"prompt\": \"Resume cet avis client en une phrase concise. Note: {{ $json.overall_rating }}/5. Commentaire: {{ $json.comment }}\", \"stream\": false, \"options\": { \"temperature\": 0.3 } }",
+        "options": { "timeout": 20000 }
+      },
+      "id": "ollama-summary", "name": "AI Summary", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1160, 400],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const review = $('Get Review').first().json;\nif (!review || !review.id) throw new Error('Review not saved — got: ' + JSON.stringify(review));\nconst summary = ($input.first().json?.response || 'Resume indisponible').substring(0,200).replace(/'/g,\"''\");\nconst r = Number(review.overall_rating) || 3;\nlet route, sentiment, status_update, sav_triggered, alert_sql;\nif (r <= 2) {\n  route = 'sav'; sentiment = 'negative'; status_update = ''; sav_triggered = true;\n  alert_sql = `INSERT INTO alerts (store_id,type,severity,message,is_read,is_sent,created_at) VALUES (1,'BAD_REVIEW','high','Avis negatif ${r}/5',false,false,NOW());`;\n} else if (r >= 4) {\n  route = 'publish'; sentiment = 'positive'; status_update = \"status='PUBLISHED', moderated_at=NOW(),\"; sav_triggered = false;\n  alert_sql = '';\n} else {\n  route = 'moderate'; sentiment = 'neutral'; status_update = ''; sav_triggered = false;\n  alert_sql = '';\n}\nconst update_sql = `UPDATE reviews SET ${status_update} ai_summary='${summary}', ai_sentiment='${sentiment}', sav_triggered=${sav_triggered} WHERE id=${review.id}; ${alert_sql}`;\nreturn [{ json: { reviewId: review.id, rating: r, route, summary, update_sql } }];"
+      },
+      "id": "decide", "name": "Decide & Build Update", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1380, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.update_sql }}"
+      },
+      "id": "db-apply-route", "name": "Apply Route", "type": "n8n-nodes-base.postgres", "typeVersion": 2.5, "position": [1600, 400],
+      "credentials": { "postgres": { "id": "cbDqvZTXf93hJtnr", "name": "Shimmer PostgreSQL" } },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": false
+    },
+    {
+      "parameters": { "jsCode": "const d = $('Decide & Build Update').first().json;\nreturn [{ json: { success: true, reviewId: d.reviewId, rating: d.rating, route: d.route } }];" },
+      "id": "resp-review", "name": "Review Response", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1820, 400],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 800]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_events (store_id, event_type, payload, created_at) VALUES (1, 'workflow_error', '{\"workflow\": \"review_collector\", \"error\": \"{{ $json.message }}\"}'::jsonb, NOW())"
+      },
+      "id": "log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [260, 800],
+      "credentials": {
+        "postgres": {
+          "id": "cbDqvZTXf93hJtnr",
+          "name": "Shimmer PostgreSQL"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Order Delivered": { "main": [[{ "node": "Normalize Delivered", "type": "main", "index": 0 }]] },
+    "Normalize Delivered": { "main": [[{ "node": "Create Review Request", "type": "main", "index": 0 }]] },
+    "Create Review Request": { "main": [[{ "node": "Response", "type": "main", "index": 0 }]] },
+    "Review Submitted": { "main": [[{ "node": "Normalize", "type": "main", "index": 0 }]] },
+    "Normalize": { "main": [[{ "node": "Build Query", "type": "main", "index": 0 }]] },
+    "Build Query": { "main": [[{ "node": "Save Review", "type": "main", "index": 0 }]] },
+    "Save Review": { "main": [[{ "node": "Get Review", "type": "main", "index": 0 }]] },
+    "Get Review": { "main": [[{ "node": "AI Summary", "type": "main", "index": 0 }]] },
+    "AI Summary": { "main": [[{ "node": "Decide & Build Update", "type": "main", "index": 0 }]] },
+    "Decide & Build Update": { "main": [[{ "node": "Apply Route", "type": "main", "index": 0 }]] },
+    "Apply Route": { "main": [[{ "node": "Review Response", "type": "main", "index": 0 }]] },
+    "Error Trigger": {
+      "main": [[{ "node": "Log Error", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1", "saveExecutionProgress": true },
+  "active": false,
+  "tags": [{ "name": "shimmer" }, { "name": "reviews" }]
+}

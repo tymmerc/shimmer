@@ -1,0 +1,22 @@
+{
+  "name": "@shimmer/smart-search",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts",
+    "dev": "tsup src/index.ts --format esm --dts --watch"
+  },
+  "dependencies": {
+    "@shimmer/core": "workspace:*",
+    "hnswlib-node": "^3.0.0",
+    "fastest-levenshtein": "^1.0.0",
+    "double-metaphone": "^2.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0"
+  }
+}

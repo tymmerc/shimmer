@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shimmer — AI E-Commerce Platform</title>
+  <meta name="description" content="Shimmer — recherche intelligente, chatbot SAV, triage email. IA locale, zero cloud." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav class="nav" id="nav">
+    <a href="#hero" class="nav-logo">SHIMMER</a>
+    <div class="nav-links" id="navLinks">
+      <a href="#modules">Modules</a>
+      <a href="#search">Recherche</a>
+      <a href="#chatbot">Chatbot</a>
+      <a href="#arch">Architecture</a>
+      <a href="#demo" class="nav-cta">Demo live</a>
+    </div>
+    <button class="nav-burger" id="navBurger" aria-label="Menu"><span></span></button>
+  </nav>
+
+  <!-- ████  HERO  ████ -->
+  <section class="hero" id="hero">
+    <canvas id="toxin"></canvas>
+    <div class="hero-inner">
+      <p class="hero-tag">Plateforme IA pour e-commerce</p>
+      <h1 class="hero-title" data-text="SHIMMER">SHIMMER</h1>
+      <p class="hero-sub">Des modules IA autonomes qui font gagner du temps aux e-commercants. Recherche, SAV, emails, avis : chaque brique automatise un pan du quotidien, jusqu'a couvrir l'ensemble du commerce en ligne.</p>
+      <div class="hero-btns">
+        <a href="#modules" class="btn-fill">Decouvrir</a>
+        <a href="#demo" class="btn-line">Demo live</a>
+      </div>
+    </div>
+    <div class="hero-fade"></div>
+    <div class="scroll-hint"><span></span></div>
+  </section>
+
+  <!-- ████  NUMBERS  ████ -->
+  <section class="numbers">
+    <div class="wrap">
+      <div class="num"><b data-to="10">0</b><small>ms</small><span>BM25 Search</span></div>
+      <div class="num"><b data-to="4">0</b><small></small><span>Modules IA</span></div>
+      <div class="num"><b data-to="500">0</b><small>ms</small><span>Pipeline complet</span></div>
+      <div class="num"><b data-to="0">0</b><small></small><span>Donnees envoyees au cloud</span></div>
+    </div>
+  </section>
+
+  <!-- ████  MODULES  ████ -->
+  <section class="section" id="modules">
+    <div class="wrap">
+      <p class="stag">Modules</p>
+      <h2 class="sh">Quatre moteurs. Une plateforme.</h2>
+      <div class="cards4">
+        <article class="card" data-accent="cyan">
+          <div class="card-num">01</div>
+          <h3>Smart Search</h3>
+          <p>Pipeline 3 etapes — BM25 lexical, embeddings semantiques 768D, reformulation LLM. Recherche par besoin fonctionnel.</p>
+          <a href="#search">Explorer &rarr;</a>
+        </article>
+        <article class="card" data-accent="purple">
+          <div class="card-num">02</div>
+          <h3>Chatbot SAV</h3>
+          <p>Assistant conversationnel avec memoire, consultation commandes temps reel, detection de frustration et escalade auto.</p>
+          <a href="#chatbot">Explorer &rarr;</a>
+        </article>
+        <article class="card" data-accent="pink">
+          <div class="card-num">03</div>
+          <h3>Mail Engine</h3>
+          <p>Classification IA des emails, extraction de donnees, brouillons generes. Validation humaine obligatoire avant envoi.</p>
+          <a href="#mail">Explorer &rarr;</a>
+        </article>
+        <article class="card" data-accent="gold">
+          <div class="card-num">04</div>
+          <h3>Review Collector</h3>
+          <p>Questionnaire post-livraison, collecte d'avis, publication auto sur fiches produits et Google. Declenchement SAV si note basse.</p>
+          <a href="#reviews">Explorer &rarr;</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ████  SEARCH PIPELINE  ████ -->
+  <section class="section dark" id="search">
+    <div class="wrap">
+      <p class="stag">Module 01</p>
+      <h2 class="sh">Le pipeline de recherche.</h2>
+      <div class="pipeline">
+        <div class="pipe-step" data-reveal>
+          <div class="pipe-bar"></div>
+          <div class="pipe-head">
+            <span class="pipe-n">01</span>
+            <h3>BM25 Lexical</h3>
+            <span class="pipe-time">&lt;10ms</span>
+          </div>
+          <p>Index inverse, stopwords FR/EN, scoring TF-IDF. Matchs exacts sur noms, SKU, marques.</p>
+          <div class="pipe-code"><span class="c-kw">search</span>(<span class="c-str">"aspirateur robot"</span>) <span class="c-op">&rarr;</span> [Roomba i7, Dyson V15, ...]</div>
+        </div>
+        <div class="pipe-step" data-reveal>
+          <div class="pipe-bar"></div>
+          <div class="pipe-head">
+            <span class="pipe-n">02</span>
+            <h3>Embeddings</h3>
+            <span class="pipe-time">&lt;100ms</span>
+          </div>
+          <p>Vecteurs 768D via multilingual-e5-base ONNX. Recherche par sens, pas par mots. Index HNSW + cache Redis.</p>
+          <div class="pipe-code"><span class="c-fn">embed</span>(<span class="c-str">"nettoyer poils chat"</span>) <span class="c-op">&rarr;</span> knn(vec, k=20)</div>
+        </div>
+        <div class="pipe-step" data-reveal>
+          <div class="pipe-bar"></div>
+          <div class="pipe-head">
+            <span class="pipe-n">03</span>
+            <h3>LLM Local</h3>
+            <span class="pipe-time">&lt;500ms</span>
+          </div>
+          <p>Qwen 2.5 reformule les requetes ambigues, detecte le besoin fonctionnel, qualifie en max 3 questions.</p>
+          <div class="pipe-code"><span class="c-fn">qualify</span>(<span class="c-str">"cadeau maman"</span>) <span class="c-op">&rarr;</span> {usages: [GIFT, BEAUTY], questions: [budget?]}</div>
+        </div>
+      </div>
+      <div class="fusion" data-reveal>
+        <span>Reciprocal Rank Fusion</span>
+        <p>Les 3 etapes fusionnees par RRF — pertinence lexicale + semantique + intentionnelle.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ████  CHATBOT  ████ -->
+  <section class="section" id="chatbot">
+    <div class="wrap">
+      <div class="split">
+        <div class="split-txt" data-reveal>
+          <p class="stag">Module 02</p>
+          <h2 class="sh left">Chatbot SAV intelligent.</h2>
+          <p class="sdesc">Assistant qui comprend le contexte client — commandes, livraisons, SAV. Repond en francais avec empathie.</p>
+          <ul class="dots">
+            <li>Suivi commandes & colis temps reel</li>
+            <li>Detection frustration + escalade auto</li>
+            <li>Memoire conversationnelle</li>
+            <li>Streaming SSE</li>
+            <li>Zero donnee sensible exposee</li>
+          </ul>
+        </div>
+        <div class="split-vis" data-reveal>
+          <div class="chat-mock">
+            <div class="chat-top"><i></i>Shimmer Assistant</div>
+            <div class="chat-msgs">
+              <div class="msg-user">Ou en est ma commande #4521 ?</div>
+              <div class="msg-bot" id="botMsg">
+                <div class="typing" id="typing"><i></i><i></i><i></i></div>
+                <div class="typed" id="typed"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ████  MAIL  ████ -->
+  <section class="section dark" id="mail">
+    <div class="wrap">
+      <div class="split rev">
+        <div class="split-txt" data-reveal>
+          <p class="stag">Module 03</p>
+          <h2 class="sh left">Triage email automatise.</h2>
+          <p class="sdesc">Classification, extraction, brouillon. L'humain valide toujours.</p>
+          <div class="mail-flow">
+            <div class="mf-step">Email</div>
+            <div class="mf-arr">&rarr;</div>
+            <div class="mf-step">Classification</div>
+            <div class="mf-arr">&rarr;</div>
+            <div class="mf-step">Brouillon</div>
+            <div class="mf-arr">&rarr;</div>
+            <div class="mf-step ok">Validation</div>
+          </div>
+        </div>
+        <div class="split-vis" data-reveal>
+          <div class="mail-mock">
+            <div class="mm-head">
+              <span class="mm-badge">Urgent</span>
+              <span class="mm-cat">Retour produit</span>
+            </div>
+            <div class="mm-body">
+              <p class="mm-from">marie.dupont@email.fr</p>
+              <p class="mm-subject">Retour commande #7892</p>
+              <div class="mm-tags">
+                <span>#7892</span>
+                <span>Neutre</span>
+                <span>94%</span>
+              </div>
+            </div>
+            <div class="mm-actions">
+              <button class="btn-ok">Approuver</button>
+              <button class="btn-no">Rejeter</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ████  REVIEWS  ████ -->
+  <section class="section" id="reviews">
+    <div class="wrap">
+      <div class="split">
+        <div class="split-txt" data-reveal>
+          <p class="stag">Module 04</p>
+          <h2 class="sh left">Collecte d'avis automatisee.</h2>
+          <p class="sdesc">Questionnaire post-livraison, analyse IA du sentiment, publication multi-plateforme. Les avis negatifs declenchent le SAV automatiquement.</p>
+          <ul class="dots">
+            <li>Questionnaire email post-livraison</li>
+            <li>Notes commande + produits + livraison</li>
+            <li>Analyse IA du sentiment</li>
+            <li>Publication fiche produit + Google + Trustpilot</li>
+            <li>Declenchement SAV auto si note &le; 2/5</li>
+            <li>Moderation humaine avant publication</li>
+          </ul>
+        </div>
+        <div class="split-vis" data-reveal>
+          <div class="review-mock">
+            <div class="rv-head">Votre avis compte</div>
+            <div class="rv-stars">
+              <div class="rv-label">Commande #4521</div>
+              <div class="rv-rating"><i>&#9733;</i><i>&#9733;</i><i>&#9733;</i><i>&#9733;</i><i class="dim">&#9733;</i> <span>4/5</span></div>
+            </div>
+            <div class="rv-fields">
+              <div class="rv-field"><span>Produit</span><div class="rv-bar"><div class="rv-fill" style="width:90%"></div></div><span>4.5</span></div>
+              <div class="rv-field"><span>Livraison</span><div class="rv-bar"><div class="rv-fill" style="width:60%"></div></div><span>3.0</span></div>
+              <div class="rv-field"><span>Service</span><div class="rv-bar"><div class="rv-fill" style="width:80%"></div></div><span>4.0</span></div>
+            </div>
+            <div class="rv-comment">"Tres bon produit, livraison un peu lente mais SAV reactif !"</div>
+            <div class="rv-publish">
+              <span class="rv-pub-badge pub-ok">Fiche produit</span>
+              <span class="rv-pub-badge pub-ok">Google</span>
+              <span class="rv-pub-badge pub-wait">Trustpilot</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ████  ARCHITECTURE  ████ -->
+  <section class="section" id="arch">
+    <div class="wrap">
+      <p class="stag">Architecture</p>
+      <h2 class="sh">Construit pour la vitesse.</h2>
+      <div class="tech-row">
+        <div class="tech" data-reveal>
+          <h4>TypeScript Strict</h4>
+          <p>Monorepo pnpm, zero any.</p>
+        </div>
+        <div class="tech" data-reveal>
+          <h4>Ollama Local</h4>
+          <p>Qwen 2.5 — inference 100% locale.</p>
+        </div>
+        <div class="tech" data-reveal>
+          <h4>Embeddings ONNX</h4>
+          <p>e5-base INT8, sidecar FastAPI.</p>
+        </div>
+        <div class="tech" data-reveal>
+          <h4>BullMQ</h4>
+          <p>4 workers asynchrones Redis.</p>
+        </div>
+        <div class="tech" data-reveal>
+          <h4>Prisma</h4>
+          <p>20 tables PostgreSQL 16.</p>
+        </div>
+        <div class="tech" data-reveal>
+          <h4>Redis</h4>
+          <p>Cache, rate-limit, queues.</p>
+        </div>
+      </div>
+      <div class="arch-layers" data-reveal>
+        <div class="al"><span>Client</span><div><b>SDK JS</b><b>Frontend Lovable</b></div></div>
+        <div class="al-arr">&darr;</div>
+        <div class="al"><span>API</span><div><b class="hl">Express :3003</b><b>Auth</b><b>Zod</b></div></div>
+        <div class="al-arr">&darr;</div>
+        <div class="al"><span>Packages</span><div><b class="c1">smart-search</b><b class="c2">chatbot</b><b class="c3">mail-engine</b><b class="c4">reviews</b><b>core</b></div></div>
+        <div class="al-arr">&darr;</div>
+        <div class="al"><span>Infra</span><div><b>PostgreSQL</b><b>Redis</b><b>Ollama</b><b>ONNX</b></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ████  DEMO  ████ -->
+  <section class="section dark" id="demo">
+    <div class="wrap">
+      <p class="stag">Demo live</p>
+      <h2 class="sh">Testez le vendeur IA.</h2>
+      <p class="sdesc" style="text-align:center;max-width:600px;margin:0 auto 1.5rem">Cherchez un produit comme sur un vrai site. Le vendeur IA qualifie votre besoin et recommande le bon produit.</p>
+
+      <!-- Fake e-commerce store shell -->
+      <div class="store-shell" data-reveal>
+        <!-- Store header with search bar -->
+        <div class="store-header">
+          <div class="store-logo">BricoPlus<span>.fr</span></div>
+          <div class="store-search">
+            <svg class="store-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" id="dcQ" placeholder="Que cherchez-vous ?" autocomplete="off" />
+            <button id="dcGo" class="store-search-btn">Rechercher</button>
+          </div>
+          <div class="store-nav-icons">
+            <span>&#9825;</span>
+            <span>&#128722;</span>
+          </div>
+        </div>
+
+        <!-- Store categories ribbon -->
+        <div class="store-cats">
+          <span class="store-cat" data-q="aspirateur poils de chat">Electromenager</span>
+          <span class="store-cat" data-q="perceuse beton">Bricolage</span>
+          <span class="store-cat" data-q="barbecue">Jardin</span>
+          <span class="store-cat" data-q="parfum femme">Parfumerie</span>
+          <span class="store-cat" data-q="robot cuisine">Cuisine</span>
+        </div>
+
+        <!-- AI Assistant bar (appears after first search) -->
+        <div class="ai-bar" id="aiBar" style="display:none">
+          <div class="ai-bar-icon">&#10024;</div>
+          <div class="ai-bar-content" style="flex:1;display:flex;flex-direction:column;gap:8px">
+            <div class="ai-bar-text" id="aiText"></div>
+            <div class="ai-bar-suggestions" id="dcSugg"></div>
+          </div>
+          <button id="dcReset" style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:18px;padding:4px" title="Nouvelle recherche">&#8635;</button>
+        </div>
+
+        <!-- Product results grid (appears when recommending) -->
+        <div class="store-results" id="storeResults" style="display:none">
+          <div class="store-results-header">
+            <span id="resultsCount"></span>
+            <div class="ai-qual" id="aiQual"></div>
+          </div>
+          <div class="store-grid" id="storeGrid"></div>
+        </div>
+
+        <!-- Initial state: popular products -->
+        <div class="store-promo" id="storePromo">
+          <h3>Nos coups de coeur</h3>
+          <div class="store-grid">
+            <div class="store-card placeholder"><div class="store-card-img"></div><div class="store-card-name">Aspirateur Dyson V15</div><div class="store-card-price">599€</div></div>
+            <div class="store-card placeholder"><div class="store-card-img"></div><div class="store-card-name">Perceuse Bosch 18V</div><div class="store-card-price">189€</div></div>
+            <div class="store-card placeholder"><div class="store-card-img"></div><div class="store-card-name">Barbecue Weber Spirit</div><div class="store-card-price">749€</div></div>
+            <div class="store-card placeholder"><div class="store-card-img"></div><div class="store-card-name">Chanel N°5 50ml</div><div class="store-card-price">135€</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="foot">
+    <div class="wrap">
+      <div class="foot-top">
+        <div>
+          <span class="nav-logo">SHIMMER</span>
+          <p>IA e-commerce. Local. Prive. Rapide.</p>
+        </div>
+        <div class="foot-cols">
+          <div><h4>Modules</h4><a href="#search">Smart Search</a><a href="#chatbot">Chatbot</a><a href="#mail">Mail Engine</a><a href="#reviews">Reviews</a></div>
+          <div><h4>Tech</h4><a href="#arch">Architecture</a><a href="#demo">Demo</a></div>
+        </div>
+      </div>
+      <div class="foot-bot">Shimmer — Built with AI, for AI-powered commerce.</div>
+    </div>
+  </footer>
+
+  <script src="sdk/shimmer-sdk.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
