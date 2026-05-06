@@ -1,0 +1,4 @@
+# API keys of test stores (regeneratable via import.sh)
+.api-key
+*/.api-key
+**/results/_credentials.txt

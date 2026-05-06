@@ -1,0 +1,22 @@
+{
+  "category": "Vin",
+  "comment": "Usages que l'agent vendeur de vin devrait pouvoir détecter dans les requêtes clients. La taxonomie d'usages globale Shimmer ne contient pas ces entrées (vérifié 2026-05-06 : seulement Bricolage, Cuisine, Électroménager, Jardin, Parfumerie). C'est le test critique : peut-on injecter de nouveaux usages sans toucher au code ?",
+  "expected_usages": [
+    {"code": "vin_repas_quotidien", "label": "Vin pour le quotidien", "keywords": ["quotidien", "tous les jours", "soir", "dîner", "facile", "à boire"]},
+    {"code": "vin_repas_amis", "label": "Vin pour repas entre amis", "keywords": ["amis", "soirée", "dîner", "entre potes", "convivial"]},
+    {"code": "vin_grand_repas", "label": "Vin pour grand repas", "keywords": ["grand repas", "occasion", "anniversaire", "noël", "réveillon", "fête"]},
+    {"code": "vin_cadeau", "label": "Vin cadeau", "keywords": ["cadeau", "offrir", "anniversaire", "remerciement"]},
+    {"code": "vin_apero", "label": "Vin apéritif", "keywords": ["apéro", "apéritif", "avant le repas", "amuse-bouches"]},
+    {"code": "vin_cave", "label": "Vin de garde / cave", "keywords": ["cave", "garde", "investissement", "vieillir", "garder"]},
+    {"code": "vin_decouverte", "label": "Découverte / curiosité", "keywords": ["découvrir", "essayer", "curieux", "nouveau", "tester"]},
+    {"code": "accord_viande_rouge", "label": "Accord viande rouge", "keywords": ["bœuf", "boeuf", "agneau", "côte", "magret", "gibier", "rôti"]},
+    {"code": "accord_viande_blanche", "label": "Accord viande blanche", "keywords": ["poulet", "volaille", "veau", "porc", "lapin"]},
+    {"code": "accord_poisson", "label": "Accord poisson", "keywords": ["poisson", "saumon", "bar", "daurade", "cabillaud"]},
+    {"code": "accord_fruits_de_mer", "label": "Accord fruits de mer", "keywords": ["huîtres", "fruits de mer", "coquillages", "saint-jacques", "homard"]},
+    {"code": "accord_fromage", "label": "Accord fromage", "keywords": ["fromage", "plateau", "comté", "roquefort", "chèvre"]},
+    {"code": "accord_dessert", "label": "Accord dessert", "keywords": ["dessert", "tarte", "chocolat", "fruits"]},
+    {"code": "accord_charcuterie", "label": "Accord charcuterie", "keywords": ["charcuterie", "saucisson", "jambon", "terrine", "pâté"]},
+    {"code": "accord_cuisine_epicee", "label": "Accord cuisine épicée / asiatique", "keywords": ["asiatique", "thaï", "épicé", "sushi", "indien"]},
+    {"code": "accord_apero_amuse", "label": "Accord apéro / amuse-bouches", "keywords": ["apéro", "amuse-bouches", "tapas"]}
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "category": "Luminaire",
+  "comment": "La taxonomie d'usages globale Shimmer ne contient aucune entrée luminaire. Test critique : peut-on injecter ces usages sans toucher au code ? Les usages s'expriment souvent en langage non-technique ('lumière jaune', 'truc cosy').",
+  "expected_usages": [
+    {"code": "lum_eclairer_salon", "label": "Éclairer un salon", "keywords": ["salon", "séjour", "salle de vie", "espace de vie"]},
+    {"code": "lum_eclairer_chambre", "label": "Éclairer une chambre", "keywords": ["chambre", "lit", "chevet", "tête de lit"]},
+    {"code": "lum_eclairer_bureau", "label": "Éclairage de travail", "keywords": ["bureau", "travail", "lecture", "ordi", "ordinateur", "studio"]},
+    {"code": "lum_eclairer_salle_manger", "label": "Éclairer une table à manger", "keywords": ["salle à manger", "table à manger", "repas", "diner", "table"]},
+    {"code": "lum_eclairer_cuisine", "label": "Éclairer une cuisine", "keywords": ["cuisine", "plan de travail", "ilot"]},
+    {"code": "lum_eclairer_couloir_entree", "label": "Éclairer couloir/entrée", "keywords": ["couloir", "entrée", "hall", "escalier"]},
+    {"code": "lum_ambiance_cosy", "label": "Créer ambiance cosy", "keywords": ["cosy", "chaleureux", "doux", "intime", "tamisé", "ambiance"]},
+    {"code": "lum_ambiance_design", "label": "Pièce design / déco forte", "keywords": ["déco", "design", "statement", "joli", "stylé"]},
+    {"code": "lum_lumiere_chaude", "label": "Lumière chaude jaune", "keywords": ["jaune", "chaude", "douce", "chaleureuse", "feu"]},
+    {"code": "lum_lumiere_fonctionnelle", "label": "Lumière fonctionnelle blanche", "keywords": ["blanche", "neutre", "naturelle", "travail", "lecture précise"]},
+    {"code": "lum_compact_petit_espace", "label": "Compact / petit espace", "keywords": ["studio", "petit", "compact", "place", "discret"]},
+    {"code": "lum_grand_espace", "label": "Grand espace / hauteur", "keywords": ["grand", "haut", "loft", "hauteur"]},
+    {"code": "lum_sans_install", "label": "Sans installation électrique", "keywords": ["plug", "sans installation", "branche", "prise", "rechargeable", "portable"]},
+    {"code": "lum_lecture", "label": "Liseuse / éclairage lecture", "keywords": ["lecture", "liseuse", "lire", "livre"]}
+  ]
+}
