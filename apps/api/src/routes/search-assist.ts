@@ -14,6 +14,119 @@ import type { ClaudeMessage, ScoredProduct } from '@shimmer/core';
 import { search, applyDeductions, detectBudget } from '@shimmer/smart-search';
 import { loadStoreUniverses } from './universe-gen.js';
 
+// ── Per-store tone ─────────────────────────────────
+
+type StoreTone = 'tu' | 'vous';
+
+function getStoreTone(store: { config?: unknown } | undefined): StoreTone {
+  const cfg = store?.config;
+  if (cfg && typeof cfg === 'object' && cfg !== null) {
+    const tone = (cfg as Record<string, unknown>)['tone'];
+    if (typeof tone === 'string') {
+      const t = tone.toLowerCase().trim();
+      if (t === 'vous' || t === 'tu') return t;
+    }
+  }
+  return 'tu';
+}
+
+// Re-cases the replacement to match the original token's first-letter case.
+function preserveCase(orig: string, replacement: string): string {
+  if (!orig.length || !replacement.length) return replacement;
+  if (orig[0] === orig[0]!.toUpperCase()) {
+    return replacement[0]!.toUpperCase() + replacement.slice(1);
+  }
+  return replacement;
+}
+
+// Convert template messages between "tu" and "vous". Internal templates use "tu".
+// DB-generated questions (universe-gen) use "vous" by default. This adapts both
+// to whatever the store has configured.
+function applyTone(text: string, tone: StoreTone): string {
+  const sub = (pattern: RegExp, repl: string) =>
+    text = text.replace(pattern, (m) => preserveCase(m, repl));
+
+  if (tone === 'tu') {
+    // Subject pronoun + conjugated verb (changes both pronoun and verb)
+    sub(/\bvous avez\b/gi, 'tu as');
+    sub(/\bvous êtes\b/gi, 'tu es');
+    sub(/\bvous voulez\b/gi, 'tu veux');
+    sub(/\bvous cherchez\b/gi, 'tu cherches');
+    sub(/\bvous préférez\b/gi, 'tu préfères');
+    sub(/\bvous aimez\b/gi, 'tu aimes');
+    sub(/\bvous prenez\b/gi, 'tu prends');
+    // "vous" as object pronoun before a vowel/h verb → "t'" elision
+    sub(/\bvous int[ée]resse\b/gi, "t'intéresse");
+    sub(/\bvous int[ée]ressent\b/gi, "t'intéressent");
+    sub(/\bvous accompagne\b/gi, "t'accompagne");
+    // "vous" as object pronoun before a consonant verb → "te"
+    sub(/\bvous pla[îi]t\b/gi, 'te plaît');
+    sub(/\bvous convient\b/gi, 'te convient');
+    sub(/\bvous tente\b/gi, 'te tente');
+    sub(/\bvous va\b/gi, 'te va');
+    // Possessives
+    sub(/\bvotre\b/gi, 'ton');
+    sub(/\bvos\b/gi, 'tes');
+    // Orphan "vous" last (so it doesn't double-replace patterns above)
+    sub(/\bvous\b/gi, 'tu');
+    return text;
+  }
+  // tone === 'vous'
+  sub(/\bt'as\b/gi, 'vous avez');
+  sub(/\bt'es\b/gi, 'vous êtes');
+  sub(/\bt'/gi, 'vous ');
+  sub(/\btu as\b/gi, 'vous avez');
+  sub(/\btu es\b/gi, 'vous êtes');
+  sub(/\btu veux\b/gi, 'vous voulez');
+  sub(/\btu cherches\b/gi, 'vous cherchez');
+  sub(/\btu préfères\b/gi, 'vous préférez');
+  sub(/\btu\b/gi, 'vous');
+  sub(/\bte\b/gi, 'vous');
+  sub(/\btoi\b/gi, 'vous');
+  sub(/\b(ton|ta)\b/gi, 'votre');
+  sub(/\btes\b/gi, 'vos');
+  return text;
+}
+
+// ── Universal cross-universe signals (cadeau, premium, budget...) ──────────────
+
+// Patterns that map a free-text signal to a normalized budget hint.
+// Order matters: more specific patterns first.
+const UNIVERSAL_BUDGET_PATTERNS: { test: RegExp; hint: 'cheap' | 'mid' | 'premium' }[] = [
+  { test: /\b(haut de gamme|premium|le meilleur|le top|de luxe|grand cru)\b/i, hint: 'premium' },
+  { test: /\b(milieu de gamme|rapport qualit[ée][- ]prix|raisonnable)\b/i, hint: 'mid' },
+  { test: /\bpas (trop )?cher(\b|e)/i, hint: 'cheap' },
+  { test: /\b(petit budget|[ée]conomique|premier prix|budget serr[ée]|entr[ée]e de gamme)\b/i, hint: 'cheap' },
+];
+
+// Patterns that map free-text to a normalized occasion. "cadeau" implicitly
+// pushes the budget hint up to 'premium' downstream.
+const UNIVERSAL_OCCASION_PATTERNS: { test: RegExp; occasion: 'cadeau' | 'amis' | 'quotidien' | 'fete' }[] = [
+  { test: /\b(cadeau|offrir|pour mon (patron|chef|boss|directeur)|pour ma (m[èe]re|grand[- ]m[èe]re)|anniversaire de)\b/i, occasion: 'cadeau' },
+  { test: /\b(no[ëe]l|r[ée]veillon|saint[- ]valentin|f[êe]te des m[èe]res|f[êe]te des p[èe]res)\b/i, occasion: 'fete' },
+  { test: /\b(entre amis|repas amis|soir[ée]e|d[îi]ner amis)\b/i, occasion: 'amis' },
+  { test: /\b(quotidien|tous les jours|le soir|chaque jour)\b/i, occasion: 'quotidien' },
+];
+
+function detectUniversalSignals(query: string): { budget?: 'cheap' | 'mid' | 'premium'; occasion?: string } {
+  const q = query.toLowerCase();
+  const out: { budget?: 'cheap' | 'mid' | 'premium'; occasion?: string } = {};
+
+  for (const rule of UNIVERSAL_BUDGET_PATTERNS) {
+    if (rule.test.test(q)) { out.budget = rule.hint; break; }
+  }
+  for (const rule of UNIVERSAL_OCCASION_PATTERNS) {
+    if (rule.test.test(q)) { out.occasion = rule.occasion; break; }
+  }
+
+  // "Cadeau" without an explicit budget signal implies premium.
+  if (out.occasion === 'cadeau' && !out.budget) out.budget = 'premium';
+  // "Fête" implies at least mid.
+  if (out.occasion === 'fete' && !out.budget) out.budget = 'mid';
+
+  return out;
+}
+
 // ── TYPE 1: Exact product matching ──────────────
 
 interface ExactMatch {
@@ -22,11 +135,32 @@ interface ExactMatch {
   confidence: number; // 0-1
 }
 
+// Strip intent phrases ("je veux", "je cherche"...) so a query like "Je veux le Chablis William Fèvre"
+// becomes "chablis william fèvre" before product matching.
+function stripIntentPrefix(raw: string): string {
+  let q = raw.toLowerCase().trim();
+  const intentPatterns = [
+    /^(je\s+(veux|voudrais|cherche|prends|prendrais|aimerais)|j'aimerais|j'voudrais|il\s+me\s+faut|il\s+m'en\s+faut|tu\s+(as|aurais|aurais\s+pas)|vous\s+(avez|auriez)|donne[sz]?[\s-]+moi|montre[sz]?[\s-]+moi|montrer|trouve[sz]?[\s-]+moi|peux[\s-]+tu|pouvez[\s-]+vous|c'est\s+quoi|qu'est[\s-]+ce\s+que)\s+/i,
+  ];
+  for (const p of intentPatterns) q = q.replace(p, '');
+  // Strip leading determiners
+  q = q.replace(/^(le|la|les|l'|un|une|du|de\s+la|de\s+l'|des|ce|cet|cette|ces)\s+/i, '');
+  return q.trim();
+}
+
 async function detectExactProduct(query: string, storeId: number): Promise<ExactMatch | null> {
-  const q = query.toLowerCase().trim();
-  if (q.length < 3) return null;
+  const raw = query.toLowerCase().trim();
+  if (raw.length < 3) return null;
+
+  // Try both the raw query and the intent-stripped version. Stripped is preferred
+  // (more selective), raw is fallback for "Chablis" alone-style queries.
+  const stripped = stripIntentPrefix(raw);
+  const candidates = stripped !== raw ? [stripped, raw] : [raw];
 
   const prisma = getPrisma();
+
+  for (const q of candidates) {
+    if (q.length < 3) continue;
 
   // 1. Try exact name match (case-insensitive)
   const exact = await prisma.$queryRawUnsafe<any[]>(
@@ -76,22 +210,68 @@ async function detectExactProduct(query: string, storeId: number): Promise<Exact
     return null;
   }
 
-  // 3. Try brand + model pattern: "Dyson V15", "Bosch PSB", "Makita 18V"
-  const words = q.split(/\s+/);
+  // 3. Brand + model. The brand may be stored with prefixes the client doesn't type
+  //    (e.g. "Domaine William Fèvre" vs "William Fèvre"). We use a substring match
+  //    in both directions instead of strict equality.
+  const words = q.split(/\s+/).filter(w => w.length > 2);
   if (words.length >= 2) {
-    const brandMatch = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT *, 0.8 as match_score FROM products
-       WHERE store_id = $1 AND is_active = true
-       AND LOWER(brand) = $2
-       AND LOWER(name) LIKE '%' || $3 || '%'
-       ORDER BY price ASC LIMIT 3`,
-      storeId, words[0], words.slice(1).join(' '),
+    const brandRows = await prisma.$queryRawUnsafe<{ brand: string }[]>(
+      `SELECT DISTINCT LOWER(brand) AS brand FROM products
+       WHERE store_id = $1 AND is_active = true AND brand IS NOT NULL`,
+      storeId,
     );
-    if (brandMatch.length === 1) {
-      return { type: 'exact', product: brandMatch[0], confidence: 0.8 };
+
+    // Build a list of (storedBrand, matchedToken) pairs: a stored brand matches if
+    // any of its significant tokens (>=4 chars) appears in the query, or the full
+    // stored brand contains the query as substring.
+    const STOP = new Set(['domaine', 'château', 'chateau', 'mas', 'clos', 'cave', 'caves', 'maison']);
+    let detectedBrand: { stored: string; tokenInQuery: string } | null = null;
+    let bestLen = 0;
+
+    for (const { brand } of brandRows) {
+      // Multi-word brand: try the full string first
+      if (brand.length >= 4 && q.includes(brand)) {
+        if (brand.length > bestLen) {
+          detectedBrand = { stored: brand, tokenInQuery: brand };
+          bestLen = brand.length;
+        }
+        continue;
+      }
+      // Token-level match: significant token in query and brand
+      const brandTokens = brand.split(/\s+/).filter(t => t.length >= 4 && !STOP.has(t));
+      for (const t of brandTokens) {
+        if (q.includes(t) && t.length > bestLen) {
+          detectedBrand = { stored: brand, tokenInQuery: t };
+          bestLen = t.length;
+        }
+      }
+    }
+
+    if (detectedBrand) {
+      // Remove every brand token from the query to get the model/name remainder.
+      // "chablis william fèvre" with brand "domaine william fèvre" → remainder "chablis".
+      let remainder = q;
+      for (const t of detectedBrand.stored.split(/\s+/)) {
+        if (t.length >= 3) remainder = remainder.replace(t, '');
+      }
+      remainder = remainder.replace(/\s+/g, ' ').trim();
+      if (remainder.length >= 3) {
+        const brandMatch = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT *, 0.9 as match_score FROM products
+           WHERE store_id = $1 AND is_active = true
+           AND LOWER(brand) = $2
+           AND ($3 LIKE '%' || LOWER(name) || '%' OR LOWER(name) LIKE '%' || $3 || '%')
+           ORDER BY price ASC LIMIT 3`,
+          storeId, detectedBrand.stored, remainder,
+        );
+        if (brandMatch.length >= 1) {
+          return { type: 'exact', product: brandMatch[0], confidence: brandMatch.length === 1 ? 0.95 : 0.85 };
+        }
+      }
     }
   }
 
+  } // end candidates loop
   return null;
 }
 
@@ -351,32 +531,82 @@ async function getUniverses(storeId: number): Promise<UniverseConfig[]> {
 // ── Detect universe from query ──────────────
 
 function detectUniverse(query: string, universes: UniverseConfig[]): UniverseConfig | null {
-  const q = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const scores: { u: UniverseConfig; score: number }[] = [];
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const q = norm(query);
+  const scores: { u: UniverseConfig; score: number; debug?: Record<string, number> }[] = [];
 
   for (const u of universes) {
     let score = 0;
+    const dbg: Record<string, number> = {};
+
+    // 1) Keyword matches (existing logic, smaller weight)
     const kwArr = Array.isArray(u.keywords) ? u.keywords : [];
     for (const kw of kwArr) {
       if (typeof kw !== 'string') continue;
-      const nkw = kw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const nkw = norm(kw);
       if (nkw.length < 2) continue;
-      // Longer keyword matches are worth more (avoid "opi" matching in "copine")
       if (q.includes(nkw)) {
         score += nkw.length >= 5 ? 2 : 1;
       }
     }
-    if (score > 0) scores.push({ u, score });
+    dbg.kw = score;
+
+    // 2) Label match (very strong: an explicit category mention wins)
+    const label = norm(u.label || '');
+    if (label && q.includes(label)) {
+      score += 8;
+      dbg.label = 8;
+    } else if (label) {
+      for (const w of label.split(/\s+/)) {
+        if (w.length >= 4 && q.includes(w)) {
+          score += 4;
+          dbg.labelWord = (dbg.labelWord || 0) + 4;
+        }
+      }
+    }
+
+    // 3) Universe id segments (e.g. VIN_ROUGE \u2192 "rouge"; SUSPENSION \u2192 "suspension")
+    //    These are the discriminators inside a same product family.
+    const idParts = (u.id || '').toLowerCase().split('_').filter(p => p.length >= 3);
+    for (const part of idParts) {
+      if (q.includes(part)) {
+        score += 5;
+        dbg.idPart = (dbg.idPart || 0) + 5;
+      }
+    }
+
+    // 4) Catalog-aware signal: criterion values that appear in the query.
+    //    Lets "tannique" disambiguate VIN_ROUGE from VIN_BLANC, "scandinave" pull SUSPENSION over
+    //    LAMPADAIRE if the criterion only exists for SUSPENSION, etc. Without any metier-specific code.
+    let valueHits = 0;
+    for (const c of u.criteria || []) {
+      if (!c.values) continue;
+      for (const v of c.values) {
+        // Specs sometimes hold CSV concatenations ("poisson,fruits de mer,apero"). Split and test each.
+        const parts = String(v).split(/[,;|]/).map(p => norm(p.trim())).filter(p => p.length >= 4);
+        for (const part of parts) {
+          if (q.includes(part)) {
+            valueHits += 1;
+          }
+        }
+      }
+    }
+    if (valueHits > 0) {
+      const valueScore = Math.min(valueHits * 3, 12); // cap to avoid runaway
+      score += valueScore;
+      dbg.values = valueScore;
+    }
+
+    if (score > 0) scores.push({ u, score, debug: dbg });
   }
 
   if (scores.length === 0) return null;
 
   scores.sort((a, b) => b.score - a.score);
+  logger.debug({ topScores: scores.slice(0, 3).map(s => ({ id: s.u.id, score: s.score, dbg: s.debug })) }, 'universe.detect');
 
   // If top 2 scores are tied or very close, the query is ambiguous (e.g. brand name "Dior")
-  // In that case, prefer PARFUM for beauty brands, or return the one with most products
   if (scores.length >= 2 && scores[1]!.score >= scores[0]!.score * 0.8) {
-    // Ambiguous - prefer PARFUM > MAQUILLAGE > SOIN_VISAGE > others (natural priority for beauty)
     const priority = ['PARFUM', 'PARFUMERIE', 'MAQUILLAGE', 'SOIN_VISAGE', 'ELECTROMENAGER', 'BRICOLAGE', 'JARDIN'];
     const tied = scores.filter(s => s.score >= scores[0]!.score * 0.8);
     for (const pref of priority) {
@@ -653,6 +883,10 @@ async function fetchMatchingProducts(
   }
 
   const budget = known['BUDGET'];
+  // Normalize budget hint across legacy values and new universal hints
+  const budgetLow = budget?.toLowerCase() || '';
+  const isPremium = budgetLow === 'premium' || budgetLow.includes('haut de gamme') || budgetLow.includes('luxe') || budgetLow.includes('top') || budgetLow.includes('meilleur');
+  const isCheap = budgetLow === 'cheap' || budgetLow.includes('pas cher') || budgetLow.includes('entrée de gamme') || budgetLow.includes('entree de gamme') || budgetLow.includes('petit budget') || budgetLow.includes('économique') || budgetLow.includes('economique');
 
   // Genre filter — soft (only if field exists)
   const genre = known['GENRE'];
@@ -684,7 +918,7 @@ async function fetchMatchingProducts(
         as usage_score
        FROM products
        WHERE ${conditions.join(' AND ')}
-       ORDER BY usage_score DESC, ${budget === 'Haut de gamme' ? 'price DESC' : 'price ASC'}
+       ORDER BY usage_score DESC, ${isPremium ? 'price DESC' : isCheap ? 'price ASC' : 'price ASC'}
        LIMIT 5`,
       storeId, userTerms, (originalQuery || '').toLowerCase().split(/\s+/)[0] || '',
     );
@@ -767,27 +1001,45 @@ const QUESTION_TEMPLATES: Record<string, Record<string, string>> = {
   },
 };
 
+// Native universes that ship with hand-tuned QUESTION_TEMPLATES. For these we
+// prefer the hardcoded copy over a DB-generated question to preserve the demo
+// experience on legacy stores. New custom universes always use their own question.
+const NATIVE_UNIVERSE_IDS = new Set([
+  'BRICOLAGE', 'ASPIRATEUR', 'CUISINE', 'JARDIN',
+  'ELECTROMENAGER', 'PARFUM', 'PARFUMERIE',
+  'MAQUILLAGE', 'SOIN_VISAGE', 'CHEVEUX', 'CORPS_BAIN',
+]);
+
 function buildQualificationTemplate(
   userMessage: string,
   universe: UniverseConfig | null,
   known: Record<string, string>,
   suggestions: string[],
+  nextCriterion?: QualCriterion | null,
 ): string {
   const ack = ACKNOWLEDGMENTS[Math.floor(Math.random() * ACKNOWLEDGMENTS.length)]!;
   const uid = universe?.id || 'default';
+  const isNativeUniverse = universe ? NATIVE_UNIVERSE_IDS.has(universe.id) : false;
 
-  // Find which criterion maps to the current suggestions
-  let questionKey = 'USAGE'; // default
-  if (suggestions.includes('Pour moi') || suggestions.includes('Cadeau')) questionKey = 'OCCASION';
-  else if (suggestions.includes('Sans fil') || suggestions.includes('Avec fil')) questionKey = 'SANS_FIL';
-  else if (suggestions.includes('Pas cher') || suggestions.includes('Milieu de gamme')) questionKey = 'BUDGET';
-  else if (suggestions.includes('Oui, animaux')) questionKey = 'ANIMAUX';
-  else if (suggestions.includes('Femme') || suggestions.includes('Homme')) questionKey = 'GENRE';
-  else if (suggestions.includes('Béton/Pierre') || suggestions.includes('Bois')) questionKey = 'MATERIAUX';
-  else if (suggestions.includes('Extérieur') || suggestions.includes('Intérieur')) questionKey = 'TYPE';
+  // For native universes, keep the hand-tuned template path (preserves legacy demo).
+  // For new auto-generated universes, use the criterion-driven question.
+  let question: string;
+  if (!isNativeUniverse && nextCriterion?.question && nextCriterion.question.trim().length > 0) {
+    question = nextCriterion.question;
+  } else {
+    // Find which criterion maps to the current suggestions (legacy fallback)
+    let questionKey = 'USAGE'; // default
+    if (suggestions.includes('Pour moi') || suggestions.includes('Cadeau')) questionKey = 'OCCASION';
+    else if (suggestions.includes('Sans fil') || suggestions.includes('Avec fil')) questionKey = 'SANS_FIL';
+    else if (suggestions.includes('Pas cher') || suggestions.includes('Milieu de gamme')) questionKey = 'BUDGET';
+    else if (suggestions.includes('Oui, animaux')) questionKey = 'ANIMAUX';
+    else if (suggestions.includes('Femme') || suggestions.includes('Homme')) questionKey = 'GENRE';
+    else if (suggestions.includes('Béton/Pierre') || suggestions.includes('Bois')) questionKey = 'MATERIAUX';
+    else if (suggestions.includes('Extérieur') || suggestions.includes('Intérieur')) questionKey = 'TYPE';
 
-  const templates = QUESTION_TEMPLATES[questionKey] || QUESTION_TEMPLATES['USAGE']!;
-  const question = templates[uid] || templates['default']!;
+    const templates = QUESTION_TEMPLATES[questionKey] || QUESTION_TEMPLATES['USAGE']!;
+    question = templates[uid] || templates['default']!;
+  }
 
   // For first message, rephrase what the client wants
   const knownKeys = Object.keys(known).filter(k => !k.startsWith('_'));
@@ -903,6 +1155,7 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
     ].join(' ');
 
     // ── TYPE 1: Check for exact product match first ──
+    const tone = getStoreTone(req.store);
     const exactMatch = await detectExactProduct(body.message, req.storeId!);
     if (exactMatch && exactMatch.confidence >= 0.8 && !body.history?.length) {
       // Direct product match — skip qualification, respond immediately
@@ -913,7 +1166,7 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
       logger.info({ query: body.message, product: p.name, confidence: exactMatch.confidence }, 'search.type1.exact');
 
       res.json({
-        message: `Le **${p.name}** de ${p.brand} à ${p.price}€ — ${(p.description || '').slice(0, 150)}`,
+        message: applyTone(`Le **${p.name}** de ${p.brand} à ${p.price}€ — ${(p.description || '').slice(0, 150)}`, tone),
         suggestedQuestions: ['Voir les détails', 'Similaire moins cher ?', 'Autre chose'],
         highlightedProducts: [{
           name: p.name,
@@ -966,6 +1219,16 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
 
     // 3. Merge with previously known criteria (objection-updated known0 + deduced)
     const known = { ...known0, ...deduced };
+
+    // 3b. Universal cross-universe signals (cadeau, premium, pas cher...)
+    //     Only fill when not already set by an objection or universe deduction.
+    const universalSignals = detectUniversalSignals(fullConversation);
+    if (universalSignals.budget && !known['BUDGET']) {
+      known['BUDGET'] = universalSignals.budget;
+    }
+    if (universalSignals.occasion && !known['OCCASION']) {
+      known['OCCASION'] = universalSignals.occasion;
+    }
 
     // Add brand filter from hybrid detection
     if (brandFilter) known['_BRAND'] = brandFilter;
@@ -1056,13 +1319,19 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
     // 8. Pre-compute suggestions (needed for prompt alignment)
     const isRecommendingEarly = qual.score >= 65 || objection?.type === 'price' || objection?.type === 'change_criteria' || objection?.type === 'backtrack';
     let earlySuggestions: string[];
+    let nextCriterion: QualCriterion | null = qual.askable[0] || null;
+
+    const isNativeUniv = universe ? NATIVE_UNIVERSE_IDS.has(universe.id) : false;
     if (isRecommendingEarly) {
       earlySuggestions = ['Voir les détails', 'Moins cher ?', 'Autre chose'];
+    } else if (!isNativeUniv && nextCriterion?.values && nextCriterion.values.length > 0) {
+      // Custom universes: use the next missing criterion's own values as suggestions.
+      // Native universes fall through to the hand-tuned suggestion lists below.
+      earlySuggestions = nextCriterion.values.slice(0, 3);
     } else {
+      // Legacy fallback for native universes that have criteria without explicit values
       const uid = universe?.id || '';
-      // Beauty universes (no "sans fil" question!)
       const isBeauty = ['PARFUM', 'MAQUILLAGE', 'SOIN_VISAGE', 'CHEVEUX', 'CORPS_BAIN', 'PARFUMERIE'].includes(uid);
-      // Hardware/tool universes
       const isHardware = ['BRICOLAGE', 'ELECTROMENAGER', 'JARDIN'].includes(uid);
 
       const missingSugg: string[][] = [];
@@ -1078,7 +1347,6 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
         if (!known['ANIMAUX'] && uid === 'ELECTROMENAGER') missingSugg.push(['Oui, animaux', 'Non', 'Pas sûr']);
         if (!known['MATERIAUX'] && uid === 'BRICOLAGE') missingSugg.push(['Béton/Pierre', 'Bois', 'Placo']);
       } else {
-        // Generic
         if (!known['USAGE']) missingSugg.push(['Occasionnel', 'Régulier', 'Pro']);
         if (!known['BUDGET']) missingSugg.push(['Pas cher', 'Milieu de gamme', 'Haut de gamme']);
       }
@@ -1103,11 +1371,14 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
 
     if (!needsLLM) {
       // ── INSTANT TEMPLATE (< 5ms) ── No LLM needed for qualification questions
-      cleanMessage = buildQualificationTemplate(body.message, universe, known, earlySuggestions);
+      cleanMessage = buildQualificationTemplate(body.message, universe, known, earlySuggestions, nextCriterion);
     } else {
       // ── INSTANT TEMPLATE for recommendations too ── LLM is too slow on CPU
       cleanMessage = buildRecommendationTemplate(topProducts, known, objection);
     }
+
+    // Apply per-store tone (tu/vous) to the final outgoing message.
+    cleanMessage = applyTone(cleanMessage, tone);
 
     const totalMs = Math.round(performance.now() - t0);
 
