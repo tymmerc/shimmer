@@ -35,6 +35,52 @@ interface GeneratedUniverse {
   }[];
 }
 
+// ── Step 0: Cluster small categories into bigger families ────────────
+
+const CLUSTER_THRESHOLD = 3; // Categories with fewer products are candidates for merging
+
+async function clusterCategories(
+  cats: { name: string; count: number; samples: string[] }[],
+): Promise<Record<string, string>> {
+  const tiny = cats.filter(c => c.count < CLUSTER_THRESHOLD);
+  if (tiny.length === 0 || cats.length < 3) return {};
+
+  const summary = cats
+    .map(c => `- "${c.name}" (${c.count} produits): ${c.samples.slice(0, 2).join(' | ')}`)
+    .join('\n');
+
+  const prompt = `Voici les catégories produits d'un magasin :
+${summary}
+
+Certaines catégories ont moins de ${CLUSTER_THRESHOLD} produits. Si elles forment une même famille qu'une catégorie plus grosse (ex: "Crémant" + "Prosecco" + "Champagne" = effervescents ; "Bières blondes" + "Bières IPA" = bières), propose un regroupement. Sinon laisse-les séparées.
+
+Réponds UNIQUEMENT en JSON, format : {"mapping": {"NomOriginal": "NomCible"}}. Inclus seulement les catégories à fusionner. Si rien à fusionner, renvoie {"mapping": {}}.`;
+
+  try {
+    const response = await client.complete(
+      [{ role: 'user', content: prompt }],
+      { maxTokens: 500, temperature: 0.2, timeout: 60_000, maxRetries: 1 },
+    );
+    const match = response.match(/\{[\s\S]*\}/);
+    if (!match) return {};
+    const parsed = JSON.parse(match[0].replace(/,\s*}/g, '}').replace(/,\s*]/g, ']'));
+    const mapping = parsed?.mapping;
+    if (!mapping || typeof mapping !== 'object') return {};
+    // Keep only valid entries (source must exist in cats)
+    const validNames = new Set(cats.map(c => c.name));
+    const out: Record<string, string> = {};
+    for (const [src, tgt] of Object.entries(mapping)) {
+      if (typeof tgt === 'string' && validNames.has(src) && tgt !== src) {
+        out[src] = tgt;
+      }
+    }
+    return out;
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, 'universe.gen.cluster.failed');
+    return {};
+  }
+}
+
 // ── Step 1: Analyze catalog ────────────────────────────────
 
 async function analyzeCatalog(storeId: number) {
@@ -58,12 +104,30 @@ async function analyzeCatalog(storeId: number) {
   }
 
   // Group by category
-  const categories = new Map<string, typeof products>();
+  let categories = new Map<string, typeof products>();
   for (const p of products) {
     const cat = p.category || 'Autre';
     const existing = categories.get(cat) || [];
     existing.push(p);
     categories.set(cat, existing);
+  }
+
+  // Cluster small categories with the LLM (e.g. Crémant + Prosecco → Champagne)
+  const clusterInput = [...categories.entries()].map(([name, prods]) => ({
+    name,
+    count: prods.length,
+    samples: prods.slice(0, 3).map(p => p.name),
+  }));
+  const clusterMap = await clusterCategories(clusterInput);
+  if (Object.keys(clusterMap).length > 0) {
+    const merged = new Map<string, typeof products>();
+    for (const [cat, prods] of categories) {
+      const target = clusterMap[cat] || cat;
+      if (!merged.has(target)) merged.set(target, []);
+      merged.get(target)!.push(...prods);
+    }
+    categories = merged;
+    logger.info({ clusterMap }, 'universe.gen.clustered');
   }
 
   // For each category, find the varying spec keys
@@ -80,14 +144,27 @@ async function analyzeCatalog(storeId: number) {
     const brands = [...new Set(prods.map(p => p.brand).filter(Boolean))] as string[];
     const prices = prods.map(p => Number(p.price));
 
-    // Analyze specs variance
+    // Analyze specs variance — array specs are exploded into their items so
+    // each tag counts as a distinct value (no more "magret,cassoulet,gibier"
+    // treated as a single value).
     const specMap = new Map<string, Set<string>>();
     for (const p of prods) {
       const specs = p.specs as Record<string, unknown> | null;
       if (!specs) continue;
       for (const [k, v] of Object.entries(specs)) {
         if (!specMap.has(k)) specMap.set(k, new Set());
-        specMap.get(k)!.add(String(v));
+        const bucket = specMap.get(k)!;
+        if (Array.isArray(v)) {
+          for (const item of v) bucket.add(String(item));
+        } else if (typeof v === 'string' && v.includes(',')) {
+          // Stored legacy as CSV string — split for analysis
+          for (const item of v.split(/[,;]/)) {
+            const t = item.trim();
+            if (t) bucket.add(t);
+          }
+        } else {
+          bucket.add(String(v));
+        }
       }
     }
 

@@ -26,6 +26,18 @@ interface ProductInput {
 
 // ── Normalize product from various formats ──────────────
 
+// Split CSV-like values ("magret,cassoulet,gibier") into arrays so downstream
+// universe-gen and detection treat each value separately. Only splits when every
+// part looks like a short tag (avoids splitting prose/descriptions).
+function maybeSplitCsv(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  if (!/[,;]/.test(value)) return value;
+  const parts = value.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+  if (parts.length < 2) return value;
+  const allShort = parts.every(p => p.length >= 2 && p.length <= 50 && !/[.!?]/.test(p));
+  return allShort ? parts : value;
+}
+
 function normalizeProduct(raw: Record<string, unknown>): ProductInput | null {
   // Handle Shopify format
   const name = String(raw.name || raw.Title || raw.title || raw.product_name || '').trim();
@@ -57,6 +69,10 @@ function normalizeProduct(raw: Record<string, unknown>): ProductInput | null {
     if (!knownFields.has(k) && v !== null && v !== '' && v !== undefined) {
       specs[k.toLowerCase().replace(/\s+/g, '_')] = v;
     }
+  }
+  // Normalize CSV-like multi-value specs into arrays
+  for (const [k, v] of Object.entries(specs)) {
+    specs[k] = maybeSplitCsv(v);
   }
 
   return {
