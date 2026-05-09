@@ -275,6 +275,189 @@ async function detectExactProduct(query: string, storeId: number): Promise<Exact
   return null;
 }
 
+// ── TYPE 3: Similarity to a reference product ──────────────
+
+type SimilaritySubCase = 'like' | 'budget_alt' | 'replacement' | 'competitor_equiv';
+
+interface SimilarityIntent {
+  reference: any;
+  subCase: SimilaritySubCase;
+}
+
+const SIM_LIKE_PATTERNS = [
+  /\b(comme|similaire|du m[êe]me style|m[êe]me genre|dans le genre|m[êe]me esprit|m[êe]me type|qui ressemble)\b/i,
+  /\b(j'ai (ador[ée]|aim[ée]|d[ée]gust[ée]|essay[ée]|bu|gout[ée]|test[ée]))\b/i,
+];
+const SIM_CHEAPER_PATTERNS = [/\b(moins cher|plus abordable|moins on[ée]reux|petit prix|m[êe]me chose mais moins)\b/i];
+const SIM_REPLACEMENT_PATTERNS = [/\b(remplacer|en remplacement|à la place de|le successeur)\b/i];
+const SIM_COMPETITOR_PATTERNS = [/\b(autre marque|alternative|[ée]quivalent|concurrent)\b/i];
+
+// Extract the reference product from a long natural sentence: take significant tokens
+// (>=4 chars, not stop words), score each product by the total length of matched tokens
+// in its name, and return the best hit. Used for TYPE 3 where the user's sentence is
+// too long for the standard exact-match query.
+async function findReferenceProductInPhrase(
+  query: string,
+  storeId: number,
+): Promise<any | null> {
+  const STOP = new Set([
+    'comme', 'meme', 'meme', 'genre', 'style', 'esprit', 'type', 'avec',
+    'sans', 'pour', 'autre', 'chose', 'quelque', 'similaire', 'remplacer',
+    'alternative', 'equivalent', 'concurrent', 'aime', 'adore', 'goute',
+    'teste', 'essaye', 'bu', 'mange', 'semaine', 'derniere', 'derniere',
+    'hier', 'soir', 'depuis', 'avant', 'plutot', 'cher', 'cherche',
+  ]);
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const tokens = norm(query)
+    .split(/[^a-z\-]+/)
+    .filter(t => t.length >= 4 && !STOP.has(t));
+  if (tokens.length === 0) return null;
+
+  // Load every active product (catalog size <50k assumed) and score in JS so we
+  // don't have to deal with Postgres unaccent. For real Caves: ~80 products.
+  const { getPrisma } = await import('@shimmer/core');
+  const prisma = getPrisma();
+  const all = await prisma.product.findMany({
+    where: { storeId, isActive: true },
+    take: 5000,
+  });
+
+  let best: any | null = null;
+  let bestScore = 0;
+  for (const p of all) {
+    const name = norm(String(p.name));
+    let score = 0;
+    for (const t of tokens) {
+      if (name.includes(t)) score += t.length;
+    }
+    if (score > bestScore) {
+      best = p;
+      bestScore = score;
+    }
+  }
+  return bestScore >= 6 ? best : null;
+}
+
+async function detectSimilarityIntent(
+  query: string,
+  storeId: number,
+): Promise<SimilarityIntent | null> {
+  const q = query.toLowerCase();
+
+  const isCheaper = SIM_CHEAPER_PATTERNS.some(p => p.test(q));
+  const isReplacement = SIM_REPLACEMENT_PATTERNS.some(p => p.test(q));
+  const isCompetitor = SIM_COMPETITOR_PATTERNS.some(p => p.test(q));
+  const isLike = SIM_LIKE_PATTERNS.some(p => p.test(q));
+
+  if (!isCheaper && !isReplacement && !isCompetitor && !isLike) return null;
+
+  // Try the standard exact-match first (handles short queries like "comme le Chablis")
+  let reference: any = null;
+  const exact = await detectExactProduct(query, storeId);
+  if (exact && exact.confidence >= 0.8) reference = exact.product;
+
+  // Fall back to phrase-based extraction for long sentences
+  if (!reference) {
+    reference = await findReferenceProductInPhrase(query, storeId);
+  }
+  if (!reference) return null;
+
+  let subCase: SimilaritySubCase = 'like';
+  if (isCheaper) subCase = 'budget_alt';
+  else if (isReplacement) subCase = 'replacement';
+  else if (isCompetitor) subCase = 'competitor_equiv';
+
+  return { reference, subCase };
+}
+
+interface SimilarHit {
+  product: any;
+  score: number; // 0..1
+  sharedKeys: string[];
+}
+
+async function findSimilarProducts(
+  reference: any,
+  storeId: number,
+  subCase: SimilaritySubCase,
+): Promise<SimilarHit[]> {
+  const { getPrisma } = await import('@shimmer/core');
+  const prisma = getPrisma();
+
+  const where: Record<string, unknown> = {
+    storeId,
+    isActive: true,
+    id: { not: reference.id },
+  };
+  if (reference.category) where.category = reference.category;
+  if (subCase === 'budget_alt') where.price = { lt: reference.price };
+  if (subCase === 'competitor_equiv' && reference.brand) where.brand = { not: reference.brand };
+
+  const candidates = await prisma.product.findMany({ where, take: 100 });
+
+  const refSpecs = (reference.specs as Record<string, unknown>) || {};
+  // Specs we don't compare on: vintage, garde, age — they vary by year and don't reflect style
+  const SKIP = new Set(['millesime', 'garde', 'puissance_max', 'temperature_k']);
+
+  const scored: SimilarHit[] = [];
+  for (const c of candidates) {
+    const cSpecs = (c.specs as Record<string, unknown>) || {};
+    const sharedKeys: string[] = [];
+    let shared = 0;
+    let total = 0;
+
+    for (const [k, refV] of Object.entries(refSpecs)) {
+      if (SKIP.has(k)) continue;
+      const candV = cSpecs[k];
+      if (candV === undefined) continue;
+      total += 1;
+
+      // Both arrays → Jaccard
+      if (Array.isArray(refV) && Array.isArray(candV)) {
+        const a = new Set(refV.map(String));
+        const b = new Set(candV.map(String));
+        const inter = [...a].filter(x => b.has(x)).length;
+        const union = new Set([...a, ...b]).size;
+        if (inter > 0 && union > 0) {
+          shared += inter / union;
+          sharedKeys.push(k);
+        }
+        continue;
+      }
+      // One array, one string → membership / substring
+      if (Array.isArray(refV) && typeof candV === 'string') {
+        if (refV.map(String).some(item => candV.toLowerCase().includes(item.toLowerCase()))) {
+          shared += 0.5;
+          sharedKeys.push(k);
+        }
+        continue;
+      }
+      if (typeof refV === 'string' && Array.isArray(candV)) {
+        if (candV.map(String).some(item => refV.toLowerCase().includes(item.toLowerCase()))) {
+          shared += 0.5;
+          sharedKeys.push(k);
+        }
+        continue;
+      }
+      // Both strings → equality or containment
+      if (typeof refV === 'string' && typeof candV === 'string') {
+        const a = refV.toLowerCase();
+        const b = candV.toLowerCase();
+        if (a === b) { shared += 1; sharedKeys.push(k); }
+        else if (a.includes(b) || b.includes(a)) { shared += 0.5; sharedKeys.push(k); }
+      }
+    }
+
+    const score = total > 0 ? shared / total : 0;
+    if (score > 0.2 && sharedKeys.length >= 2) {
+      scored.push({ product: c, score, sharedKeys });
+    }
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, 5);
+}
+
 // ── HYBRID: Detect brand + need pattern ──────────────
 
 interface HybridMatch {
@@ -1270,6 +1453,52 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
         searchMeta: { totalProducts: 1, stageUsed: 'exact', searchType: 'TYPE_1', totalMs },
       });
       return;
+    }
+
+    // ── TYPE 3: Similarity to a reference product ("comme le X que j'ai bu") ──
+    if ((body.history?.length || 0) === 0) {
+      const simIntent = await detectSimilarityIntent(body.message, req.storeId!);
+      if (simIntent) {
+        const similar = await findSimilarProducts(simIntent.reference, req.storeId!, simIntent.subCase);
+        if (similar.length > 0) {
+          const top = similar[0]!;
+          const ref = simIntent.reference;
+          const labelBySubCase: Record<SimilaritySubCase, string> = {
+            like: `Tu as aimé le ${ref.name} ? Essaie le **${top.product.name}** de ${top.product.brand} à ${top.product.price}€, c'est dans le même esprit.`,
+            budget_alt: `Plus abordable que le ${ref.name} : le **${top.product.name}** de ${top.product.brand} à ${top.product.price}€, dans le même style mais plus accessible.`,
+            replacement: `Pour remplacer le ${ref.name} : le **${top.product.name}** de ${top.product.brand} à ${top.product.price}€, profil similaire.`,
+            competitor_equiv: `Une alternative au ${ref.name} : le **${top.product.name}** de ${top.product.brand} à ${top.product.price}€.`,
+          };
+          const totalMs = Math.round(performance.now() - t0);
+          logger.info({
+            reference: ref.name,
+            top: top.product.name,
+            subCase: simIntent.subCase,
+            sharedKeys: top.sharedKeys,
+            score: top.score,
+          }, 'search.type3.similarity');
+
+          res.json({
+            message: applyTone(labelBySubCase[simIntent.subCase], tone),
+            suggestedQuestions: ['Voir les détails', 'Encore plus similaire ?', 'Autre chose'],
+            highlightedProducts: similar.slice(0, 3).map(s => ({
+              name: s.product.name,
+              brand: s.product.brand || '',
+              reason: s.product.description?.slice(0, 120) || `Profil proche : ${s.sharedKeys.slice(0, 3).join(', ')}`,
+              price: `${s.product.price}€`,
+              sku: s.product.sku,
+              specs: (s.product.specs as Record<string, unknown>) || {},
+            })),
+            needsMoreInfo: false,
+            qualificationStep: 'similarity',
+            sessionToken: null,
+            knownCriteria: {},
+            qualification: { universe: null, score: Math.round(top.score * 100), missingRequired: false, type: 'TYPE_3', objection: null },
+            searchMeta: { totalProducts: similar.length, stageUsed: 'similarity', searchType: 'TYPE_3', totalMs },
+          });
+          return;
+        }
+      }
     }
 
     // ── HYBRID: Brand + need pattern ("Dyson pour poils de chat") ──
