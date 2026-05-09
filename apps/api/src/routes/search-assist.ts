@@ -486,6 +486,64 @@ const UNIVERSES: UniverseConfig[] = [
 const universeCache = new Map<number, { data: UniverseConfig[]; ts: number }>();
 const CACHE_TTL = 5 * 60 * 1000;
 
+// Per-store overrides — applied on top of the DB-loaded universes at every request.
+// Lets a merchant force a criterion the auto-config missed (e.g. OCCASION for a
+// caviste), reorder questions, or drop noisy criteria like GARDE/MILLESIME.
+interface UniverseOverride {
+  criteria_replace?: QualCriterion[];
+  criteria_add?: QualCriterion[];
+  criteria_remove?: string[];
+  criteria_priority?: string[];
+  keywords_add?: string[];
+  deductions_add?: { patterns: string[]; criterion: string; value: string }[];
+}
+
+function applyStoreOverrides(
+  universes: UniverseConfig[],
+  storeConfig: unknown,
+): UniverseConfig[] {
+  if (!storeConfig || typeof storeConfig !== 'object') return universes;
+  const overridesRoot = (storeConfig as Record<string, unknown>)['universe_overrides'];
+  if (!overridesRoot || typeof overridesRoot !== 'object') return universes;
+  const overrides = overridesRoot as Record<string, UniverseOverride>;
+
+  return universes.map((u) => {
+    const ov = overrides[u.id];
+    if (!ov) return u;
+
+    let criteria = [...u.criteria];
+
+    if (Array.isArray(ov.criteria_replace)) {
+      const replaceMap = new Map(ov.criteria_replace.map(c => [c.id, c]));
+      criteria = criteria.map(c => replaceMap.get(c.id) || c);
+    }
+    if (Array.isArray(ov.criteria_add)) {
+      const existingIds = new Set(criteria.map(c => c.id));
+      for (const c of ov.criteria_add) {
+        if (c?.id && !existingIds.has(c.id)) criteria.push(c);
+      }
+    }
+    if (Array.isArray(ov.criteria_remove)) {
+      const removeSet = new Set(ov.criteria_remove);
+      criteria = criteria.filter(c => !removeSet.has(c.id));
+    }
+    if (Array.isArray(ov.criteria_priority)) {
+      const order = new Map(ov.criteria_priority.map((id, i) => [id, i]));
+      criteria = [...criteria].sort((a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999));
+    }
+
+    const keywords = Array.isArray(ov.keywords_add)
+      ? [...new Set([...u.keywords, ...ov.keywords_add.map(k => String(k).toLowerCase())])]
+      : u.keywords;
+
+    const deductions = Array.isArray(ov.deductions_add)
+      ? [...u.deductions, ...ov.deductions_add]
+      : u.deductions;
+
+    return { ...u, criteria, keywords, deductions };
+  });
+}
+
 async function getUniverses(storeId: number): Promise<UniverseConfig[]> {
   const cached = universeCache.get(storeId);
   if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
@@ -725,10 +783,16 @@ function computeQualification(
     score = Math.max(score, 65);
   }
 
-  // Sort missing by weight descending, required first
+  // Sort missing: required first, then preserve the universe-declared order
+  // (criteria_priority from store overrides drives the order via universe.criteria).
+  // Falls back to weight desc when both are unranked.
+  const declaredOrder = new Map(universe.criteria.map((c, i) => [c.id, i]));
   missing.sort((a, b) => {
     if (a.required && !b.required) return -1;
     if (!a.required && b.required) return 1;
+    const ai = declaredOrder.get(a.id);
+    const bi = declaredOrder.get(b.id);
+    if (ai !== undefined && bi !== undefined) return ai - bi;
     return b.weight - a.weight;
   });
 
@@ -898,6 +962,28 @@ async function fetchMatchingProducts(
   const brandFilter = known['_BRAND'];
   if (brandFilter) {
     conditions.push(`LOWER(brand) = '${brandFilter.toLowerCase()}'`);
+  }
+
+  // Universe-driven filters: for each closed criterion that has a known value,
+  // turn it into a soft SQL filter (skip products that have the spec but don't match).
+  // Keeps Loire/scandinave/style filters strict instead of being only a scoring boost.
+  const sqlEsc = (s: string) => s.replace(/'/g, "''");
+  const SKIP_FILTER_IDS = new Set(['BUDGET', 'OCCASION', 'GARDE', 'MILLESIME']);
+  const ALREADY_HANDLED = new Set(['SANS_FIL', 'ANIMAUX', 'GENRE', 'MATERIAUX', 'PERC_MATERIAU', 'PERC_ALIM', 'ASP_FIL']);
+  for (const c of universe.criteria) {
+    if (SKIP_FILTER_IDS.has(c.id) || ALREADY_HANDLED.has(c.id)) continue;
+    if (c.type === 'open' || c.type === 'deduced') continue;
+    const val = known[c.id];
+    if (!val) continue;
+    const specKey = c.id.toLowerCase();
+    const escVal = sqlEsc(val);
+    // Match: (no spec at all) OR (spec equals val) OR (string spec contains val) OR (array spec contains val)
+    conditions.push(
+      `(NOT specs ? '${specKey}' OR ` +
+      `specs->>'${specKey}' = '${escVal}' OR ` +
+      `specs->>'${specKey}' ILIKE '%${escVal}%' OR ` +
+      `(jsonb_typeof(specs->'${specKey}') = 'array' AND specs->'${specKey}' @> '["${escVal}"]'::jsonb))`
+    );
   }
 
   try {
@@ -1210,9 +1296,49 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
       }
     }
 
-    // 1. Load universes (DB first, fallback hardcoded) then detect
-    const universes = await getUniverses(req.storeId!);
+    // 1. Load universes (DB first, fallback hardcoded) + apply per-store overrides
+    const universesRaw = await getUniverses(req.storeId!);
+    const universes = applyStoreOverrides(universesRaw, req.store?.config);
     const universe = detectUniverse(fullConversation, universes);
+
+    // 1b. Out-of-scope detection: no universe matched and the user is asking
+    //     for a product. Reply politely instead of falling through to a generic
+    //     qualification question.
+    if (!universe && !exactMatch && !hybridMatch && (body.history?.length || 0) === 0) {
+      const STOP = new Set([
+        'veux', 'cherche', 'avez', 'voudrais', 'salut', 'bonjour', 'hello',
+        'aide', 'recommande', 'autre', 'chose', 'bonne', 'merci', 'svp',
+        'plait', 'plaît', 'pour', 'avec', 'dans', 'chez', 'tres', 'très',
+        'tout', 'bien', 'aussi', 'donc', 'mais', 'alors', 'comment',
+      ]);
+      const noun = body.message
+        .toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .split(/[^a-z]+/)
+        .find(t => t.length >= 4 && !STOP.has(t));
+
+      if (noun) {
+        const storeName = req.store?.name || 'la boutique';
+        const out = applyTone(
+          `Désolé, on ne fait pas ça chez ${storeName}. Dis-moi ce qui t'intéresse vraiment et je te trouve quelque chose !`,
+          tone,
+        );
+        const totalMs = Math.round(performance.now() - t0);
+        logger.info({ query: body.message, noun }, 'search.out_of_scope');
+        res.json({
+          message: out,
+          suggestedQuestions: [],
+          highlightedProducts: [],
+          needsMoreInfo: false,
+          qualificationStep: 'out_of_scope',
+          sessionToken: null,
+          knownCriteria: {},
+          qualification: { universe: null, score: 0, missingRequired: false, type: 'OUT_OF_SCOPE', objection: null },
+          searchMeta: { totalProducts: 0, stageUsed: 'none', searchType: 'OUT_OF_SCOPE', totalMs },
+        });
+        return;
+      }
+    }
 
     // 2. Apply deductions from full conversation
     const deduced = universe ? applyUniverseDeductions(fullConversation, universe) : {};
