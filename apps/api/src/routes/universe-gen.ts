@@ -45,16 +45,25 @@ async function clusterCategories(
   const tiny = cats.filter(c => c.count < CLUSTER_THRESHOLD);
   if (tiny.length === 0 || cats.length < 3) return {};
 
+  const tinyNames = tiny.map(c => `"${c.name}"`).join(', ');
   const summary = cats
-    .map(c => `- "${c.name}" (${c.count} produits): ${c.samples.slice(0, 2).join(' | ')}`)
+    .map(c => `- "${c.name}" (${c.count} produits) — exemples : ${c.samples.slice(0, 3).join(' ; ')}`)
     .join('\n');
 
-  const prompt = `Voici les catégories produits d'un magasin :
+  const prompt = `Tu aides un caviste/marchand à organiser son catalogue. Voici ses catégories actuelles :
 ${summary}
 
-Certaines catégories ont moins de ${CLUSTER_THRESHOLD} produits. Si elles forment une même famille qu'une catégorie plus grosse (ex: "Crémant" + "Prosecco" + "Champagne" = effervescents ; "Bières blondes" + "Bières IPA" = bières), propose un regroupement. Sinon laisse-les séparées.
+Les catégories ${tinyNames} ont moins de ${CLUSTER_THRESHOLD} produits. Pour chacune, dis si elle doit être fusionnée avec une catégorie plus grosse de la liste ci-dessus, en suivant ces règles strictes :
 
-Réponds UNIQUEMENT en JSON, format : {"mapping": {"NomOriginal": "NomCible"}}. Inclus seulement les catégories à fusionner. Si rien à fusionner, renvoie {"mapping": {}}.`;
+1. FUSIONNE uniquement si les produits partagent la même finalité d'usage client (ex: tous des effervescents, tous des biscuits, tous des outils manuels).
+2. NE PAS fusionner sur la base du goût ou du procédé seul (un Prosecco n'est PAS un "vin doux", c'est un effervescent comme le Champagne et le Crémant).
+3. Le nom cible doit exister EXACTEMENT dans la liste fournie.
+4. Si aucune catégorie de la liste ne convient comme cible, ne pas fusionner cette catégorie (laisse-la séparée).
+
+Exemples de bonnes fusions : Crémant→Champagne, Prosecco→Champagne, Bières IPA→Bières, Tournevis cruciformes→Tournevis.
+Exemples de mauvaises fusions : Prosecco→Vin doux (l'un est sec et pétillant, l'autre sucré tranquille).
+
+Réponds UNIQUEMENT en JSON, format : {"mapping": {"NomOriginal": "NomCible"}, "reasoning": "courte explication"}. Inclus seulement les fusions valides. Si rien à fusionner, renvoie {"mapping": {}, "reasoning": "..."}.`;
 
   try {
     const response = await client.complete(

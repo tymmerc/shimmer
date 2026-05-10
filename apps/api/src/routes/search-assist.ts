@@ -39,6 +39,51 @@ function preserveCase(orig: string, replacement: string): string {
   return replacement;
 }
 
+// ── Brand voice (per-store intro phrases, vocabulary substitutions, signature) ──
+
+interface BrandVoice {
+  intro_phrases?: string[];
+  vocabulary?: Record<string, string>;
+  signature?: string;
+}
+
+function getStoreVoice(store: { config?: unknown } | undefined): BrandVoice | null {
+  const cfg = store?.config;
+  if (!cfg || typeof cfg !== 'object') return null;
+  const v = (cfg as Record<string, unknown>)['voice'];
+  if (!v || typeof v !== 'object') return null;
+  return v as BrandVoice;
+}
+
+const STANDARD_ACK_RE = /^(Très bien|Compris|Parfait|OK|Super|Noté|D'accord)\s*!\s*/i;
+
+function applyVoice(text: string, voice: BrandVoice | null): string {
+  if (!voice) return text;
+
+  // Replace standard acknowledgment at start with a per-store intro phrase
+  if (Array.isArray(voice.intro_phrases) && voice.intro_phrases.length > 0 && STANDARD_ACK_RE.test(text)) {
+    const intro = voice.intro_phrases[Math.floor(Math.random() * voice.intro_phrases.length)]!;
+    text = text.replace(STANDARD_ACK_RE, `${intro} `);
+  }
+
+  // Vocabulary substitution (word-boundary, case-insensitive, preserve case)
+  if (voice.vocabulary && typeof voice.vocabulary === 'object') {
+    for (const [orig, replacement] of Object.entries(voice.vocabulary)) {
+      if (typeof orig !== 'string' || typeof replacement !== 'string' || orig.length === 0) continue;
+      const re = new RegExp(`\\b${orig.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+      text = text.replace(re, (m) => preserveCase(m, replacement));
+    }
+  }
+
+  // Append signature with proper spacing
+  if (typeof voice.signature === 'string' && voice.signature.trim().length > 0) {
+    text = text.replace(/\s*$/, '');
+    text = `${text} ${voice.signature.trim()}`;
+  }
+
+  return text;
+}
+
 // Convert template messages between "tu" and "vous". Internal templates use "tu".
 // DB-generated questions (universe-gen) use "vous" by default. This adapts both
 // to whatever the store has configured.
@@ -1417,14 +1462,24 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
     const body = assistSchema.parse(req.body);
     const t0 = performance.now();
 
+    // Detect "need_change" signals upfront: when the user says "finalement",
+    // "en fait", "plutôt" + a new need, we reset the conversation context so the
+    // new turn isn't polluted by the previous history.
+    const NEED_CHANGE_RE = /\b(en fait|finalement|plut[ôo]t|j.?ai chang[ée]|au lieu de|change d.?avis|finalement non)\b/i;
+    const isNeedChange = (body.history?.length || 0) > 0 && NEED_CHANGE_RE.test(body.message);
+
     // Combine only USER messages for deduction (avoid false positives from assistant suggestions)
-    const fullConversation = [
-      ...(body.history || []).filter(h => h.role === 'user').map(h => h.content),
-      body.message,
-    ].join(' ');
+    // On need_change, restart from the current message only — the previous goal is voided.
+    const fullConversation = isNeedChange
+      ? body.message
+      : [
+          ...(body.history || []).filter(h => h.role === 'user').map(h => h.content),
+          body.message,
+        ].join(' ');
 
     // ── TYPE 1: Check for exact product match first ──
     const tone = getStoreTone(req.store);
+    const voice = getStoreVoice(req.store);
     const exactMatch = await detectExactProduct(body.message, req.storeId!);
     if (exactMatch && exactMatch.confidence >= 0.8 && !body.history?.length) {
       // Direct product match — skip qualification, respond immediately
@@ -1435,7 +1490,7 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
       logger.info({ query: body.message, product: p.name, confidence: exactMatch.confidence }, 'search.type1.exact');
 
       res.json({
-        message: applyTone(`Le **${p.name}** de ${p.brand} à ${p.price}€ — ${(p.description || '').slice(0, 150)}`, tone),
+        message: applyVoice(applyTone(`Le **${p.name}** de ${p.brand} à ${p.price}€ — ${(p.description || '').slice(0, 150)}`, tone), voice),
         suggestedQuestions: ['Voir les détails', 'Similaire moins cher ?', 'Autre chose'],
         highlightedProducts: [{
           name: p.name,
@@ -1479,7 +1534,7 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
           }, 'search.type3.similarity');
 
           res.json({
-            message: applyTone(labelBySubCase[simIntent.subCase], tone),
+            message: applyVoice(applyTone(labelBySubCase[simIntent.subCase], tone), voice),
             suggestedQuestions: ['Voir les détails', 'Encore plus similaire ?', 'Autre chose'],
             highlightedProducts: similar.slice(0, 3).map(s => ({
               name: s.product.name,
@@ -1512,7 +1567,11 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
     }
 
     // ── OBJECTION: Check if client is pushing back ──
-    const known0 = { ...body.knownCriteria };
+    // On need_change, drop previously-known criteria so the new turn starts fresh.
+    // Brand and internal flags stay.
+    const known0 = isNeedChange
+      ? Object.fromEntries(Object.entries(body.knownCriteria || {}).filter(([k]) => k.startsWith('_')))
+      : { ...body.knownCriteria };
     const objection = (body.history?.length || 0) > 0 ? detectObjection(body.message, known0) : null;
     if (objection) {
       logger.info({ objection }, 'search.objection');
@@ -1548,10 +1607,10 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
 
       if (noun) {
         const storeName = req.store?.name || 'la boutique';
-        const out = applyTone(
+        const out = applyVoice(applyTone(
           `Désolé, on ne fait pas ça chez ${storeName}. Dis-moi ce qui t'intéresse vraiment et je te trouve quelque chose !`,
           tone,
-        );
+        ), voice);
         const totalMs = Math.round(performance.now() - t0);
         logger.info({ query: body.message, noun }, 'search.out_of_scope');
         res.json({
@@ -1733,7 +1792,7 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
     }
 
     // Apply per-store tone (tu/vous) to the final outgoing message.
-    cleanMessage = applyTone(cleanMessage, tone);
+    cleanMessage = applyVoice(applyTone(cleanMessage, tone), voice);
 
     const totalMs = Math.round(performance.now() - t0);
 
@@ -1746,7 +1805,8 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
     }, 'search.assist');
 
     // Build highlighted products SERVER-SIDE (don't trust LLM for structured data)
-    const isRecommending = qual.score >= 65 || objection?.type === 'price' || objection?.type === 'change_criteria';
+    // Aligned with isRecommendingEarly so the message and the structured products stay consistent.
+    const isRecommending = qual.score >= 65 || objection?.type === 'price' || objection?.type === 'change_criteria' || objection?.type === 'backtrack';
     const serverProducts = isRecommending
       ? topProducts.slice(0, 3).map((sp) => {
           const p = sp.product;
