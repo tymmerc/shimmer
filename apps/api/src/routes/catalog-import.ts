@@ -258,6 +258,47 @@ catalogImportRouter.post('/import/csv', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/catalog/normalize-specs — convert legacy CSV-string specs to arrays
+//   for products imported before maybeSplitCsv was introduced. Idempotent.
+catalogImportRouter.post('/normalize-specs', async (req: Request, res: Response) => {
+  try {
+    const storeId = req.storeId!;
+    const prisma = getPrisma();
+
+    const products = await prisma.product.findMany({
+      where: { storeId },
+      select: { id: true, specs: true },
+    });
+
+    let updatedCount = 0;
+    let touchedSpecs = 0;
+    for (const p of products) {
+      const original = (p.specs as Record<string, unknown>) || null;
+      if (!original) continue;
+      const next: Record<string, unknown> = {};
+      let changed = false;
+      for (const [k, v] of Object.entries(original)) {
+        const normalized = maybeSplitCsv(v);
+        if (Array.isArray(normalized) && !Array.isArray(v)) {
+          changed = true;
+          touchedSpecs += 1;
+        }
+        next[k] = normalized;
+      }
+      if (changed) {
+        await prisma.product.update({ where: { id: p.id }, data: { specs: next } });
+        updatedCount += 1;
+      }
+    }
+
+    logger.info({ storeId, updatedCount, touchedSpecs }, 'catalog.normalize.done');
+    res.json({ success: true, productsUpdated: updatedCount, specsConverted: touchedSpecs });
+  } catch (err) {
+    logger.error({ err }, 'catalog.normalize.failed');
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // GET /api/catalog/stats — catalog stats
 catalogImportRouter.get('/stats', async (req: Request, res: Response) => {
   try {
