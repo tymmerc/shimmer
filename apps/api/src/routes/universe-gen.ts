@@ -203,7 +203,7 @@ async function analyzeCatalog(storeId: number) {
 
 // ── Step 2: Build universes programmatically + LLM for questions ────
 
-function toId(str: string): string {
+export function toId(str: string): string {
   return str.toUpperCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^A-Z0-9]/g, '_')
@@ -297,14 +297,14 @@ const KEY_PRETTY: Record<string, { label: string; question: string }> = {
 // Words that take "Quelle" rather than "Quel" in French. Used by the fallback.
 const FEMININE_ENDINGS = /(eur|aison|ance|ence|ie|tion|sion|sse|nce|ette|ique|ière|ure|ace|ade)$/i;
 
-function prettyLabelFromKey(rawKey: string): string {
+export function prettyLabelFromKey(rawKey: string): string {
   const k = rawKey.toLowerCase().trim();
   const mapped = KEY_PRETTY[k];
   if (mapped) return mapped.label;
   return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function prettyQuestionFromKey(rawKey: string): string {
+export function prettyQuestionFromKey(rawKey: string): string {
   const k = rawKey.toLowerCase().trim();
   const mapped = KEY_PRETTY[k];
   if (mapped) return mapped.question;

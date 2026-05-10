@@ -30,7 +30,7 @@ interface ProductInput {
 // Split CSV-like values ("magret,cassoulet,gibier") into arrays so downstream
 // universe-gen and detection treat each value separately. Only splits when every
 // part looks like a short tag (avoids splitting prose/descriptions).
-function maybeSplitCsv(value: unknown): unknown {
+export function maybeSplitCsv(value: unknown): unknown {
   if (typeof value !== 'string') return value;
   if (!/[,;]/.test(value)) return value;
   const parts = value.split(/[,;]/).map(s => s.trim()).filter(Boolean);

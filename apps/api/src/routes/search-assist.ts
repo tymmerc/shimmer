@@ -16,9 +16,9 @@ import { loadStoreUniverses } from './universe-gen.js';
 
 // ── Per-store tone ─────────────────────────────────
 
-type StoreTone = 'tu' | 'vous';
+export type StoreTone = 'tu' | 'vous';
 
-function getStoreTone(store: { config?: unknown } | undefined): StoreTone {
+export function getStoreTone(store: { config?: unknown } | undefined): StoreTone {
   const cfg = store?.config;
   if (cfg && typeof cfg === 'object' && cfg !== null) {
     const tone = (cfg as Record<string, unknown>)['tone'];
@@ -31,7 +31,7 @@ function getStoreTone(store: { config?: unknown } | undefined): StoreTone {
 }
 
 // Re-cases the replacement to match the original token's first-letter case.
-function preserveCase(orig: string, replacement: string): string {
+export function preserveCase(orig: string, replacement: string): string {
   if (!orig.length || !replacement.length) return replacement;
   if (orig[0] === orig[0]!.toUpperCase()) {
     return replacement[0]!.toUpperCase() + replacement.slice(1);
@@ -41,13 +41,13 @@ function preserveCase(orig: string, replacement: string): string {
 
 // ── Brand voice (per-store intro phrases, vocabulary substitutions, signature) ──
 
-interface BrandVoice {
+export interface BrandVoice {
   intro_phrases?: string[];
   vocabulary?: Record<string, string>;
   signature?: string;
 }
 
-function getStoreVoice(store: { config?: unknown } | undefined): BrandVoice | null {
+export function getStoreVoice(store: { config?: unknown } | undefined): BrandVoice | null {
   const cfg = store?.config;
   if (!cfg || typeof cfg !== 'object') return null;
   const v = (cfg as Record<string, unknown>)['voice'];
@@ -57,7 +57,7 @@ function getStoreVoice(store: { config?: unknown } | undefined): BrandVoice | nu
 
 const STANDARD_ACK_RE = /^(Très bien|Compris|Parfait|OK|Super|Noté|D'accord)\s*!\s*/i;
 
-function applyVoice(text: string, voice: BrandVoice | null): string {
+export function applyVoice(text: string, voice: BrandVoice | null): string {
   if (!voice) return text;
 
   // Replace standard acknowledgment at start with a per-store intro phrase
@@ -87,7 +87,7 @@ function applyVoice(text: string, voice: BrandVoice | null): string {
 // Convert template messages between "tu" and "vous". Internal templates use "tu".
 // DB-generated questions (universe-gen) use "vous" by default. This adapts both
 // to whatever the store has configured.
-function applyTone(text: string, tone: StoreTone): string {
+export function applyTone(text: string, tone: StoreTone): string {
   const sub = (pattern: RegExp, repl: string) =>
     text = text.replace(pattern, (m) => preserveCase(m, repl));
 
@@ -153,7 +153,7 @@ const UNIVERSAL_OCCASION_PATTERNS: { test: RegExp; occasion: 'cadeau' | 'amis' |
   { test: /\b(quotidien|tous les jours|le soir|chaque jour)\b/i, occasion: 'quotidien' },
 ];
 
-function detectUniversalSignals(query: string): { budget?: 'cheap' | 'mid' | 'premium'; occasion?: string } {
+export function detectUniversalSignals(query: string): { budget?: 'cheap' | 'mid' | 'premium'; occasion?: string } {
   const q = query.toLowerCase();
   const out: { budget?: 'cheap' | 'mid' | 'premium'; occasion?: string } = {};
 
@@ -182,7 +182,7 @@ interface ExactMatch {
 
 // Strip intent phrases ("je veux", "je cherche"...) so a query like "Je veux le Chablis William Fèvre"
 // becomes "chablis william fèvre" before product matching.
-function stripIntentPrefix(raw: string): string {
+export function stripIntentPrefix(raw: string): string {
   let q = raw.toLowerCase().trim();
   const intentPatterns = [
     /^(je\s+(veux|voudrais|cherche|prends|prendrais|aimerais)|j'aimerais|j'voudrais|il\s+me\s+faut|il\s+m'en\s+faut|tu\s+(as|aurais|aurais\s+pas)|vous\s+(avez|auriez)|donne[sz]?[\s-]+moi|montre[sz]?[\s-]+moi|montrer|trouve[sz]?[\s-]+moi|peux[\s-]+tu|pouvez[\s-]+vous|c'est\s+quoi|qu'est[\s-]+ce\s+que)\s+/i,
@@ -595,7 +595,7 @@ function detectObjection(message: string, known: Record<string, string>): Object
 
 // ── Qualification criteria per universe (Annexe C) ──────────────
 
-interface QualCriterion {
+export interface QualCriterion {
   id: string;
   label: string;
   weight: number;
@@ -606,7 +606,7 @@ interface QualCriterion {
   fallback: string;
 }
 
-interface UniverseConfig {
+export interface UniverseConfig {
   id: string;
   label: string;
   keywords: string[];
@@ -726,7 +726,7 @@ interface UniverseOverride {
   deductions_add?: { patterns: string[]; criterion: string; value: string }[];
 }
 
-function applyStoreOverrides(
+export function applyStoreOverrides(
   universes: UniverseConfig[],
   storeConfig: unknown,
 ): UniverseConfig[] {
@@ -816,7 +816,7 @@ async function getUniverses(storeId: number): Promise<UniverseConfig[]> {
 
 // ── Detect universe from query ──────────────
 
-function detectUniverse(query: string, universes: UniverseConfig[]): UniverseConfig | null {
+export function detectUniverse(query: string, universes: UniverseConfig[]): UniverseConfig | null {
   const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const q = norm(query);
   const scores: { u: UniverseConfig; score: number; debug?: Record<string, number> }[] = [];
@@ -939,7 +939,7 @@ const UNIVERSAL_PATTERNS: { patterns: string[]; criterion: string; value: string
 
 // ── Apply deductions from query text ──────────────
 
-function applyUniverseDeductions(query: string, universe: UniverseConfig): Record<string, string> {
+export function applyUniverseDeductions(query: string, universe: UniverseConfig): Record<string, string> {
   const q = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const deduced: Record<string, string> = {};
 
