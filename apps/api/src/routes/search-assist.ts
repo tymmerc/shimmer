@@ -1807,19 +1807,49 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
     // Build highlighted products SERVER-SIDE (don't trust LLM for structured data)
     // Aligned with isRecommendingEarly so the message and the structured products stay consistent.
     const isRecommending = qual.score >= 65 || objection?.type === 'price' || objection?.type === 'change_criteria' || objection?.type === 'backtrack';
+
+    // Choose which spec keys to surface to the client.
+    // Priority: criteria_priority from override > universe criteria order > variance.
+    // Caps at 5 keys so the highlighted card stays readable.
+    const NOISY_SPEC_KEYS = new Set(['usage', 'materiaux', 'garde', 'millesime', 'puissance_max', 'temperature_k']);
+    const priorityKeys = universe
+      ? universe.criteria
+          .filter(c => !['BUDGET', 'OCCASION'].includes(c.id))
+          .map(c => c.id.toLowerCase())
+          .slice(0, 5)
+      : [];
+
+    const filterAndOrderSpecs = (raw: Record<string, unknown> | null): Record<string, unknown> => {
+      if (!raw) return {};
+      const ordered: Record<string, unknown> = {};
+      // Take priority keys first, in declared order
+      for (const k of priorityKeys) {
+        if (raw[k] !== undefined && !NOISY_SPEC_KEYS.has(k)) {
+          ordered[k] = raw[k];
+          if (Object.keys(ordered).length >= 5) return ordered;
+        }
+      }
+      // Then any remaining non-noisy specs
+      for (const [k, v] of Object.entries(raw)) {
+        if (k in ordered) continue;
+        if (NOISY_SPEC_KEYS.has(k)) continue;
+        ordered[k] = v;
+        if (Object.keys(ordered).length >= 5) break;
+      }
+      return ordered;
+    };
+
     const serverProducts = isRecommending
       ? topProducts.slice(0, 3).map((sp) => {
           const p = sp.product;
-          const specs = p.specs as Record<string, string> | null;
+          const specs = p.specs as Record<string, unknown> | null;
           return {
             name: p.name,
             brand: p.brand || '',
             reason: p.description?.slice(0, 120) || '',
             price: `${p.price}€`,
             sku: p.sku,
-            specs: specs ? Object.fromEntries(
-              Object.entries(specs).filter(([k]) => !['usage', 'materiaux'].includes(k)).slice(0, 5)
-            ) : {},
+            specs: filterAndOrderSpecs(specs),
           };
         })
       : [];
