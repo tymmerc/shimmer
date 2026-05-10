@@ -250,6 +250,71 @@ function generateKeywords(
   return [...kw];
 }
 
+// Pretty labels + properly-worded questions for the spec keys we see often.
+// Falls back to a generic formatter if the key isn't mapped.
+const KEY_PRETTY: Record<string, { label: string; question: string }> = {
+  couleur: { label: 'Couleur', question: 'Quelle couleur souhaitez-vous ?' },
+  matiere: { label: 'Matière', question: 'Quelle matière préférez-vous ?' },
+  matériau: { label: 'Matériau', question: 'Quel matériau ?' },
+  taille: { label: 'Taille', question: 'Quelle taille ?' },
+  hauteur: { label: 'Hauteur', question: 'Quelle hauteur ?' },
+  hauteur_cm: { label: 'Hauteur (cm)', question: 'Quelle hauteur (en cm) ?' },
+  largeur: { label: 'Largeur', question: 'Quelle largeur ?' },
+  largeur_cm: { label: 'Largeur (cm)', question: 'Quelle largeur (en cm) ?' },
+  longueur: { label: 'Longueur', question: 'Quelle longueur ?' },
+  profondeur: { label: 'Profondeur', question: 'Quelle profondeur ?' },
+  diametre: { label: 'Diamètre', question: 'Quel diamètre ?' },
+  diametre_cm: { label: 'Diamètre (cm)', question: 'Quel diamètre (en cm) ?' },
+  poids: { label: 'Poids', question: 'Quel poids ?' },
+  capacite: { label: 'Capacité', question: 'Quelle capacité ?' },
+  autonomie: { label: 'Autonomie', question: 'Quelle autonomie ?' },
+  puissance: { label: 'Puissance', question: 'Quelle puissance ?' },
+  puissance_max: { label: 'Puissance max (W)', question: 'Quelle puissance maximum ?' },
+  temperature: { label: 'Température', question: 'Quelle température ?' },
+  temperature_k: { label: 'Température de couleur (K)', question: 'Plutôt lumière chaude ou neutre ?' },
+  ambiance: { label: 'Ambiance', question: 'Quelle ambiance lumineuse ?' },
+  style: { label: 'Style', question: 'Quel style ?' },
+  piece: { label: 'Pièce', question: 'Pour quelle pièce ?' },
+  type: { label: 'Type', question: 'Quel type ?' },
+  type_luminaire: { label: 'Type de luminaire', question: 'Quel type de luminaire ?' },
+  source: { label: 'Source lumineuse', question: 'LED, halogène ou ampoule classique ?' },
+  occasion: { label: 'Occasion', question: "C'est pour quelle occasion ?" },
+  cepage: { label: 'Cépage', question: 'Quel cépage préférez-vous ?' },
+  region: { label: 'Région', question: 'Quelle région ?' },
+  millesime: { label: 'Millésime', question: 'Quel millésime ?' },
+  accord: { label: 'Accord met-vin', question: "C'est avec quel plat ?" },
+  profil: { label: 'Profil', question: 'Quel profil de goût ?' },
+  garde: { label: 'Garde', question: "Combien d'années de garde ?" },
+  dosage: { label: 'Dosage', question: 'Brut, demi-sec, doux ?' },
+  finition: { label: 'Finition', question: 'Quelle finition ?' },
+  genre: { label: 'Genre', question: 'Pour qui ?' },
+  marque: { label: 'Marque', question: 'Une marque en tête ?' },
+  format: { label: 'Format', question: 'Quel format ?' },
+  contenance: { label: 'Contenance', question: 'Quelle contenance ?' },
+  collection: { label: 'Collection', question: 'Quelle collection ?' },
+};
+
+// Words that take "Quelle" rather than "Quel" in French. Used by the fallback.
+const FEMININE_ENDINGS = /(eur|aison|ance|ence|ie|tion|sion|sse|nce|ette|ique|ière|ure|ace|ade)$/i;
+
+function prettyLabelFromKey(rawKey: string): string {
+  const k = rawKey.toLowerCase().trim();
+  const mapped = KEY_PRETTY[k];
+  if (mapped) return mapped.label;
+  return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function prettyQuestionFromKey(rawKey: string): string {
+  const k = rawKey.toLowerCase().trim();
+  const mapped = KEY_PRETTY[k];
+  if (mapped) return mapped.question;
+  // Fallback: pick "Quel" vs "Quelle" based on a crude ending heuristic
+  const noun = k.replace(/_/g, ' ');
+  const lastWord = noun.split(/\s+/).pop() || noun;
+  const det = FEMININE_ENDINGS.test(lastWord) ? 'Quelle' : 'Quel';
+  return `${det} ${noun} préférez-vous ?`;
+}
+
 function buildCriteriaFromSpecs(
   specKeys: { key: string; values: string[]; variance: number }[],
 ): GeneratedUniverse['criteria'] {
@@ -267,12 +332,12 @@ function buildCriteriaFromSpecs(
     const id = toId(s.key);
     criteria.push({
       criterion_id: id,
-      label: s.key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      label: prettyLabelFromKey(s.key),
       weight,
       required: i === 0,
       type: s.values.length <= 8 ? 'closed' : 'open',
       values: s.values.length <= 8 ? s.values : undefined,
-      question: `Quel ${s.key.replace(/_/g, ' ')} vous intéresse ?`,
+      question: prettyQuestionFromKey(s.key),
       fallback: s.values[0] || '',
     });
   }
