@@ -7,7 +7,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import cors from 'cors';
 import pinoHttp from 'pino-http';
-import { logger, closePrisma, closeRedis } from '@shimmer/core';
+import { logger, closePrisma, closeRedis, getPrisma, getRedis } from '@shimmer/core';
 import { initializeIndexes } from '@shimmer/smart-search';
 import { authMiddleware } from './middleware/auth.js';
 import { errorHandler } from './middleware/error-handler.js';
@@ -41,9 +41,58 @@ app.use(express.text({ limit: '50mb', type: 'text/csv' }));
 app.use(pinoHttp({ logger }));
 app.use(createRateLimiter());
 
-// Health check (no auth)
+// Health check (no auth) — fast liveness probe + deeper readiness
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Readiness probe — checks DB, Redis, embedding sidecar. Returns 200 on success,
+// 503 if any dependency is unhealthy. Detail is always exposed so operators can
+// see which dependency is failing.
+app.get('/health/ready', async (_req, res) => {
+  const started = Date.now();
+  const embedUrl = process.env.EMBEDDING_URL || 'http://localhost:8100';
+
+  const checks = await Promise.all([
+    (async () => {
+      const t = Date.now();
+      try {
+        await getPrisma().$queryRawUnsafe('SELECT 1');
+        return { name: 'database', ok: true, ms: Date.now() - t };
+      } catch (err) {
+        return { name: 'database', ok: false, ms: Date.now() - t, error: (err as Error).message };
+      }
+    })(),
+    (async () => {
+      const t = Date.now();
+      try {
+        const pong = await getRedis().ping();
+        return { name: 'redis', ok: pong === 'PONG', ms: Date.now() - t };
+      } catch (err) {
+        return { name: 'redis', ok: false, ms: Date.now() - t, error: (err as Error).message };
+      }
+    })(),
+    (async () => {
+      const t = Date.now();
+      try {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), 2000);
+        const r = await fetch(`${embedUrl}/health`, { signal: ctl.signal });
+        clearTimeout(timer);
+        return { name: 'embedding', ok: r.ok, ms: Date.now() - t, status: r.status };
+      } catch (err) {
+        return { name: 'embedding', ok: false, ms: Date.now() - t, error: (err as Error).message };
+      }
+    })(),
+  ]);
+
+  const allOk = checks.every(c => c.ok);
+  res.status(allOk ? 200 : 503).json({
+    status: allOk ? 'ready' : 'degraded',
+    totalMs: Date.now() - started,
+    checks,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Store creation (no auth — admin endpoint)
