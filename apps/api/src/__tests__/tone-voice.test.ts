@@ -59,6 +59,26 @@ describe('applyTone', () => {
       .toContain("t'intéresse");
   });
 
+  it('converts "tu peux" → "vous pouvez"', () => {
+    expect(applyTone("Tu peux l'ajouter au panier", 'vous'))
+      .toBe("Vous pouvez l'ajouter au panier");
+  });
+
+  it('converts "tu prends" → "vous prenez"', () => {
+    expect(applyTone('Tu prends celui-ci ?', 'vous'))
+      .toBe('Vous prenez celui-ci ?');
+  });
+
+  it('converts "tu cherches" → "vous cherchez"', () => {
+    expect(applyTone('Tu cherches autre chose ?', 'vous'))
+      .toBe('Vous cherchez autre chose ?');
+  });
+
+  it('converts catch-all "tu + verb" → "vous + verb"', () => {
+    // Verbs not in the explicit list still get a basic substitution
+    expect(applyTone('Tu pleures', 'vous')).toBe('Vous pleures');
+  });
+
   it('does not match "vous" inside other words', () => {
     // "nous" must not be turned into "ntu"
     const out = applyTone('nous', 'tu');

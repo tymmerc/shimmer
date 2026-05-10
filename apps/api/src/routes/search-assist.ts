@@ -122,12 +122,22 @@ export function applyTone(text: string, tone: StoreTone): string {
   sub(/\bt'/gi, 'vous ');
   sub(/\btu as\b/gi, 'vous avez');
   sub(/\btu es\b/gi, 'vous êtes');
+  sub(/\btu peux\b/gi, 'vous pouvez');
+  sub(/\btu sais\b/gi, 'vous savez');
+  sub(/\btu fais\b/gi, 'vous faites');
+  sub(/\btu vas\b/gi, 'vous allez');
+  sub(/\btu viens\b/gi, 'vous venez');
   sub(/\btu veux\b/gi, 'vous voulez');
   sub(/\btu cherches\b/gi, 'vous cherchez');
   sub(/\btu préfères\b/gi, 'vous préférez');
-  sub(/\btu\b/gi, 'vous');
+  sub(/\btu prends\b/gi, 'vous prenez');
+  sub(/\btu aimes\b/gi, 'vous aimez');
+  sub(/\btu trouves\b/gi, 'vous trouvez');
+  // Object pronoun + verb
+  sub(/\btu /gi, 'vous '); // catch other "tu + verb" not above
   sub(/\bte\b/gi, 'vous');
   sub(/\btoi\b/gi, 'vous');
+  // Possessives
   sub(/\b(ton|ta)\b/gi, 'votre');
   sub(/\btes\b/gi, 'vos');
   return text;
@@ -1477,9 +1487,56 @@ searchAssistRouter.post('/', async (req: Request, res: Response, next: NextFunct
           body.message,
         ].join(' ');
 
-    // ── TYPE 1: Check for exact product match first ──
     const tone = getStoreTone(req.store);
     const voice = getStoreVoice(req.store);
+
+    // ── FSM transitions on subsequent turns: ACCEPT / CLOSE / IDLE ──
+    // Short-circuits when the customer is done (avoids re-running qualification
+    // on "je le prends" / "merci au revoir" which used to loop back to a question).
+    if ((body.history?.length || 0) > 0) {
+      const m = body.message.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      const isClose = /\b(au revoir|bonne journee|a bientot|salut|bye|ciao)\b/.test(m)
+        || /\bmerci\b/.test(m) && !/\bmerci de\b/.test(m) && m.split(/\s+/).length <= 5;
+      const isAccept = /\b(je (le |la |les )?prends|je l['\s]?achete|j['\s]?adopte|ca me va|c['\s]?est parfait|j['\s]?ai trouve|emballe|c['\s]?est bon|je veux celui|on prend celui)\b/.test(m);
+
+      if (isClose) {
+        const goodbye = applyVoice(applyTone("Avec plaisir, à bientôt !", tone), voice);
+        const totalMs = Math.round(performance.now() - t0);
+        logger.info({ storeId: req.storeId, signal: 'close' }, 'search.fsm');
+        res.json({
+          message: goodbye,
+          suggestedQuestions: [],
+          highlightedProducts: [],
+          needsMoreInfo: false,
+          qualificationStep: 'closure',
+          sessionToken: body.sessionToken || null,
+          knownCriteria: body.knownCriteria || {},
+          qualification: { universe: null, score: 0, missingRequired: false, type: 'CLOSURE', objection: null },
+          searchMeta: { totalProducts: 0, stageUsed: 'none', searchType: 'CLOSURE', totalMs },
+        });
+        return;
+      }
+
+      if (isAccept) {
+        const ack = applyVoice(applyTone("Excellent choix ! Tu peux l'ajouter au panier. Tu cherches autre chose ?", tone), voice);
+        const totalMs = Math.round(performance.now() - t0);
+        logger.info({ storeId: req.storeId, signal: 'accept' }, 'search.fsm');
+        res.json({
+          message: ack,
+          suggestedQuestions: ['Autre chose', 'Voir le panier', 'Non merci'],
+          highlightedProducts: [],
+          needsMoreInfo: false,
+          qualificationStep: 'purchase',
+          sessionToken: body.sessionToken || null,
+          knownCriteria: body.knownCriteria || {},
+          qualification: { universe: null, score: 100, missingRequired: false, type: 'PURCHASE', objection: null },
+          searchMeta: { totalProducts: 0, stageUsed: 'none', searchType: 'PURCHASE', totalMs },
+        });
+        return;
+      }
+    }
+
+    // ── TYPE 1: Check for exact product match first ──
     const exactMatch = await detectExactProduct(body.message, req.storeId!);
     if (exactMatch && exactMatch.confidence >= 0.8 && !body.history?.length) {
       // Direct product match — skip qualification, respond immediately
