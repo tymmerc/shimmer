@@ -3,11 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Shimmer — Le vendeur IA pour votre boutique</title>
-  <meta name="description" content="Un vendeur IA qui comprend vos clients comme en magasin. Branchez votre boutique en 5 minutes." />
+  <title>Shimmer — Le temps qu'on rend aux marchands</title>
+  <meta name="description" content="Un vendeur IA qui fait gagner des heures aux marchands en ligne. Branché en 5 minutes." />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://api.fontshare.com" />
+  <link href="https://api.fontshare.com/v2/css?f[]=editorial-new@400,500,800,400i,500i,800i&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
@@ -18,15 +21,10 @@
 
   <nav class="nav" id="nav">
     <a href="#hero" class="nav-logo">SHIMMER</a>
-    <div class="nav-links" id="navLinks">
-      <a href="#how">Comment ça marche</a>
-      <a href="#voice">Votre marque</a>
-      <a href="#live" class="nav-cta">Essayer</a>
-    </div>
-    <button class="nav-burger" id="navBurger" aria-label="Menu"><span></span></button>
+    <a href="#live" class="nav-cta">Essayer en live</a>
   </nav>
 
-  <!-- ════════ HERO ════════ -->
+  <!-- ════════════════════ HERO (preserved) ════════════════════ -->
   <section class="hero" id="hero">
     <canvas id="toxin"></canvas>
     <div class="hero-inner">
@@ -34,7 +32,7 @@
       <h1 class="hero-title" data-text="SHIMMER">SHIMMER</h1>
       <p class="hero-sub">Un vendeur qui comprend vos clients comme en magasin. Il pose les bonnes questions, recommande le bon produit, et parle comme votre marque.</p>
       <div class="hero-btns">
-        <a href="#how" class="btn-fill">Voir comment ça marche</a>
+        <a href="#act-1" class="btn-fill">Voir comment ça marche</a>
         <a href="#live" class="btn-line">Essayer en live</a>
       </div>
     </div>
@@ -42,325 +40,251 @@
     <div class="scroll-hint" aria-hidden="true"><span></span></div>
   </section>
 
-  <!-- ════════ INTRO TRANSITION ════════ -->
-  <section class="intro" id="intro">
-    <canvas class="bleed" id="bleed" aria-hidden="true"></canvas>
-    <div class="wrap">
-      <p class="kicker">Cinq étapes</p>
-      <h2 class="lead">
-        On vous montre exactement <em>ce qui se passe</em><br />quand un client arrive sur votre boutique.
-      </h2>
-      <p class="lead-sub">Aucun jargon technique. Juste les moments concrets où Shimmer fait gagner du temps à vos clients — et de l'argent à vous.</p>
+  <!-- ════════════════════ INTRO ════════════════════ -->
+  <section class="intro">
+    <div class="intro-inner">
+      <p class="kicker">Cinq démonstrations</p>
+      <h2 class="intro-lead">Chaque scroll, <em>une heure de gagnée.</em></h2>
     </div>
   </section>
 
-  <!-- ════════ ÉTAPE 1 — BRANCHER LA BOUTIQUE ════════ -->
-  <section class="step step-graft" id="how">
-    <div class="step-pin">
-      <div class="step-head">
-        <p class="kicker"><span class="num">01</span> Installation</p>
-        <h2 class="step-title">Branchez votre boutique en 5 minutes.</h2>
-        <p class="step-sub">Vous nous donnez votre catalogue. On entraîne votre vendeur IA sur vos produits, vos catégories, vos clients. Il est prêt à vendre.</p>
-      </div>
+  <!-- ════════════════════ ACTE 1 — Brancher ════════════════════ -->
+  <section class="act act-graft" id="act-1">
+    <div class="act-pin">
+      <header class="act-header">
+        <p class="kicker"><span class="num">01</span></p>
+        <h2 class="act-title"><em>Brancher</em> votre boutique.</h2>
+      </header>
 
-      <div class="workflow" id="workflow">
-        <svg class="workflow-lines" viewBox="0 0 900 320" preserveAspectRatio="none">
-          <path class="wf-line" id="wfL1" d="M 110 160 C 220 160, 220 160, 330 160" />
-          <path class="wf-line" id="wfL2" d="M 330 160 C 440 160, 440 160, 550 160" />
-          <path class="wf-line" id="wfL3" d="M 550 160 C 660 160, 660 160, 790 160" />
-        </svg>
-
-        <div class="wf-node" data-step="1">
-          <div class="wf-dot"></div>
-          <div class="wf-card">
-            <div class="wf-icn">⌁</div>
-            <h4>Compte créé</h4>
-            <p class="wf-meta">Caves Forty-Two</p>
-            <ul class="wf-list">
-              <li>Identité de la boutique</li>
-              <li>Domaine connecté</li>
-            </ul>
-          </div>
+      <div class="graft-stage">
+        <div class="graft-before">
+          <p class="graft-label">Sans Shimmer</p>
+          <p class="graft-figure" id="grBefore">21</p>
+          <p class="graft-unit">jours</p>
+          <ul class="graft-detail">
+            <li>Cahier des charges</li>
+            <li>Intégration développeur</li>
+            <li>Tests, allers-retours</li>
+            <li>Mise en ligne</li>
+          </ul>
         </div>
 
-        <div class="wf-node" data-step="2">
-          <div class="wf-dot"></div>
-          <div class="wf-card">
-            <div class="wf-icn">⌬</div>
-            <h4>Catalogue importé</h4>
-            <p class="wf-meta">80 produits</p>
-            <div class="wf-bar"><span></span></div>
-            <ul class="wf-list">
-              <li>Photos, prix, descriptions</li>
-              <li>Vins · Champagnes · Liquoreux</li>
-            </ul>
-          </div>
+        <div class="graft-arrow" aria-hidden="true">
+          <svg viewBox="0 0 200 40">
+            <path class="graft-arrow-path" d="M 10 20 L 180 20" />
+            <path class="graft-arrow-head" d="M 170 10 L 190 20 L 170 30" />
+          </svg>
         </div>
 
-        <div class="wf-node" data-step="3">
-          <div class="wf-dot"></div>
-          <div class="wf-card">
-            <div class="wf-icn">◬</div>
-            <h4>Vendeur entraîné</h4>
-            <p class="wf-meta">7 rayons compris</p>
-            <ul class="wf-list">
-              <li>Reconnaît les questions clients</li>
-              <li>Apprend le vocabulaire métier</li>
-              <li>Détecte le hors-scope</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="wf-node" data-step="4">
-          <div class="wf-dot"></div>
-          <div class="wf-card wf-card-pulse">
-            <div class="wf-icn">●</div>
-            <h4>En ligne</h4>
-            <p class="wf-meta">Prêt à conseiller</p>
-            <ul class="wf-list">
-              <li>Disponible 24/7</li>
-              <li>Répond en moins d'une seconde</li>
-            </ul>
-          </div>
+        <div class="graft-after">
+          <p class="graft-label">Avec Shimmer</p>
+          <p class="graft-figure" id="grAfter">5</p>
+          <p class="graft-unit">minutes</p>
+          <ul class="graft-detail">
+            <li>Upload du catalogue</li>
+            <li>Vendeur entraîné</li>
+            <li>En ligne</li>
+          </ul>
         </div>
       </div>
 
-      <div class="step-foot">
-        <p>Vous gardez la main : modifiez le ton, les questions, les rayons, à tout moment.</p>
-      </div>
+      <p class="act-caption">Vous tenez 4 200 fois moins de temps occupé.</p>
     </div>
   </section>
 
-  <!-- ════════ ÉTAPE 2 — RECHERCHE EXACTE ════════ -->
-  <section class="step step-exact">
-    <div class="wrap">
-      <div class="step-head">
-        <p class="kicker"><span class="num">02</span> Quand votre client sait ce qu'il veut</p>
-        <h2 class="step-title">Le produit. Direct.</h2>
-        <p class="step-sub">Il connaît le nom, la marque, la référence. Pas besoin de l'interroger. Le vendeur lui sort le produit en une seconde.</p>
-      </div>
+  <!-- ════════════════════ ACTE 2 — Recherche exacte ════════════════════ -->
+  <section class="act act-exact" id="act-2">
+    <div class="act-pin">
+      <header class="act-header">
+        <p class="kicker"><span class="num">02</span></p>
+        <h2 class="act-title">Il sait <em>déjà</em> ce qu'il veut.</h2>
+      </header>
 
       <div class="exact-stage">
-        <div class="exact-phone">
-          <div class="phone-bar">
-            <span class="phone-dot"></span>
-            <span class="phone-dot"></span>
-            <span class="phone-dot"></span>
-          </div>
-          <div class="phone-chat">
-            <div class="phone-input">
-              <span class="phone-caret" id="exactCaret"></span><span id="exactText"></span>
-            </div>
-            <div class="phone-reply" id="exactReply">
-              <p class="reply-name">Chablis 2022</p>
-              <p class="reply-brand">Domaine William Fèvre</p>
-              <p class="reply-meta">Chablis classique, chardonnay sur Kimméridgien. Tendu, citron, iode. Sur huîtres et fruits de mer.</p>
-              <div class="reply-cta">
-                <span class="reply-price">24€</span>
-                <span class="reply-btn">Ajouter</span>
-              </div>
-            </div>
+        <div class="exact-input">
+          <span class="exact-prefix">Client →</span>
+          <span class="exact-typed" id="exactTyped"></span><span class="exact-caret" id="exactCaret"></span>
+        </div>
+
+        <div class="exact-scanner" id="exactScanner">
+          <div class="scan-bar"></div>
+          <div class="scan-grid">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
           </div>
         </div>
 
-        <div class="exact-meta">
-          <div class="ms"><b id="exactMs">0</b> <span>ms pour comprendre</span></div>
-          <p class="exact-note">Pas un seul aller-retour de questions. Le client tape, il a son produit.</p>
-          <ul class="exact-list">
-            <li>Marque mal orthographiée ? Géré.</li>
-            <li>Mots de remplissage ("je veux le…") ? Ignorés.</li>
-            <li>Référence partielle ? Reconnue.</li>
-          </ul>
+        <div class="exact-result" id="exactResult">
+          <p class="result-name">Chablis 2022</p>
+          <p class="result-sub">Domaine William Fèvre · 24€</p>
         </div>
       </div>
+
+      <p class="act-caption">
+        <span class="ms"><b id="exactMs">9</b><i>ms</i></span>
+        Zéro question. Zéro mail. Le client a son produit.
+      </p>
     </div>
   </section>
 
-  <!-- ════════ ÉTAPE 3 — QUALIFICATION ════════ -->
-  <section class="step step-qual" id="qual">
-    <div class="step-pin">
-      <div class="step-head">
-        <p class="kicker"><span class="num">03</span> Quand votre client décrit un besoin</p>
-        <h2 class="step-title">Trois questions, une recommandation.</h2>
-        <p class="step-sub">Comme un vendeur en magasin. Il écoute, comprend ce qui compte vraiment, et oriente.</p>
-      </div>
+  <!-- ════════════════════ ACTE 3 — Qualification ════════════════════ -->
+  <section class="act act-qual" id="act-3">
+    <div class="act-pin">
+      <header class="act-header">
+        <p class="kicker"><span class="num">03</span></p>
+        <h2 class="act-title">Il décrit un <em>besoin</em>.</h2>
+      </header>
 
       <div class="qual-stage">
-        <div class="qual-chat">
-          <div class="chat-head">
-            <i></i><span>Vendeur Caves Forty-Two</span>
-          </div>
-          <div class="chat-thread" id="qualThread"></div>
-        </div>
+        <div class="qual-thread" id="qualThread"></div>
 
-        <div class="qual-side">
-          <p class="qual-mini">Ce que comprend le vendeur, en direct.</p>
-          <ul class="qual-criteria" id="qualCriteria">
-            <li data-key="universe"><span class="cri-k">Rayon</span><span class="cri-v"></span></li>
-            <li data-key="plat"><span class="cri-k">Plat à accompagner</span><span class="cri-v"></span></li>
-            <li data-key="occasion"><span class="cri-k">Occasion</span><span class="cri-v"></span></li>
-            <li data-key="budget"><span class="cri-k">Budget</span><span class="cri-v"></span></li>
+        <div class="qual-board">
+          <ul class="qual-crit" id="qualCrit">
+            <li data-key="rayon"><b>Rayon</b><span></span></li>
+            <li data-key="plat"><b>Plat</b><span></span></li>
+            <li data-key="occasion"><b>Occasion</b><span></span></li>
+            <li data-key="budget"><b>Budget</b><span></span></li>
           </ul>
-          <div class="qual-bar">
-            <div class="qual-bar-track"><div class="qual-bar-fill" id="qualBar"></div></div>
-            <span class="qual-bar-label"><span id="qualPct">0</span>% compris</span>
-          </div>
-          <div class="qual-result" id="qualResult">
-            <p class="result-tag">Recommandé</p>
-            <p class="result-name">Châteauneuf-du-Pape 2019</p>
-            <p class="result-brand">Domaine du Vieux Télégraphe</p>
-            <p class="result-meta">Grenache dominant, puissant, garrigue. Parfait sur magret entre amis.</p>
-            <span class="result-price">38€</span>
+
+          <div class="qual-pick" id="qualPick">
+            <p class="pick-tag">Recommandation</p>
+            <p class="pick-name">Châteauneuf-du-Pape 2019</p>
+            <p class="pick-sub">38€</p>
           </div>
         </div>
       </div>
+
+      <p class="act-caption">
+        <span class="ms"><b>12</b><i>min</i></span>
+        Le temps qu'aurait pris cette conversation, par mail. Sans vous.
+      </p>
     </div>
   </section>
 
-  <!-- ════════ ÉTAPE 4 — SIMILARITÉ ════════ -->
-  <section class="step step-similar" id="similar">
-    <div class="wrap">
-      <div class="step-head">
-        <p class="kicker"><span class="num">04</span> Quand votre client se réfère à ce qu'il a aimé</p>
-        <h2 class="step-title">« Comme ce que j'ai goûté l'autre fois. »</h2>
-        <p class="step-sub">Le vendeur trouve ce que ce produit a de spécifique, et propose des produits qui partagent ces qualités.</p>
-      </div>
+  <!-- ════════════════════ ACTE 4 — Similarité ════════════════════ -->
+  <section class="act act-similar" id="act-4">
+    <div class="act-pin">
+      <header class="act-header">
+        <p class="kicker"><span class="num">04</span></p>
+        <h2 class="act-title">« Comme <em>celui-là</em>, mais autre. »</h2>
+      </header>
 
-      <div class="similar-stage" id="similarStage">
-        <div class="sim-reference">
-          <p class="sim-tag">Référence du client</p>
-          <p class="sim-name">Châteauneuf-du-Pape 2019</p>
-          <p class="sim-brand">Domaine du Vieux Télégraphe</p>
-          <div class="sim-traits">
-            <span class="sim-trait" data-i="0">Vallée du Rhône</span>
-            <span class="sim-trait" data-i="1">Grenache</span>
-            <span class="sim-trait" data-i="2">Puissant</span>
-            <span class="sim-trait" data-i="3">Garrigue</span>
+      <div class="sim-stage">
+        <div class="sim-ref" id="simRef">
+          <p class="sim-ref-tag">L'a aimé</p>
+          <p class="sim-ref-name">Châteauneuf-du-Pape</p>
+          <div class="sim-ref-tokens">
+            <span data-i="0">Rhône</span>
+            <span data-i="1">Grenache</span>
+            <span data-i="2">Puissant</span>
           </div>
         </div>
 
-        <svg class="sim-links" viewBox="0 0 600 400" aria-hidden="true">
-          <path class="sim-link" d="M 300 130 Q 200 200, 110 280" />
-          <path class="sim-link" d="M 300 130 Q 300 200, 300 290" />
-          <path class="sim-link" d="M 300 130 Q 400 200, 490 280" />
+        <svg class="sim-links" viewBox="0 0 800 200" aria-hidden="true">
+          <path class="sim-link" d="M 400 0 Q 300 100, 150 200" data-i="0" />
+          <path class="sim-link" d="M 400 0 L 400 200" data-i="1" />
+          <path class="sim-link" d="M 400 0 Q 500 100, 650 200" data-i="2" />
         </svg>
 
-        <div class="sim-results">
+        <div class="sim-cards">
           <article class="sim-card" data-i="0">
-            <p class="card-name">Gigondas 2020</p>
-            <p class="card-brand">Domaine Saint-Cosme</p>
-            <ul class="card-traits"><li>Vallée du Rhône</li><li>Grenache</li><li>Puissant</li></ul>
-            <span class="card-price">28€</span>
+            <p class="sim-name">Gigondas</p>
+            <p class="sim-sub">28€</p>
           </article>
           <article class="sim-card" data-i="1">
-            <p class="card-name">Vacqueyras 2021</p>
-            <p class="card-brand">Domaine de Montvac</p>
-            <ul class="card-traits"><li>Vallée du Rhône</li><li>Grenache</li><li>Fruité</li></ul>
-            <span class="card-price">21€</span>
+            <p class="sim-name">Vacqueyras</p>
+            <p class="sim-sub">21€</p>
           </article>
           <article class="sim-card" data-i="2">
-            <p class="card-name">Bandol Rouge 2019</p>
-            <p class="card-brand">Domaine Tempier</p>
-            <ul class="card-traits"><li>Provence</li><li>Mourvèdre</li><li>Garrigue</li></ul>
-            <span class="card-price">36€</span>
+            <p class="sim-name">Bandol</p>
+            <p class="sim-sub">36€</p>
           </article>
         </div>
       </div>
+
+      <p class="act-caption">
+        <span class="ms"><b>0</b><i>question</i></span>
+        Aucun aller-retour. Il propose trois pistes qui collent.
+      </p>
     </div>
   </section>
 
-  <!-- ════════ ÉTAPE 5 — BRAND VOICE ════════ -->
-  <section class="step step-voice" id="voice">
-    <div class="wrap">
-      <div class="step-head">
-        <p class="kicker"><span class="num">05</span> Votre marque, votre ton</p>
-        <h2 class="step-title">Le même vendeur. Trois marques.<br />Trois personnalités.</h2>
-        <p class="step-sub">Même question client. Trois boutiques différentes répondent avec leur propre voix, leur propre vocabulaire, leur propre signature.</p>
+  <!-- ════════════════════ ACTE 5 — Brand voice ════════════════════ -->
+  <section class="act act-voice" id="act-5">
+    <div class="act-pin">
+      <header class="act-header">
+        <p class="kicker"><span class="num">05</span></p>
+        <h2 class="act-title">Avec votre <em>ton</em>. Pas un robot.</h2>
+      </header>
+
+      <div class="voice-question">
+        <span class="vq-side">Client →</span>
+        <span>Un cadeau pour mon patron.</span>
       </div>
 
-      <div class="voice-stage">
-        <div class="voice-question">
-          <span class="vq-bubble">Vous avez quelque chose pour un cadeau ?</span>
-        </div>
+      <div class="voice-rows">
+        <article class="voice-row" data-store="caves">
+          <header>
+            <h4>Caves Forty-Two</h4>
+            <span class="vr-tag">Caviste · tutoie</span>
+          </header>
+          <p class="voice-msg" data-msg="Tope ! Voilà ce qu'il faut : Meursault Coche-Dury, 92€. Santé !"></p>
+        </article>
 
-        <div class="voice-grid">
-          <article class="voice-card" data-store="caves">
-            <header>
-              <h4>Caves Forty-Two</h4>
-              <span class="vc-tag">Caviste · Tutoiement</span>
-            </header>
-            <p class="voice-msg" data-msg="Tope ! C'est pour quelle occasion ?\nLe Meursault 2021 du Domaine Coche-Dury à 92€ est un excellent choix. Santé !"></p>
-            <ul class="voice-trait">
-              <li>Ton : tutoie</li>
-              <li>Signature : « Santé ! »</li>
-              <li>Vocabulaire : « bouteille », « cuvée »</li>
-            </ul>
-          </article>
+        <article class="voice-row" data-store="atelier">
+          <header>
+            <h4>L'Atelier Lumière</h4>
+            <span class="vr-tag">Décoration · vouvoie</span>
+          </header>
+          <p class="voice-msg" data-msg="Avec plaisir. La suspension Mass Light, 340€ — élégance discrète. À très vite chez L'Atelier."></p>
+        </article>
 
-          <article class="voice-card" data-store="atelier">
-            <header>
-              <h4>L'Atelier Lumière</h4>
-              <span class="vc-tag">Décoration · Vouvoiement</span>
-            </header>
-            <p class="voice-msg" data-msg="Avec plaisir. Pour quelle pièce ?\nLa suspension Mass Light de &Tradition à 340€ serait parfaite. À très vite chez L'Atelier."></p>
-            <ul class="voice-trait">
-              <li>Ton : vouvoie</li>
-              <li>Signature : « À très vite chez L'Atelier »</li>
-              <li>Vocabulaire : « luminaire »</li>
-            </ul>
-          </article>
-
-          <article class="voice-card" data-store="bricolage">
-            <header>
-              <h4>Boutique Test</h4>
-              <span class="vc-tag">Bricolage · Standard</span>
-            </header>
-            <p class="voice-msg" data-msg="Compris ! Tu bricoles de temps en temps ou c'est plus régulier ?\nLa perceuse Bosch GSB 18V à 159€ couvre tous les usages."></p>
-            <ul class="voice-trait">
-              <li>Ton : tutoiement neutre</li>
-              <li>Signature : aucune</li>
-              <li>Vocabulaire : standard</li>
-            </ul>
-          </article>
-        </div>
-
-        <p class="voice-note">Vous changez ces réglages quand vous voulez, sans toucher au code de votre boutique.</p>
+        <article class="voice-row" data-store="bricolage">
+          <header>
+            <h4>L'Atelier du Bois</h4>
+            <span class="vr-tag">Bricolage · neutre</span>
+          </header>
+          <p class="voice-msg" data-msg="Pour offrir : la perceuse Bosch GSB 18V, 159€. Couvre tout les usages."></p>
+        </article>
       </div>
+
+      <p class="act-caption">
+        <span class="ms"><b>0</b><i>chatbot à éduquer</i></span>
+        Chaque boutique parle sa langue. Réglage en une minute.
+      </p>
     </div>
   </section>
 
-  <!-- ════════ DÉMO LIVE ════════ -->
+  <!-- ════════════════════ LIVE ════════════════════ -->
   <section class="live" id="live">
-    <div class="wrap">
-      <div class="step-head center">
-        <p class="kicker">À votre tour</p>
-        <h2 class="step-title">Parlez au vendeur, en vrai.</h2>
-        <p class="step-sub">La boutique « Caves Forty-Two » est en ligne. 80 vins. Posez n'importe quelle question.</p>
-      </div>
+    <header class="live-head">
+      <p class="kicker">À vous</p>
+      <h2 class="live-title">Parlez au <em>vendeur</em>, en vrai.</h2>
+      <p class="live-sub">Caves Forty-Two · 80 références.</p>
+    </header>
 
-      <div class="live-stage">
-        <div class="live-chat" id="liveChat"></div>
-        <div class="live-input-wrap">
-          <input type="text" id="liveInput" placeholder="Je cherche un rouge pour un magret…" autocomplete="off" />
-          <button id="liveSend" aria-label="Envoyer">→</button>
-        </div>
-        <div class="live-suggestions" id="liveSugg">
-          <button>Je veux le Chablis William Fèvre</button>
-          <button>Un cadeau pour mon patron</button>
-          <button>Un blanc pour des huîtres</button>
-          <button>Vous avez du whisky ?</button>
-        </div>
+    <div class="live-stage">
+      <div class="live-chat" id="liveChat"></div>
+      <div class="live-input">
+        <input id="liveInput" type="text" placeholder="Je cherche un rouge pour un magret…" autocomplete="off" />
+        <button id="liveSend" aria-label="Envoyer">→</button>
+      </div>
+      <div class="live-suggs" id="liveSugg">
+        <button>Je veux le Chablis William Fèvre</button>
+        <button>Un cadeau pour mon patron</button>
+        <button>Un blanc pour des huîtres</button>
       </div>
     </div>
   </section>
 
-  <!-- ════════ FOOTER ════════ -->
+  <!-- ════════════════════ FOOTER ════════════════════ -->
   <footer class="footer">
-    <div class="wrap">
-      <p class="ft-logo">SHIMMER</p>
-      <p class="ft-tag">Un vendeur qui comprend.</p>
-      <p class="ft-mini">© 2026 Shimmer. Vendeur IA pour boutiques en ligne.</p>
-    </div>
+    <p class="ft-logo">SHIMMER</p>
+    <p class="ft-tag">Le temps qu'on rend aux marchands.</p>
   </footer>
 
   <script src="script.js" defer></script>
