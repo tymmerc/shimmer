@@ -8,6 +8,7 @@
  */
 
 import { Router, type Request, type Response } from 'express';
+import { z } from 'zod';
 import { getPrisma, logger } from '@shimmer/core';
 
 export const catalogImportRouter = Router();
@@ -254,6 +255,151 @@ catalogImportRouter.post('/import/csv', async (req: Request, res: Response) => {
     res.json({ success: true, ...result, totalMs });
   } catch (err) {
     logger.error({ err }, 'catalog.import.csv.failed');
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// GET /api/catalog/products — paginated list (filter: category, brand, q)
+catalogImportRouter.get('/products', async (req: Request, res: Response) => {
+  try {
+    const storeId = req.storeId!;
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+    const brand = typeof req.query.brand === 'string' ? req.query.brand : undefined;
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+
+    const prisma = getPrisma();
+    const where: Record<string, unknown> = { storeId };
+    if (category) where.category = category;
+    if (brand) where.brand = brand;
+    if (q.length >= 2) {
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { description: { contains: q, mode: 'insensitive' } },
+        { sku: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    const [items, total] = await Promise.all([
+      prisma.product.findMany({ where, take: limit, skip: offset, orderBy: { id: 'asc' } }),
+      prisma.product.count({ where }),
+    ]);
+
+    res.json({ items, total, limit, offset });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// GET /api/catalog/products/:id — single product
+catalogImportRouter.get('/products/:id', async (req: Request, res: Response) => {
+  try {
+    const storeId = req.storeId!;
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      res.status(400).json({ error: 'Invalid product id' });
+      return;
+    }
+    const prisma = getPrisma();
+    const product = await prisma.product.findFirst({ where: { id, storeId } });
+    if (!product) {
+      res.status(404).json({ error: 'Product not found' });
+      return;
+    }
+    res.json(product);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// PATCH /api/catalog/products/:id — partial update (price, stock, isActive, specs, ...)
+const productUpdateSchema = z.object({
+  name: z.string().min(1).max(500).optional(),
+  brand: z.string().max(200).nullable().optional(),
+  category: z.string().max(200).nullable().optional(),
+  description: z.string().max(5000).nullable().optional(),
+  price: z.number().positive().optional(),
+  stock: z.number().int().min(0).optional(),
+  isActive: z.boolean().optional(),
+  imageUrl: z.string().url().nullable().optional(),
+  specs: z.record(z.unknown()).optional(),
+}).strict();
+
+catalogImportRouter.patch('/products/:id', async (req: Request, res: Response) => {
+  try {
+    const storeId = req.storeId!;
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      res.status(400).json({ error: 'Invalid product id' });
+      return;
+    }
+    const body = productUpdateSchema.parse(req.body);
+    const prisma = getPrisma();
+    const existing = await prisma.product.findFirst({ where: { id, storeId } });
+    if (!existing) {
+      res.status(404).json({ error: 'Product not found' });
+      return;
+    }
+
+    // Normalize incoming specs (CSV → arrays). Merge with existing if partial.
+    let nextSpecs = existing.specs as Record<string, unknown> | null;
+    if (body.specs !== undefined) {
+      const merged: Record<string, unknown> = { ...(nextSpecs || {}) };
+      for (const [k, v] of Object.entries(body.specs)) {
+        merged[k] = maybeSplitCsv(v);
+      }
+      nextSpecs = merged;
+    }
+
+    const updated = await prisma.product.update({
+      where: { id },
+      data: {
+        ...(body.name !== undefined && { name: body.name }),
+        ...(body.brand !== undefined && { brand: body.brand }),
+        ...(body.category !== undefined && { category: body.category }),
+        ...(body.description !== undefined && { description: body.description }),
+        ...(body.price !== undefined && { price: body.price }),
+        ...(body.stock !== undefined && { stock: body.stock }),
+        ...(body.isActive !== undefined && { isActive: body.isActive }),
+        ...(body.imageUrl !== undefined && { imageUrl: body.imageUrl }),
+        ...(body.specs !== undefined && { specs: (nextSpecs as object) || {} }),
+      },
+    });
+
+    logger.info({ storeId, productId: id, fields: Object.keys(body) }, 'catalog.product.update');
+    res.json(updated);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'Validation error', details: err.errors });
+      return;
+    }
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// DELETE /api/catalog/products/:id — soft delete (isActive = false)
+catalogImportRouter.delete('/products/:id', async (req: Request, res: Response) => {
+  try {
+    const storeId = req.storeId!;
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      res.status(400).json({ error: 'Invalid product id' });
+      return;
+    }
+    const prisma = getPrisma();
+    const existing = await prisma.product.findFirst({ where: { id, storeId } });
+    if (!existing) {
+      res.status(404).json({ error: 'Product not found' });
+      return;
+    }
+    const updated = await prisma.product.update({
+      where: { id },
+      data: { isActive: false },
+    });
+    logger.info({ storeId, productId: id }, 'catalog.product.softDelete');
+    res.json({ success: true, product: updated });
+  } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
 });
