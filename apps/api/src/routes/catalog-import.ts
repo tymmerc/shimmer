@@ -58,6 +58,7 @@ function normalizeProduct(raw: Record<string, unknown>): ProductInput | null {
     'regular_price', 'brand', 'Brand', 'Vendor', 'vendor', 'category', 'Category', 'Product Type', 'type',
     'sku', 'SKU', 'Variant SKU', 'description', 'Description', 'Body (HTML)', 'body_html',
     'image_url', 'image', 'Image Src', 'images', 'stock', 'stock_quantity', 'Variant Inventory Qty',
+    'specs', // already handled below, must not be auto-extracted as a nested "specs.specs"
     'id', 'ID', 'Handle', 'Status', 'Published']);
 
   const specs: Record<string, unknown> = {};
