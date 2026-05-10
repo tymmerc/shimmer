@@ -1,9 +1,15 @@
--- Store overrides used during the P2 grafting validation.
--- Replays of these overrides reproduce the post-P2 results documented in POST-FIX-P2.md.
+-- Store overrides used during the P2 + P3 grafting validation.
+-- Replays of these overrides reproduce the post-P3 results documented in POST-FIX-P3.md.
+-- Add the `voice` block (P3) at the same level as `tone` and `universe_overrides`.
 
--- Caves Forty-Two: tutoiement + force OCCASION as required, drop GARDE/MILLESIME
+-- Caves Forty-Two: tutoiement + brand voice + force OCCASION as required, drop GARDE/MILLESIME
 UPDATE stores SET config = jsonb_build_object(
   'tone', 'tu',
+  'voice', jsonb_build_object(
+    'intro_phrases', jsonb_build_array('Tope !', 'Bonne idée !', 'Pile poil pour ça !', 'Joli choix !'),
+    'signature', 'Santé !',
+    'vocabulary', jsonb_build_object('produit', 'bouteille', 'produits', 'bouteilles', 'article', 'cuvée')
+  ),
   'universe_overrides', jsonb_build_object(
     'VIN_ROUGE', jsonb_build_object(
       'criteria_add', jsonb_build_array(
@@ -49,9 +55,14 @@ UPDATE stores SET config = jsonb_build_object(
 )::jsonb
 WHERE name = 'Caves Forty-Two';
 
--- L'Atelier Lumière: vouvoiement + replace PIECE with curated values & deductions
+-- L'Atelier Lumière: vouvoiement + brand voice + replace PIECE with curated values & deductions
 UPDATE stores SET config = jsonb_build_object(
   'tone', 'vous',
+  'voice', jsonb_build_object(
+    'intro_phrases', jsonb_build_array('Avec plaisir.', 'Bien noté.', 'Excellent point.'),
+    'signature', 'À très vite chez L''Atelier.',
+    'vocabulary', jsonb_build_object('produit', 'luminaire', 'produits', 'luminaires')
+  ),
   'universe_overrides', jsonb_build_object(
     'SUSPENSION', jsonb_build_object(
       'criteria_replace', jsonb_build_array(
