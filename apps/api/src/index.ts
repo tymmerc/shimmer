@@ -26,6 +26,7 @@ import { reviewsRouter } from './routes/reviews.js';
 import { searchAssistRouter } from './routes/search-assist.js';
 import { universeGenRouter } from './routes/universe-gen.js';
 import { catalogImportRouter } from './routes/catalog-import.js';
+import { crossSellRouter } from './routes/cross-sell.js';
 
 const PORT = Number(process.env.API_PORT) || 3003;
 const HOST = process.env.API_HOST || '0.0.0.0';
@@ -111,6 +112,7 @@ app.use('/api/reviews', authMiddleware, reviewsRouter);
 app.use('/api/search/assist', authMiddleware, searchAssistRouter);
 app.use('/api/universe', authMiddleware, universeGenRouter);
 app.use('/api/catalog', authMiddleware, catalogImportRouter);
+app.use('/api/catalog/cross-sell', authMiddleware, crossSellRouter);
 
 // Error handler
 app.use(errorHandler);

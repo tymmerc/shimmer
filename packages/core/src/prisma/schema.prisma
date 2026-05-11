@@ -79,6 +79,24 @@ model Product {
   @@map("products")
 }
 
+model ProductCrossSell {
+  id          Int      @id @default(autoincrement())
+  storeId     Int      @map("store_id")
+  productId   Int      @map("product_id")
+  targetId    Int      @map("target_id")
+  role        String   @db.VarChar(40) // "apero" | "repas" | "dessert" | "decouverte" | "cadeau" | "accessoire" | "complement"
+  reason      String   @db.VarChar(280)
+  score       Decimal  @db.Decimal(4, 3)
+  source      String   @default("llm") @map("source") @db.VarChar(20) // "llm" | "manual" | "rule"
+  generatedAt DateTime @default(now()) @map("generated_at")
+
+  @@unique([productId, targetId])
+  @@index([storeId])
+  @@index([productId])
+  @@index([targetId])
+  @@map("product_cross_sells")
+}
+
 model ProductAttribute {
   id             Int     @id @default(autoincrement())
   productId      Int     @map("product_id")
