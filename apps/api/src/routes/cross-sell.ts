@@ -715,6 +715,13 @@ crossSellRouter.get('/product/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    // Load merchant rules from store config — applied at runtime, no precompute needed
+    const storeRow = await prisma.store.findUnique({
+      where: { id: storeId }, select: { config: true },
+    });
+    const rules = (storeRow?.config as Record<string, unknown> | null)?.cross_sell_rules as CrossSellRuleSet | undefined;
+
+    // Fetch a larger window than `limit` so we have room after exclude/dedupe
     const rows = await prisma.$queryRawUnsafe<{
       target_id: number; role: string; reason: string; score: string;
       name: string; brand: string | null; category: string | null; sku: string; price: string;
@@ -727,23 +734,92 @@ crossSellRouter.get('/product/:id', async (req: Request, res: Response) => {
        WHERE cs.store_id = $1 AND cs.product_id = $2
        ORDER BY cs.score DESC
        LIMIT $3`,
-      storeId, id, limit,
+      storeId, id, Math.max(limit * 2, 12),
     );
+
+    // Apply merchant rules: exclude blocked pairs, rewrite reasons, force-inject
+    const refSku = reference.sku;
+    const refCategory = reference.category;
+    let items = rows.map(r => ({
+      target_id: r.target_id,
+      target_sku: r.sku,
+      target_category: r.category,
+      role: r.role as CrossSellRole,
+      reason: r.reason,
+      score: Number(r.score),
+      product: {
+        id: r.target_id, sku: r.sku, name: r.name, brand: r.brand,
+        category: r.category, price: r.price, imageUrl: r.image_url,
+        description: r.description, specs: r.specs,
+      },
+    }));
+
+    if (rules) {
+      // Exclude
+      if (Array.isArray(rules.exclude)) {
+        const blockedTargetSkus = new Set(
+          rules.exclude.filter(r => r.from_sku === refSku && r.to_sku).map(r => r.to_sku as string),
+        );
+        if (blockedTargetSkus.size > 0) {
+          items = items.filter(i => !blockedTargetSkus.has(i.target_sku));
+        }
+      }
+      // Reason overrides — keyed "refSku→targetSku"
+      if (rules.reason_overrides && typeof rules.reason_overrides === 'object') {
+        items = items.map(i => {
+          const key = `${refSku}→${i.target_sku}`;
+          const override = rules.reason_overrides![key];
+          return override ? { ...i, reason: override } : i;
+        });
+      }
+      // Force injections — prepend if not already in the list
+      if (Array.isArray(rules.force)) {
+        const existingTargetIds = new Set(items.map(i => i.target_id));
+        for (const f of rules.force) {
+          const matchesRef =
+            (f.from_sku && f.from_sku === refSku) ||
+            (f.from_category && f.from_category === refCategory);
+          if (!matchesRef) continue;
+          // Resolve target: prefer to_sku, then any product in to_category
+          let target: typeof items[0] | null = null;
+          if (f.to_sku) {
+            const found = await prisma.product.findFirst({
+              where: { storeId, sku: f.to_sku, isActive: true },
+            });
+            if (found && !existingTargetIds.has(found.id)) {
+              target = {
+                target_id: found.id, target_sku: found.sku,
+                target_category: found.category,
+                role: (f.role as CrossSellRole) || 'complement',
+                reason: f.reason || 'Recommandé par la boutique',
+                score: 0.95,
+                product: {
+                  id: found.id, sku: found.sku, name: found.name, brand: found.brand,
+                  category: found.category, price: String(found.price),
+                  imageUrl: found.imageUrl, description: found.description,
+                  specs: found.specs,
+                },
+              };
+            }
+          }
+          if (target) {
+            items.unshift(target);
+            existingTargetIds.add(target.target_id);
+          }
+        }
+      }
+    }
 
     res.json({
       reference: {
         id: reference.id, sku: reference.sku, name: reference.name,
         brand: reference.brand, category: reference.category, price: reference.price,
       },
-      items: rows.map(r => ({
-        product: {
-          id: r.target_id, sku: r.sku, name: r.name, brand: r.brand,
-          category: r.category, price: r.price, imageUrl: r.image_url,
-          description: r.description, specs: r.specs,
-        },
-        role: r.role,
-        reason: r.reason,
-        score: Number(r.score),
+      items: items.slice(0, limit).map(i => ({
+        product: i.product,
+        role: i.role,
+        reason: i.reason,
+        score: i.score,
       })),
     });
   } catch (err) {

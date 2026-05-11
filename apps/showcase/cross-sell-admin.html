@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cross-sell — admin marchand</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=editorial-new@400,500,500i&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter Tight", system-ui, sans-serif; background: #f5f1ea; color: #0a0a0a; padding: 50px clamp(20px, 5vw, 70px); min-height: 100vh; line-height: 1.5; }
+    .wrap { max-width: 1280px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: end; gap: 30px; flex-wrap: wrap; margin-bottom: 40px; }
+    .breadcrumb { font-family: "JetBrains Mono", monospace; font-size: 11px; color: #6a5d7f; letter-spacing: 0.08em; margin-bottom: 12px; }
+    h1 { font-family: "Editorial New", Georgia, serif; font-size: clamp(32px, 4.5vw, 50px); line-height: 1.05; letter-spacing: -0.02em; font-weight: 400; }
+    h1 em { font-style: italic; color: #6a2bf5; }
+    .subtitle { color: #6a5d7f; font-size: 15px; margin-top: 8px; max-width: 60ch; }
+
+    .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .toolbar button, .toolbar select, .toolbar input {
+      font-family: "JetBrains Mono", monospace; font-size: 12px;
+      padding: 9px 14px; border: 1px solid rgba(10,10,10,0.12); background: #fff;
+      border-radius: 999px; color: #3b2e54; cursor: pointer; transition: all 0.2s;
+    }
+    .toolbar button.active { background: #0a0a0a; color: #fff; border-color: #0a0a0a; }
+    .toolbar button:hover:not(.active) { border-color: #6a2bf5; color: #6a2bf5; }
+    .toolbar input { font-family: "Inter Tight", sans-serif; min-width: 240px; }
+
+    .layout { display: grid; grid-template-columns: 320px 1fr; gap: 24px; }
+    @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+
+    /* Product list (left) */
+    .products {
+      background: #fff; border: 1px solid rgba(10,10,10,0.08); border-radius: 14px;
+      max-height: 75vh; overflow-y: auto; padding: 6px;
+    }
+    .product-item {
+      padding: 12px 14px; border-radius: 10px; cursor: pointer;
+      transition: background 0.15s;
+      border-bottom: 1px solid rgba(10,10,10,0.04);
+    }
+    .product-item:last-child { border-bottom: 0; }
+    .product-item:hover { background: #f5f1ea; }
+    .product-item.active { background: #0a0a0a; color: #fff; }
+    .product-item.active .pi-meta { color: rgba(255,255,255,0.7); }
+    .pi-name { font-family: "Editorial New", serif; font-style: italic; font-size: 15px; font-weight: 400; }
+    .pi-meta { font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: 0.08em; color: #6a5d7f; margin-top: 2px; }
+    .product-item .pi-badge {
+      display: inline-block; font-family: "JetBrains Mono", monospace; font-size: 9px;
+      padding: 2px 7px; border-radius: 999px; margin-left: 6px;
+      background: #ece4ff; color: #4a23c0;
+    }
+
+    /* Right panel */
+    .panel { background: #fff; border: 1px solid rgba(10,10,10,0.08); border-radius: 14px; padding: 28px; }
+    .panel-empty { color: #b3a99a; font-style: italic; padding: 80px 0; text-align: center; font-family: "Editorial New", serif; font-size: 18px; }
+    .product-head { padding-bottom: 22px; border-bottom: 1px solid rgba(10,10,10,0.08); margin-bottom: 22px; }
+    .product-head h2 { font-family: "Editorial New", serif; font-style: italic; font-size: 32px; font-weight: 400; line-height: 1.1; }
+    .product-head .meta { display: flex; gap: 18px; font-family: "JetBrains Mono", monospace; font-size: 12px; color: #6a5d7f; margin-top: 8px; letter-spacing: 0.04em; }
+
+    .panel-section { margin-bottom: 28px; }
+    .panel-section h3 { font-family: "JetBrains Mono", monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #6a5d7f; margin-bottom: 14px; }
+    .picks { display: flex; flex-direction: column; gap: 10px; }
+    .pick {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 14px 16px; background: #f5f1ea; border: 1px solid rgba(10,10,10,0.06); border-radius: 12px;
+      transition: opacity 0.2s, background 0.2s;
+    }
+    .pick.excluded { opacity: 0.4; background: #f0e9db; }
+    .pick.excluded .reason { text-decoration: line-through; }
+    .pick-info { flex: 1; min-width: 0; }
+    .pick-name { font-family: "Editorial New", serif; font-style: italic; font-size: 17px; font-weight: 400; margin-bottom: 4px; }
+    .pick-brand { font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: 0.1em; color: #6a5d7f; text-transform: uppercase; margin-bottom: 8px; }
+    .reason { font-size: 13px; color: #3b2e54; line-height: 1.45; }
+    .reason input { width: 100%; background: #fff; border: 1px solid #6a2bf5; padding: 7px 10px; border-radius: 6px; font-family: inherit; font-size: 13px; color: #0a0a0a; }
+    .pick-chip {
+      display: inline-block; font-family: "JetBrains Mono", monospace; font-size: 9px;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      padding: 3px 9px; border-radius: 999px; margin-right: 8px;
+    }
+    .chip-apero      { background: #fff3e6; color: #9c4d00; }
+    .chip-repas      { background: #fff0d9; color: #875f00; }
+    .chip-dessert    { background: #fde7f3; color: #a3236e; }
+    .chip-decouverte { background: #e6f4ff; color: #1b5b91; }
+    .chip-cadeau     { background: #ece4ff; color: #4a23c0; }
+    .chip-accessoire { background: #ecf6ec; color: #2f7a37; }
+    .chip-complement { background: #efefef; color: #3b2e54; }
+    .pick-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; min-width: 130px; }
+    .pick-price { font-family: "Editorial New", serif; font-weight: 500; font-size: 16px; margin-bottom: 4px; }
+    .pick-actions button {
+      font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: 0.04em;
+      padding: 6px 10px; border-radius: 6px; cursor: pointer; transition: all 0.15s;
+      border: 1px solid rgba(10,10,10,0.12); background: #fff; color: #3b2e54;
+    }
+    .pick-actions button:hover { border-color: #6a2bf5; color: #6a2bf5; }
+    .pick-actions button.danger:hover { border-color: #a3236e; color: #a3236e; }
+    .pick-actions button.unblock { border-color: #2f7a37; color: #2f7a37; }
+
+    .save-bar {
+      position: sticky; bottom: 20px; margin-top: 30px;
+      background: #0a0a0a; color: #f5f1ea; padding: 16px 22px;
+      border-radius: 14px;
+      display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      transform: translateY(140%); opacity: 0;
+      transition: transform 0.3s, opacity 0.3s;
+    }
+    .save-bar.visible { transform: none; opacity: 1; }
+    .save-bar .info { font-size: 13.5px; }
+    .save-bar .info b { font-family: "Editorial New", serif; font-style: italic; font-weight: 500; color: #c2ff36; }
+    .save-bar button {
+      padding: 10px 22px; background: #c2ff36; color: #0a0a0a; border: 0; border-radius: 8px;
+      font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; cursor: pointer;
+    }
+    .save-bar button.cancel { background: transparent; color: #f5f1ea; border: 1px solid rgba(255,255,255,0.3); }
+
+    .footer-hint { margin-top: 30px; font-family: "JetBrains Mono", monospace; font-size: 11.5px; color: #6a5d7f; text-align: center; }
+    .footer-hint code { color: #0a0a0a; background: #fff; padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <p class="breadcrumb">SHIMMER · cross-sell admin</p>
+        <h1>Ajustez ce que <em>vos visiteurs voient</em>.</h1>
+        <p class="subtitle">Pour chaque produit, vous gardez la main sur les recommandations : bloquer une paire, réécrire la phrase, ajouter une règle.</p>
+      </div>
+      <div class="toolbar">
+        <button class="store-btn active" data-store="caves">Caves Forty-Two</button>
+        <button class="store-btn" data-store="atelier">L'Atelier Lumière</button>
+        <input id="search" placeholder="Rechercher un produit…" />
+      </div>
+    </header>
+
+    <div class="layout">
+      <!-- Left: product list -->
+      <aside class="products" id="products"></aside>
+
+      <!-- Right: picks editor -->
+      <main class="panel" id="panel">
+        <p class="panel-empty">Sélectionnez un produit à gauche pour voir et ajuster ses recommandations.</p>
+      </main>
+    </div>
+
+    <p class="footer-hint">
+      Tous les changements sont stockés dans <code>stores.config.cross_sell_rules</code> et s'appliquent immédiatement au widget côté visiteur.
+    </p>
+
+    <!-- Save bar (slides up when there are unsaved changes) -->
+    <div class="save-bar" id="saveBar">
+      <span class="info"><b id="saveCount">0</b> changement(s) en attente</span>
+      <div>
+        <button class="cancel" id="cancelBtn">Annuler</button>
+        <button id="saveBtn">Sauvegarder</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const apiUrl = window.location.port === '8080' ? 'http://localhost:3003' : '/shimmer';
+    const STORES = {
+      caves:   { name: 'Caves Forty-Two',  key: 'sk_fc215c787b2c48d9808a4638e2d51899' },
+      atelier: { name: "L'Atelier Lumière", key: 'sk_5542d50630c448dfa6a2873e3b5a55bf' },
+    };
+
+    let currentStore = 'caves';
+    let products = [];           // full list of store products
+    let currentProductId = null;
+    let currentRules = { exclude: [], force: [], reason_overrides: {} };   // server snapshot
+    let dirtyRules    = { exclude: [], force: [], reason_overrides: {} }; // local edits
+    let originalRulesJson = '';
+    let cachedPicks = new Map(); // productId → items[]
+
+    function api(path, opts = {}) {
+      return fetch(apiUrl + path, {
+        ...opts,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + STORES[currentStore].key,
+          ...(opts.headers || {}),
+        },
+      }).then(r => r.ok ? (r.status === 204 ? null : r.json()) : r.json().then(j => { throw new Error(j.error || r.statusText); }));
+    }
+
+    function dirtyCount() {
+      let n = 0;
+      n += (dirtyRules.exclude || []).length;
+      n += Object.keys(dirtyRules.reason_overrides || {}).length;
+      n += (dirtyRules.force || []).length;
+      return n;
+    }
+
+    function refreshSaveBar() {
+      const json = JSON.stringify(dirtyRules);
+      const bar = document.getElementById('saveBar');
+      const changed = json !== originalRulesJson;
+      bar.classList.toggle('visible', changed);
+      document.getElementById('saveCount').textContent = changed ? dirtyCount() : 0;
+    }
+
+    async function loadProducts() {
+      const res = await api('/api/catalog/products?limit=200');
+      products = res.items || [];
+      renderProductList();
+
+      const cfg = await api('/api/stores/me/config');
+      const rules = cfg?.config?.cross_sell_rules || { exclude: [], force: [], reason_overrides: {} };
+      currentRules = JSON.parse(JSON.stringify(rules));
+      dirtyRules = JSON.parse(JSON.stringify(rules));
+      originalRulesJson = JSON.stringify(dirtyRules);
+      refreshSaveBar();
+
+      if (products.length) selectProduct(products[0].id);
+    }
+
+    function renderProductList(filter = '') {
+      const f = filter.trim().toLowerCase();
+      const list = document.getElementById('products');
+      list.innerHTML = '';
+      products
+        .filter(p => !f || p.name.toLowerCase().includes(f) || (p.brand || '').toLowerCase().includes(f) || (p.sku || '').toLowerCase().includes(f))
+        .forEach(p => {
+          const blocked = (dirtyRules.exclude || []).filter(e => e.from_sku === p.sku).length;
+          const overridden = Object.keys(dirtyRules.reason_overrides || {}).filter(k => k.startsWith(p.sku + '→')).length;
+          const totalRules = blocked + overridden;
+          const item = document.createElement('div');
+          item.className = 'product-item' + (p.id === currentProductId ? ' active' : '');
+          item.innerHTML = `
+            <div class="pi-name">${escapeHtml(p.name)}${totalRules > 0 ? `<span class="pi-badge">${totalRules}</span>` : ''}</div>
+            <div class="pi-meta">${escapeHtml(p.sku || '')} · ${escapeHtml(p.brand || '')}</div>
+          `;
+          item.addEventListener('click', () => selectProduct(p.id));
+          list.appendChild(item);
+        });
+    }
+
+    async function selectProduct(id) {
+      currentProductId = id;
+      renderProductList(document.getElementById('search').value);
+
+      const product = products.find(p => p.id === id);
+      if (!product) return;
+
+      // Fetch picks if not cached
+      if (!cachedPicks.has(id)) {
+        const res = await api(`/api/catalog/cross-sell/product/${id}?limit=8`);
+        cachedPicks.set(id, res);
+      }
+      renderPanel(product, cachedPicks.get(id));
+    }
+
+    function renderPanel(product, picks) {
+      const panel = document.getElementById('panel');
+      panel.innerHTML = `
+        <div class="product-head">
+          <h2>${escapeHtml(product.name)}</h2>
+          <div class="meta">
+            <span>${escapeHtml(product.sku || '')}</span>
+            <span>${escapeHtml(product.brand || 'sans marque')}</span>
+            <span>${escapeHtml(product.category || '')}</span>
+            <span>${escapeHtml(product.price)}€</span>
+          </div>
+        </div>
+        <div class="panel-section">
+          <h3>Recommandations affichées</h3>
+          <div class="picks" id="picks"></div>
+        </div>
+      `;
+      const container = document.getElementById('picks');
+      if (!picks.items.length) {
+        container.innerHTML = '<p style="color:#b3a99a;font-style:italic">Aucune recommandation pour ce produit.</p>';
+        return;
+      }
+      picks.items.forEach((it, idx) => {
+        const key = `${product.sku}→${it.product.sku}`;
+        const isExcluded = (dirtyRules.exclude || []).some(e => e.from_sku === product.sku && e.to_sku === it.product.sku);
+        const overrideReason = (dirtyRules.reason_overrides || {})[key];
+        const displayReason = overrideReason ?? it.reason;
+        const card = document.createElement('div');
+        card.className = 'pick' + (isExcluded ? ' excluded' : '');
+        card.innerHTML = `
+          <div class="pick-info">
+            <span class="pick-chip chip-${it.role}">${roleLabel(it.role)}</span>
+            <span class="pick-name">${escapeHtml(it.product.name)}</span>
+            <div class="pick-brand">${escapeHtml(it.product.brand || '')} · ${escapeHtml(it.product.sku || '')}</div>
+            <div class="reason" data-reason="${escapeHtml(key)}">« ${escapeHtml(displayReason)} »${overrideReason ? ' <span style="color:#6a2bf5">·  réécrite</span>' : ''}</div>
+          </div>
+          <div class="pick-actions">
+            <span class="pick-price">${escapeHtml(it.product.price)}€</span>
+            ${isExcluded
+              ? `<button data-act="unblock" data-key="${escapeHtml(key)}" class="unblock">✓ Débloquer</button>`
+              : `<button data-act="block" data-key="${escapeHtml(key)}" class="danger">✕ Bloquer</button>`
+            }
+            <button data-act="edit" data-key="${escapeHtml(key)}">${overrideReason ? '✎ Modifier' : '✎ Éditer la phrase'}</button>
+            ${overrideReason ? `<button data-act="reset" data-key="${escapeHtml(key)}">↺ Reset</button>` : ''}
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      // Wire actions
+      container.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => handleAction(btn.dataset.act, btn.dataset.key));
+      });
+    }
+
+    function handleAction(act, key) {
+      const [fromSku, toSku] = key.split('→');
+      if (act === 'block') {
+        dirtyRules.exclude = dirtyRules.exclude || [];
+        if (!dirtyRules.exclude.some(e => e.from_sku === fromSku && e.to_sku === toSku)) {
+          dirtyRules.exclude.push({ from_sku: fromSku, to_sku: toSku });
+        }
+      } else if (act === 'unblock') {
+        dirtyRules.exclude = (dirtyRules.exclude || []).filter(e => !(e.from_sku === fromSku && e.to_sku === toSku));
+      } else if (act === 'edit') {
+        // Inline edit
+        const cur = (dirtyRules.reason_overrides || {})[key] || '';
+        const placeholder = prompt('Nouvelle phrase de recommandation :', cur || '');
+        if (placeholder === null) return;
+        const trimmed = placeholder.trim();
+        dirtyRules.reason_overrides = dirtyRules.reason_overrides || {};
+        if (trimmed.length === 0) {
+          delete dirtyRules.reason_overrides[key];
+        } else {
+          dirtyRules.reason_overrides[key] = trimmed.slice(0, 280);
+        }
+      } else if (act === 'reset') {
+        if (dirtyRules.reason_overrides) delete dirtyRules.reason_overrides[key];
+      }
+      // Re-render current product
+      const product = products.find(p => p.id === currentProductId);
+      if (product) renderPanel(product, cachedPicks.get(currentProductId));
+      renderProductList(document.getElementById('search').value);
+      refreshSaveBar();
+    }
+
+    async function save() {
+      const btn = document.getElementById('saveBtn');
+      btn.textContent = 'Sauvegarde…'; btn.disabled = true;
+      try {
+        // Clean rules: drop empty arrays/objects
+        const clean = {};
+        if ((dirtyRules.exclude || []).length) clean.exclude = dirtyRules.exclude;
+        if ((dirtyRules.force || []).length) clean.force = dirtyRules.force;
+        if (Object.keys(dirtyRules.reason_overrides || {}).length) clean.reason_overrides = dirtyRules.reason_overrides;
+        const payload = Object.keys(clean).length ? { cross_sell_rules: clean } : { cross_sell_rules: null };
+        await api('/api/stores/me/config', { method: 'PATCH', body: JSON.stringify(payload) });
+        currentRules = JSON.parse(JSON.stringify(dirtyRules));
+        originalRulesJson = JSON.stringify(dirtyRules);
+        // Invalidate cache + re-fetch current product to show server-side applied changes
+        cachedPicks.clear();
+        await selectProduct(currentProductId);
+        refreshSaveBar();
+      } catch (e) {
+        alert('Erreur de sauvegarde : ' + e.message);
+      } finally {
+        btn.textContent = 'Sauvegarder'; btn.disabled = false;
+      }
+    }
+
+    function cancel() {
+      dirtyRules = JSON.parse(JSON.stringify(currentRules));
+      const product = products.find(p => p.id === currentProductId);
+      if (product) renderPanel(product, cachedPicks.get(currentProductId));
+      renderProductList(document.getElementById('search').value);
+      refreshSaveBar();
+    }
+
+    function roleLabel(r) {
+      return ({ apero: 'Apéritif', repas: 'Repas', dessert: 'Dessert', decouverte: 'Découverte', cadeau: 'Cadeau', accessoire: 'Accessoire', complement: 'Associé' })[r] || r;
+    }
+    function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+
+    // Wire store selector
+    document.querySelectorAll('.store-btn').forEach(b => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('.store-btn').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        currentStore = b.dataset.store;
+        cachedPicks.clear();
+        currentProductId = null;
+        loadProducts();
+      });
+    });
+    document.getElementById('search').addEventListener('input', e => renderProductList(e.target.value));
+    document.getElementById('saveBtn').addEventListener('click', save);
+    document.getElementById('cancelBtn').addEventListener('click', cancel);
+
+    loadProducts();
+  </script>
+</body>
+</html>

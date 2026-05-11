@@ -53,10 +53,27 @@ const voiceShape = z.object({
   vocabulary: z.record(z.string()).optional(),
 });
 
+const crossSellRulesShape = z.object({
+  exclude: z.array(z.object({
+    from_sku: z.string().optional(),
+    to_sku: z.string().optional(),
+  })).optional(),
+  force: z.array(z.object({
+    from_sku: z.string().optional(),
+    from_category: z.string().optional(),
+    to_sku: z.string().optional(),
+    to_category: z.string().optional(),
+    role: z.enum(['apero', 'repas', 'dessert', 'decouverte', 'cadeau', 'accessoire', 'complement']).optional(),
+    reason: z.string().max(280).optional(),
+  })).optional(),
+  reason_overrides: z.record(z.string().max(280)).optional(),
+});
+
 const configUpdateSchema = z.object({
   tone: z.enum(['tu', 'vous']).optional(),
-  voice: voiceShape.nullable().optional(), // null = clear
+  voice: voiceShape.nullable().optional(),
   universe_overrides: z.record(overrideShape).nullable().optional(),
+  cross_sell_rules: crossSellRulesShape.nullable().optional(),
 }).strict();
 
 // POST /api/stores — create a new store (admin, no auth required)
@@ -135,6 +152,10 @@ storesRouter.patch('/me/config', authMiddleware, async (req: Request, res: Respo
     if (body.universe_overrides !== undefined) {
       if (body.universe_overrides === null) delete nextConfig.universe_overrides;
       else nextConfig.universe_overrides = body.universe_overrides;
+    }
+    if (body.cross_sell_rules !== undefined) {
+      if (body.cross_sell_rules === null) delete nextConfig.cross_sell_rules;
+      else nextConfig.cross_sell_rules = body.cross_sell_rules;
     }
 
     const updated = await prisma.store.update({
