@@ -20,9 +20,11 @@ import { getPrisma, ClaudeClient, logger } from '@shimmer/core';
 
 export const crossSellRouter = Router();
 
-// Uses whatever LLM is configured globally (Claude in prod with key,
-// Ollama in dev). If LLM fails or is misconfigured, the algo fallback
-// ensures we never deliver an empty result to the merchant.
+// LLM-augmented reasons are gated behind CROSS_SELL_USE_LLM=true. By default we
+// skip the LLM entirely and use the algorithmic engine, which is fast (no
+// per-product API call) and never hallucinates. Enable when a working Claude
+// or OpenAI key is configured — the path is wired up and tested.
+const USE_LLM = process.env.CROSS_SELL_USE_LLM === 'true';
 const client = new ClaudeClient();
 
 // ─────────────────────────────────────────────────────────────
@@ -243,28 +245,127 @@ export function detectVertical(categories: Iterable<string>): StoreVertical {
 
 interface RoleReason { role: CrossSellRole; reason: string; }
 
-function reasonForSharedKey(vertical: StoreVertical, sharedKeys: string[], refOccasion: string): RoleReason {
-  if (sharedKeys.includes('occasion')) {
-    if (refOccasion.includes('apero') || refOccasion.includes('apéro')) {
-      if (vertical === 'drinks') return { role: 'apero', reason: "Pour l'apéro, ils vont bien ensemble" };
-    }
-    if (refOccasion.includes('cadeau')) return { role: 'cadeau', reason: 'À offrir en duo' };
-    if (refOccasion.includes('dessert') && vertical === 'drinks') return { role: 'dessert', reason: 'Pour finir le repas' };
-    return { role: 'complement', reason: 'Pour la même occasion' };
-  }
-  if (sharedKeys.includes('accord') && vertical === 'drinks') return { role: 'repas', reason: 'Va aussi très bien avec ce plat' };
-  if (sharedKeys.includes('piece')) return { role: 'complement', reason: 'Pour la même pièce' };
-  if (sharedKeys.includes('style')) return { role: 'decouverte', reason: 'Même style, autre catégorie' };
-  return { role: 'complement', reason: 'Complète bien ce produit' };
+// Category hints drive role assignment without any LLM. They encode merchant
+// intuition: in a wine shop, a Champagne is naturally an apéritif suggestion,
+// a vin doux is for dessert, etc. Override-safe (merchant rules win at lookup).
+const CATEGORY_ROLE_HINTS: Record<string, CrossSellRole | undefined> = {
+  champagne: 'apero',
+  crémant: 'apero',
+  cremant: 'apero',
+  prosecco: 'apero',
+  effervescent: 'apero',
+  'vin doux': 'dessert',
+  liquoreux: 'dessert',
+  digestif: 'dessert',
+  applique: 'complement',
+  lampadaire: 'complement',
+  'lampe table': 'complement',
+  'lampe bureau': 'complement',
+  suspension: 'complement',
+};
+
+// Pools of phrasings per role, varied to avoid repetition. Picked deterministically
+// based on a stable hash of the (refId, candId) pair so the same lookup is consistent
+// across calls.
+const PHRASES_BY_ROLE: Record<CrossSellRole, { drinks: string[]; lighting: string[]; fashion: string[]; generic: string[] }> = {
+  apero: {
+    drinks: ["Pour ouvrir le repas", "Idéal en apéritif avant", "Pour démarrer en fraîcheur", "À servir en début de repas", "Pour l'apéritif maison"],
+    lighting: ["Pour démarrer la pièce", "Une première touche d'ambiance", "Pour ouvrir l'espace"],
+    fashion: ["Pour démarrer le look"],
+    generic: ["Pour ouvrir"],
+  },
+  repas: {
+    drinks: ["Pour le plat principal", "Sur la table aussi", "Pour accompagner le repas", "Aussi sur ce plat", "Pour le service à table"],
+    lighting: ["Pour la zone repas", "Sur la table à manger"],
+    fashion: ["Pour la même occasion"],
+    generic: ["Pour la même occasion"],
+  },
+  dessert: {
+    drinks: ["Pour finir le repas en douceur", "À servir avec le dessert", "Pour clore en sucré", "En fin de repas", "Pour le dessert"],
+    lighting: ["Pour l'ambiance fin de soirée"],
+    fashion: ["Pour terminer la tenue"],
+    generic: ["Pour finir"],
+  },
+  decouverte: {
+    drinks: ["À découvrir, autre style", "Pour élargir le palais", "Autre profil à essayer", "Un changement de cépage", "Pour la curiosité"],
+    lighting: ["Même esprit, autre forme", "Autre style à découvrir", "Une variante stylée"],
+    fashion: ["Pour varier le look"],
+    generic: ["Pour découvrir"],
+  },
+  cadeau: {
+    drinks: ["À offrir avec une carte", "Pour faire plaisir", "Idéal en cadeau", "Pour une grande occasion"],
+    lighting: ["Pour offrir un set complet", "À offrir en duo", "Une belle pièce à offrir"],
+    fashion: ["À offrir avec celui-ci"],
+    generic: ["À offrir"],
+  },
+  accessoire: {
+    drinks: ["L'accessoire qui va avec"],
+    lighting: ["L'accessoire assorti"],
+    fashion: ["L'accessoire qui complète"],
+    generic: ["L'accessoire associé"],
+  },
+  complement: {
+    drinks: ["Va bien avec celui-ci", "Un complément possible", "Aussi à considérer"],
+    lighting: ["Pour la même pièce", "Une autre pièce assortie", "À assortir avec celui-ci"],
+    fashion: ["Pour compléter la tenue", "Avec, dans le même style"],
+    generic: ["Complète bien", "À associer", "Un complément possible"],
+  },
+};
+
+function pickPhrase(role: CrossSellRole, vertical: StoreVertical, seed: number): string {
+  const pool = PHRASES_BY_ROLE[role][vertical] || PHRASES_BY_ROLE[role].generic;
+  if (pool.length === 0) return 'Complète bien ce produit';
+  return pool[seed % pool.length]!;
 }
 
-function reasonForPriceLadder(vertical: StoreVertical, candPrice: number, refPrice: number): RoleReason {
-  if (candPrice > refPrice * 1.8) return { role: 'cadeau', reason: 'Pour les grandes occasions' };
-  if (candPrice < refPrice * 0.6) return { role: 'decouverte', reason: 'Plus accessible, pour découvrir' };
-  if (vertical === 'drinks') return { role: 'complement', reason: 'Va bien avec celui-ci' };
-  if (vertical === 'lighting') return { role: 'complement', reason: 'Une autre pièce assortie' };
-  if (vertical === 'fashion') return { role: 'complement', reason: 'Pour compléter la tenue' };
-  return { role: 'complement', reason: 'Un complément possible' };
+function categoryHint(category: string | null | undefined): CrossSellRole | undefined {
+  if (!category) return undefined;
+  const c = category.toLowerCase();
+  for (const [key, role] of Object.entries(CATEGORY_ROLE_HINTS)) {
+    if (c.includes(key)) return role;
+  }
+  return undefined;
+}
+
+function reasonForSharedKey(
+  vertical: StoreVertical,
+  sharedKeys: string[],
+  refOccasion: string,
+  candCategory: string | null,
+  seed: number,
+): RoleReason {
+  // Category hint from candidate beats shared-key heuristics
+  const catRole = candCategory ? categoryHint(candCategory) : undefined;
+  if (catRole) return { role: catRole, reason: pickPhrase(catRole, vertical, seed) };
+
+  if (sharedKeys.includes('occasion')) {
+    if (refOccasion.includes('apero') || refOccasion.includes('apéro')) {
+      if (vertical === 'drinks') return { role: 'apero', reason: pickPhrase('apero', vertical, seed) };
+    }
+    if (refOccasion.includes('cadeau')) return { role: 'cadeau', reason: pickPhrase('cadeau', vertical, seed) };
+    if (refOccasion.includes('dessert') && vertical === 'drinks') return { role: 'dessert', reason: pickPhrase('dessert', vertical, seed) };
+    return { role: 'complement', reason: pickPhrase('complement', vertical, seed) };
+  }
+  if (sharedKeys.includes('accord') && vertical === 'drinks') return { role: 'repas', reason: pickPhrase('repas', vertical, seed) };
+  if (sharedKeys.includes('piece')) return { role: 'complement', reason: pickPhrase('complement', vertical, seed) };
+  if (sharedKeys.includes('style')) return { role: 'decouverte', reason: pickPhrase('decouverte', vertical, seed) };
+  return { role: 'complement', reason: pickPhrase('complement', vertical, seed) };
+}
+
+function reasonForPriceLadder(
+  vertical: StoreVertical,
+  candPrice: number,
+  refPrice: number,
+  candCategory: string | null,
+  seed: number,
+): RoleReason {
+  // Category hint wins
+  const catRole = candCategory ? categoryHint(candCategory) : undefined;
+  if (catRole) return { role: catRole, reason: pickPhrase(catRole, vertical, seed) };
+
+  if (candPrice > refPrice * 1.8) return { role: 'cadeau', reason: pickPhrase('cadeau', vertical, seed) };
+  if (candPrice < refPrice * 0.6) return { role: 'decouverte', reason: pickPhrase('decouverte', vertical, seed) };
+  return { role: 'complement', reason: pickPhrase('complement', vertical, seed) };
 }
 
 /**
@@ -330,9 +431,11 @@ export function algorithmicFallback(
     seenCategories.add(cat);
 
     const candPrice = Number(cand.product.price) || 0;
+    // Seed for phrase variation: stable across calls but varies per pair
+    const seed = (reference.id * 31 + cand.product.id * 17) % 7919;
     const { role, reason } = cand.sharedKeys.length > 0
-      ? reasonForSharedKey(vertical, cand.sharedKeys, refOccasion)
-      : reasonForPriceLadder(vertical, candPrice, refPrice);
+      ? reasonForSharedKey(vertical, cand.sharedKeys, refOccasion, cand.product.category, seed)
+      : reasonForPriceLadder(vertical, candPrice, refPrice, cand.product.category, seed);
 
     const score = Math.min(0.9, 0.5 + cand.sharedCount * 0.1);
     picks.push({ target_id: cand.product.id, role, reason, score });
@@ -347,11 +450,12 @@ async function generateForProduct(
   candidatesByCategory: Map<string, CatalogProduct[]>,
   storeContext: { name: string; voice?: string },
 ): Promise<CrossSellSuggestion[]> {
-  // Build compact catalog (skip the reference category if dominant, sample 4-6 per category)
+  // Build compact catalog. Cap heavily: small local LLMs (Ollama 7b) take ~10s per 1k input tokens.
+  // 4 candidates × N categories × ~25 tokens each + reference + prompt overhead ≈ 800-1500 tokens.
   const compactByCat = new Map<string, string[]>();
   const validIds = new Set<number>();
   for (const [cat, prods] of candidatesByCategory) {
-    const sample = prods.filter(p => p.id !== reference.id).slice(0, 8);
+    const sample = prods.filter(p => p.id !== reference.id).slice(0, 4);
     if (sample.length === 0) continue;
     compactByCat.set(cat, sample.map(p => compactProduct(p)));
     for (const p of sample) validIds.add(p.id);
@@ -361,11 +465,11 @@ async function generateForProduct(
   const refCompact = compactProduct(reference);
   const prompt = buildPrompt(reference, refCompact, compactByCat, storeContext);
 
-  // Try the LLM first
+  // Try the LLM first. Generous timeout for local 7b models (~60s typical on a small VPS).
   try {
     const response = await client.complete(
       [{ role: 'user', content: prompt }],
-      { maxTokens: 700, temperature: 0.3, timeout: 45_000, maxRetries: 1 },
+      { maxTokens: 500, temperature: 0.3, timeout: 90_000, maxRetries: 1 },
     );
     const llmPicks = validateLLMResponse(response, reference.id, validIds);
     if (llmPicks.length > 0) return llmPicks;
@@ -388,11 +492,16 @@ async function generateForProductWithSource(
   candidatesByCategory: Map<string, CatalogProduct[]>,
   storeContext: { name: string; voice?: string },
 ): Promise<{ picks: CrossSellSuggestion[]; source: 'llm' | 'rule' }> {
-  // Build catalog & validate
+  // Algorithmic-only fast path (default)
+  if (!USE_LLM) {
+    return { picks: algorithmicFallback(reference, candidatesByCategory), source: 'rule' };
+  }
+
+  // LLM path (gated)
   const validIds = new Set<number>();
   const compactByCat = new Map<string, string[]>();
   for (const [cat, prods] of candidatesByCategory) {
-    const sample = prods.filter(p => p.id !== reference.id).slice(0, 8);
+    const sample = prods.filter(p => p.id !== reference.id).slice(0, 4);
     if (sample.length === 0) continue;
     compactByCat.set(cat, sample.map(p => compactProduct(p)));
     for (const p of sample) validIds.add(p.id);
@@ -405,7 +514,7 @@ async function generateForProductWithSource(
   try {
     const response = await client.complete(
       [{ role: 'user', content: prompt }],
-      { maxTokens: 700, temperature: 0.3, timeout: 45_000, maxRetries: 1 },
+      { maxTokens: 500, temperature: 0.3, timeout: 90_000, maxRetries: 1 },
     );
     const llmPicks = validateLLMResponse(response, reference.id, validIds);
     if (llmPicks.length > 0) return { picks: llmPicks, source: 'llm' };
