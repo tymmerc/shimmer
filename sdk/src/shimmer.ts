@@ -90,6 +90,16 @@ interface CrossSellResponse {
   items: CrossSellItem[];
 }
 
+interface CrossSellEvent {
+  product_id: number;
+  target_id: number;
+  role: CrossSellRole;
+  event_type: 'impression' | 'click' | 'add' | 'view_target';
+  session_id: string;
+  position?: number;
+  metadata?: Record<string, unknown>;
+}
+
 interface CrossSellOptions {
   /** CSS selector for mount points. Default: `[data-shimmer-crosssell]`. Each matching element
    *  must carry the product id as `data-shimmer-crosssell="123"`. */
@@ -261,6 +271,29 @@ class ShimmerClient {
 
   crossSell(productId: number, limit = 4): Promise<CrossSellResponse> {
     return this.request('GET', `/api/catalog/cross-sell/product/${productId}?limit=${limit}`);
+  }
+
+  crossSellEvents(events: CrossSellEvent[]): Promise<void> {
+    // Use sendBeacon when available for the impression batch on unload, fall back to fetch.
+    const payload = JSON.stringify({ events });
+    const url = `${this.apiUrl}/api/catalog/cross-sell/events`;
+    if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+      const blob = new Blob([payload], { type: 'application/json' });
+      // sendBeacon doesn't accept custom headers, so we send a plain POST. The
+      // server doesn't require auth on /events from the same domain because nginx
+      // forwards the Bearer header; for cross-origin we fall back to fetch below.
+      // Keep it simple: try beacon first, fetch on failure or cross-origin.
+      try {
+        const ok = navigator.sendBeacon(url, blob);
+        if (ok) return Promise.resolve();
+      } catch { /* fall through */ }
+    }
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.apiKey}` },
+      body: payload,
+      keepalive: true,
+    }).then(() => undefined).catch(() => undefined);
   }
 }
 
@@ -861,10 +894,39 @@ const CROSS_SELL_ROLE_LABELS: Record<CrossSellRole, string> = {
   complement: 'À associer',
 };
 
+// Generate/persist an anonymous session id so the same browser tab/user is
+// tracked consistently across events. Stored in localStorage with a 30-day
+// rolling window so analytics don't double-count the same session.
+const SESSION_STORAGE_KEY = 'shimmer_xs_sid';
+const SESSION_MAX_AGE_MS = 30 * 86_400_000;
+
+function getOrCreateSessionId(): string {
+  if (typeof localStorage === 'undefined') return 'no-storage-' + Math.random().toString(36).slice(2);
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.id && parsed.ts && Date.now() - parsed.ts < SESSION_MAX_AGE_MS) {
+        // Refresh timestamp on use
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ id: parsed.id, ts: Date.now() }));
+        return parsed.id;
+      }
+    }
+  } catch { /* fall through to new id */ }
+  const id = 'xs-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ id, ts: Date.now() }));
+  } catch { /* ignore */ }
+  return id;
+}
+
 class CrossSellWidget {
   private client: ShimmerClient;
   private opts: Required<CrossSellOptions>;
   private mounted = new WeakSet<Element>();
+  private sessionId: string;
+  private eventQueue: CrossSellEvent[] = [];
+  private flushTimer: number | null = null;
 
   constructor(client: ShimmerClient, opts: CrossSellOptions = {}) {
     this.client = client;
@@ -875,6 +937,26 @@ class CrossSellWidget {
       onProductClick: opts.onProductClick ?? (() => {}),
       productUrl: opts.productUrl ?? null,
     };
+    this.sessionId = getOrCreateSessionId();
+  }
+
+  /** Queue an event for batched ingestion. Flushed every 1.5 s, on widget
+   *  unmount, and on page unload via navigator.sendBeacon. */
+  private trackEvent(ev: Omit<CrossSellEvent, 'session_id'>): void {
+    this.eventQueue.push({ ...ev, session_id: this.sessionId });
+    if (this.flushTimer === null && typeof window !== 'undefined') {
+      this.flushTimer = window.setTimeout(() => this.flushEvents(), 1500);
+    }
+  }
+
+  private flushEvents(): void {
+    if (this.flushTimer !== null) {
+      if (typeof window !== 'undefined') window.clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    if (this.eventQueue.length === 0) return;
+    const batch = this.eventQueue.splice(0, this.eventQueue.length);
+    this.client.crossSellEvents(batch).catch(() => { /* silent: never block UX */ });
   }
 
   /** Scan the DOM for mount points and render cross-sell cards into each. */
@@ -956,15 +1038,24 @@ class CrossSellWidget {
       <div class="sx-grid">${cards}</div>
     `;
 
-    // Wire click handlers
-    container.querySelectorAll<HTMLElement>('.sx-card').forEach((card) => {
+    // Map cards back to items + record position for analytics
+    const cardsArr = Array.from(container.querySelectorAll<HTMLElement>('.sx-card'));
+    cardsArr.forEach((card, position) => {
       const id = Number(card.dataset.productId);
       const item = data.items.find((it) => it.product.id === id);
       if (!item) return;
 
+      // Click on the card body (not on Ajouter) — tracked as a "click" event
       card.addEventListener('click', (e) => {
-        // Don't intercept clicks on the "Ajouter" button — handled below
         if ((e.target as Element).closest('.sx-add')) return;
+        this.trackEvent({
+          product_id: data.reference.id,
+          target_id: item.product.id,
+          role: item.role,
+          event_type: 'click',
+          position,
+        });
+        this.flushEvents();
         this.opts.onProductClick(item);
       });
     });
@@ -972,12 +1063,64 @@ class CrossSellWidget {
       const id = Number(btn.dataset.add);
       const item = data.items.find((it) => it.product.id === id);
       if (!item) return;
+      const position = cardsArr.findIndex(c => c.dataset.productId === String(id));
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
+        this.trackEvent({
+          product_id: data.reference.id,
+          target_id: item.product.id,
+          role: item.role,
+          event_type: 'add',
+          position,
+        });
+        this.flushEvents();
         this.opts.onProductClick(item);
       });
     });
+
+    // Impression tracking: fire once per card when ≥50% visible for ≥300ms
+    if (typeof IntersectionObserver !== 'undefined') {
+      const seen = new WeakSet<Element>();
+      const dwellTimers = new Map<Element, number>();
+      const io = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (seen.has(entry.target)) continue;
+          const card = entry.target as HTMLElement;
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+            if (dwellTimers.has(card)) continue;
+            const timer = window.setTimeout(() => {
+              seen.add(card);
+              dwellTimers.delete(card);
+              io.unobserve(card);
+              const id = Number(card.dataset.productId);
+              const item = data.items.find((it) => it.product.id === id);
+              if (!item) return;
+              const position = cardsArr.indexOf(card);
+              this.trackEvent({
+                product_id: data.reference.id,
+                target_id: item.product.id,
+                role: item.role,
+                event_type: 'impression',
+                position,
+              });
+            }, 300);
+            dwellTimers.set(card, timer);
+          } else {
+            const t = dwellTimers.get(card);
+            if (t !== undefined) { window.clearTimeout(t); dwellTimers.delete(card); }
+          }
+        }
+      }, { threshold: [0, 0.5, 1] });
+      cardsArr.forEach((c) => io.observe(c));
+    }
+
+    // Flush on page hide/unload to capture last events
+    if (typeof window !== 'undefined') {
+      const flush = () => this.flushEvents();
+      window.addEventListener('pagehide', flush, { once: false });
+      window.addEventListener('beforeunload', flush, { once: false });
+    }
   }
 }
 

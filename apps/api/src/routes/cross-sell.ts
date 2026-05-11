@@ -28,6 +28,27 @@ const USE_LLM = process.env.CROSS_SELL_USE_LLM === 'true';
 const client = new ClaudeClient();
 
 // ─────────────────────────────────────────────────────────────
+// Event tracking schemas
+// ─────────────────────────────────────────────────────────────
+
+const VALID_EVENT_TYPES = ['impression', 'click', 'add', 'view_target'] as const;
+type CrossSellEventType = typeof VALID_EVENT_TYPES[number];
+
+const eventSchema = z.object({
+  product_id: z.number().int().positive(),
+  target_id: z.number().int().positive(),
+  role: z.string().min(1).max(40),
+  event_type: z.enum(VALID_EVENT_TYPES),
+  session_id: z.string().min(8).max(64),
+  position: z.number().int().min(0).max(20).optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+const batchEventsSchema = z.object({
+  events: z.array(eventSchema).min(1).max(50),
+});
+
+// ─────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────
 
@@ -723,6 +744,159 @@ crossSellRouter.get('/product/:id', async (req: Request, res: Response) => {
         role: r.role,
         reason: r.reason,
         score: Number(r.score),
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Analytics — event ingestion + aggregated metrics
+// ─────────────────────────────────────────────────────────────
+
+/** POST /api/catalog/cross-sell/events
+ *  Ingests one or a batch of events from the SDK. Returns 204 on success.
+ *  Accepts: { events: [{...}] } or { ...singleEvent } for backwards compat. */
+crossSellRouter.post('/events', async (req: Request, res: Response) => {
+  try {
+    const storeId = req.storeId!;
+    const body = Array.isArray(req.body?.events)
+      ? batchEventsSchema.parse(req.body)
+      : batchEventsSchema.parse({ events: [eventSchema.parse(req.body)] });
+
+    const prisma = getPrisma();
+    await prisma.crossSellEvent.createMany({
+      data: body.events.map((e) => ({
+        storeId,
+        productId: e.product_id,
+        targetId: e.target_id,
+        role: e.role,
+        eventType: e.event_type,
+        sessionId: e.session_id,
+        position: e.position ?? null,
+        metadata: (e.metadata as object) ?? undefined,
+      })),
+      skipDuplicates: false,
+    });
+
+    res.status(204).end();
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'Validation error', details: err.errors });
+      return;
+    }
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** GET /api/catalog/cross-sell/analytics
+ *  Aggregated metrics over a time window (default 30 days).
+ *  Returns: funnel (impressions → clicks → adds), top pairs by add-rate,
+ *  role distribution, time-series. */
+crossSellRouter.get('/analytics', async (req: Request, res: Response) => {
+  try {
+    const storeId = req.storeId!;
+    const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
+    const prisma = getPrisma();
+
+    const since = new Date(Date.now() - days * 86_400_000);
+
+    type Row = { event_type: string; count: bigint };
+    type PairRow = {
+      product_id: number; target_id: number; role: string;
+      ref_name: string | null; target_name: string | null;
+      impressions: bigint; clicks: bigint; adds: bigint;
+    };
+    type RoleRow = { role: string; impressions: bigint; clicks: bigint; adds: bigint };
+    type DayRow = { day: string; impressions: bigint; clicks: bigint; adds: bigint };
+
+    const [funnel, topPairs, byRole, byDay] = await Promise.all([
+      prisma.$queryRawUnsafe<Row[]>(
+        `SELECT event_type, COUNT(*) AS count FROM cross_sell_events
+         WHERE store_id = $1 AND created_at >= $2 GROUP BY event_type`,
+        storeId, since,
+      ),
+      prisma.$queryRawUnsafe<PairRow[]>(
+        `SELECT e.product_id, e.target_id, e.role,
+                pr.name AS ref_name, tg.name AS target_name,
+                COUNT(*) FILTER (WHERE e.event_type = 'impression') AS impressions,
+                COUNT(*) FILTER (WHERE e.event_type = 'click')      AS clicks,
+                COUNT(*) FILTER (WHERE e.event_type = 'add')        AS adds
+         FROM cross_sell_events e
+         LEFT JOIN products pr ON pr.id = e.product_id
+         LEFT JOIN products tg ON tg.id = e.target_id
+         WHERE e.store_id = $1 AND e.created_at >= $2
+         GROUP BY e.product_id, e.target_id, e.role, pr.name, tg.name
+         HAVING COUNT(*) FILTER (WHERE e.event_type = 'impression') > 0
+         ORDER BY (COUNT(*) FILTER (WHERE e.event_type = 'add'))::float
+                  / NULLIF(COUNT(*) FILTER (WHERE e.event_type = 'impression'), 0) DESC NULLS LAST,
+                  impressions DESC
+         LIMIT 15`,
+        storeId, since,
+      ),
+      prisma.$queryRawUnsafe<RoleRow[]>(
+        `SELECT role,
+                COUNT(*) FILTER (WHERE event_type = 'impression') AS impressions,
+                COUNT(*) FILTER (WHERE event_type = 'click')      AS clicks,
+                COUNT(*) FILTER (WHERE event_type = 'add')        AS adds
+         FROM cross_sell_events
+         WHERE store_id = $1 AND created_at >= $2
+         GROUP BY role
+         ORDER BY impressions DESC`,
+        storeId, since,
+      ),
+      prisma.$queryRawUnsafe<DayRow[]>(
+        `SELECT to_char(created_at, 'YYYY-MM-DD') AS day,
+                COUNT(*) FILTER (WHERE event_type = 'impression') AS impressions,
+                COUNT(*) FILTER (WHERE event_type = 'click')      AS clicks,
+                COUNT(*) FILTER (WHERE event_type = 'add')        AS adds
+         FROM cross_sell_events
+         WHERE store_id = $1 AND created_at >= $2
+         GROUP BY day ORDER BY day`,
+        storeId, since,
+      ),
+    ]);
+
+    const funnelMap = Object.fromEntries(funnel.map(f => [f.event_type, Number(f.count)]));
+    const impressions = funnelMap.impression || 0;
+    const clicks = funnelMap.click || 0;
+    const adds = funnelMap.add || 0;
+
+    res.json({
+      windowDays: days,
+      since: since.toISOString(),
+      funnel: {
+        impressions,
+        clicks,
+        adds,
+        viewTargets: funnelMap.view_target || 0,
+        clickRate: impressions > 0 ? Math.round((clicks / impressions) * 10000) / 100 : 0,
+        addRate: impressions > 0 ? Math.round((adds / impressions) * 10000) / 100 : 0,
+      },
+      topPairs: topPairs.map(p => ({
+        productId: p.product_id,
+        targetId: p.target_id,
+        refName: p.ref_name,
+        targetName: p.target_name,
+        role: p.role,
+        impressions: Number(p.impressions),
+        clicks: Number(p.clicks),
+        adds: Number(p.adds),
+        addRate: Number(p.impressions) > 0 ? Math.round((Number(p.adds) / Number(p.impressions)) * 10000) / 100 : 0,
+      })),
+      byRole: byRole.map(r => ({
+        role: r.role,
+        impressions: Number(r.impressions),
+        clicks: Number(r.clicks),
+        adds: Number(r.adds),
+        addRate: Number(r.impressions) > 0 ? Math.round((Number(r.adds) / Number(r.impressions)) * 10000) / 100 : 0,
+      })),
+      byDay: byDay.map(d => ({
+        day: d.day,
+        impressions: Number(d.impressions),
+        clicks: Number(d.clicks),
+        adds: Number(d.adds),
       })),
     });
   } catch (err) {

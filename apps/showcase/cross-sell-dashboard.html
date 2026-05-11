@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cross-sell — dashboard analytics</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=editorial-new@400,500,500i&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter Tight", system-ui, sans-serif; background: #f5f1ea; color: #0a0a0a; padding: 60px clamp(20px, 5vw, 80px); line-height: 1.55; min-height: 100vh; }
+    .wrap { max-width: 1200px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: end; margin-bottom: 50px; flex-wrap: wrap; gap: 20px; }
+    h1 { font-family: "Editorial New", Georgia, serif; font-size: clamp(36px, 5vw, 56px); line-height: 1.05; letter-spacing: -0.02em; font-weight: 400; }
+    h1 em { font-style: italic; color: #6a2bf5; }
+    .breadcrumb { font-family: "JetBrains Mono", monospace; font-size: 11px; color: #6a5d7f; letter-spacing: 0.08em; margin-bottom: 16px; }
+    .store-select { display: flex; gap: 8px; }
+    .store-select button { padding: 9px 16px; border: 1px solid rgba(10,10,10,0.12); background: #fff; border-radius: 999px; font-family: "JetBrains Mono", monospace; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+    .store-select button.active { background: #0a0a0a; color: #fff; border-color: #0a0a0a; }
+    .store-select button:hover:not(.active) { border-color: #6a2bf5; color: #6a2bf5; }
+    .funnel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 40px; }
+    .kpi { background: #fff; border: 1px solid rgba(10,10,10,0.08); border-radius: 16px; padding: 24px; position: relative; }
+    .kpi-label { font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #6a5d7f; margin-bottom: 12px; }
+    .kpi-value { font-family: "Editorial New", serif; font-size: 48px; font-weight: 500; line-height: 1; letter-spacing: -0.02em; }
+    .kpi-value em { font-style: italic; color: #6a2bf5; }
+    .kpi-meta { font-size: 12px; color: #6a5d7f; margin-top: 8px; }
+    .funnel-arrow { font-size: 24px; color: #b3a99a; align-self: center; text-align: center; }
+
+    .section { background: #fff; border: 1px solid rgba(10,10,10,0.08); border-radius: 16px; padding: 30px; margin-bottom: 28px; }
+    .section h2 { font-family: "Editorial New", serif; font-style: italic; font-size: 24px; font-weight: 400; margin-bottom: 24px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #6a5d7f; padding: 10px 8px; border-bottom: 1px solid rgba(10,10,10,0.08); }
+    td { padding: 12px 8px; font-size: 13.5px; border-bottom: 1px solid rgba(10,10,10,0.04); }
+    td .pair { display: flex; flex-direction: column; gap: 2px; }
+    td .pair b { font-family: "Editorial New", serif; font-style: italic; font-size: 14px; font-weight: 400; }
+    td .pair span { font-family: "JetBrains Mono", monospace; font-size: 11px; color: #6a5d7f; }
+    td .chip { display: inline-block; padding: 3px 9px; font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; border-radius: 999px; }
+    td .chip-apero { background: #fff3e6; color: #9c4d00; }
+    td .chip-repas { background: #fff0d9; color: #875f00; }
+    td .chip-dessert { background: #fde7f3; color: #a3236e; }
+    td .chip-decouverte { background: #e6f4ff; color: #1b5b91; }
+    td .chip-cadeau { background: #ece4ff; color: #4a23c0; }
+    td .chip-accessoire { background: #ecf6ec; color: #2f7a37; }
+    td .chip-complement { background: #efefef; color: #3b2e54; }
+    td.rate { font-family: "JetBrains Mono", monospace; font-weight: 600; }
+    td.rate.high { color: #2f7a37; }
+    td.rate.mid { color: #875f00; }
+    td.rate.low { color: #a3236e; }
+
+    .grid-2 { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; }
+    @media (max-width: 920px) {
+      .funnel { grid-template-columns: 1fr 1fr; }
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+    .empty { text-align: center; padding: 60px 0; color: #b3a99a; font-style: italic; font-family: "Editorial New", serif; }
+    .empty .lead { font-size: 22px; margin-bottom: 6px; }
+    .empty p { font-style: normal; font-family: "Inter Tight", sans-serif; font-size: 14px; color: #6a5d7f; }
+    .footer-info { font-family: "JetBrains Mono", monospace; font-size: 11.5px; color: #6a5d7f; text-align: center; margin-top: 40px; }
+    .bar { display: flex; align-items: center; gap: 8px; }
+    .bar-track { flex: 1; height: 4px; background: rgba(10,10,10,0.06); border-radius: 2px; overflow: hidden; min-width: 80px; }
+    .bar-fill { height: 100%; background: linear-gradient(90deg, #6a2bf5, #c2ff36); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <p class="breadcrumb">SHIMMER · cross-sell analytics</p>
+        <h1>Ce que <em>les visiteurs</em> font de vos recommandations.</h1>
+      </div>
+      <div class="store-select" id="storeSelect"></div>
+    </header>
+
+    <!-- Funnel -->
+    <div class="funnel" id="funnel">
+      <div class="kpi"><div class="kpi-label">Impressions</div><div class="kpi-value" id="kImp">—</div><div class="kpi-meta" id="kImpMeta">cards vues</div></div>
+      <div class="kpi"><div class="kpi-label">Clicks</div><div class="kpi-value" id="kClick">—</div><div class="kpi-meta" id="kClickMeta">taux de clic</div></div>
+      <div class="kpi"><div class="kpi-label">Ajouts panier</div><div class="kpi-value" id="kAdd">—</div><div class="kpi-meta" id="kAddMeta">take rate</div></div>
+      <div class="kpi"><div class="kpi-label">Uplift estimé</div><div class="kpi-value" id="kUplift">—</div><div class="kpi-meta">€ supplémentaires (modèle simplifié)</div></div>
+    </div>
+
+    <div class="grid-2">
+      <!-- Top pairs -->
+      <section class="section">
+        <h2>Les paires qui convertissent</h2>
+        <table id="pairsTable">
+          <thead>
+            <tr><th>Référence → cible</th><th>Rôle</th><th style="text-align:right">Vues</th><th style="text-align:right">Add</th><th style="text-align:right">Rate</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="empty" id="pairsEmpty" style="display:none">
+          <p class="lead">Pas encore d'événements</p>
+          <p>Visite la <a href="cross-sell-demo.html" style="color:#6a2bf5">page démo</a> et clique sur quelques cards.</p>
+        </div>
+      </section>
+
+      <!-- By role -->
+      <section class="section">
+        <h2>Par rôle</h2>
+        <table id="rolesTable">
+          <thead>
+            <tr><th>Rôle</th><th style="text-align:right">Vues</th><th style="text-align:right">Add</th><th style="text-align:right">Rate</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </div>
+
+    <p class="footer-info">Fenêtre : 30 derniers jours · Mise à jour à chaque chargement.</p>
+  </div>
+
+  <script>
+    const apiUrl = window.location.port === '8080' ? 'http://localhost:3003' : '/shimmer';
+    const STORES = [
+      { name: 'Caves Forty-Two',  key: 'sk_fc215c787b2c48d9808a4638e2d51899', avgPrice: 28 },
+      { name: "L'Atelier Lumière", key: 'sk_5542d50630c448dfa6a2873e3b5a55bf', avgPrice: 380 },
+    ];
+    let currentStore = STORES[0];
+
+    function chipFor(role) {
+      const labels = { apero: 'Apéritif', repas: 'Repas', dessert: 'Dessert', decouverte: 'Découverte', cadeau: 'Cadeau', accessoire: 'Accessoire', complement: 'Associé' };
+      return `<span class="chip chip-${role}">${labels[role] || role}</span>`;
+    }
+    function rateClass(r) { return r >= 5 ? 'high' : r >= 1 ? 'mid' : 'low'; }
+    function fmt(n) { return new Intl.NumberFormat('fr-FR').format(n); }
+
+    async function load() {
+      try {
+        const r = await fetch(`${apiUrl}/api/catalog/cross-sell/analytics?days=30`, {
+          headers: { 'Authorization': 'Bearer ' + currentStore.key },
+        });
+        const data = await r.json();
+        render(data);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function render(d) {
+      const f = d.funnel;
+      document.getElementById('kImp').innerHTML = fmt(f.impressions);
+      document.getElementById('kClick').innerHTML = fmt(f.clicks);
+      document.getElementById('kClickMeta').textContent = f.clickRate + '% de clic';
+      document.getElementById('kAdd').innerHTML = `<em>${fmt(f.adds)}</em>`;
+      document.getElementById('kAddMeta').textContent = f.addRate + '% take rate';
+      const upliftEur = Math.round(f.adds * currentStore.avgPrice);
+      document.getElementById('kUplift').innerHTML = '<em>' + fmt(upliftEur) + '€</em>';
+
+      // Pairs
+      const tbody = document.querySelector('#pairsTable tbody');
+      tbody.innerHTML = '';
+      if (d.topPairs.length === 0) {
+        document.getElementById('pairsTable').style.display = 'none';
+        document.getElementById('pairsEmpty').style.display = 'block';
+      } else {
+        document.getElementById('pairsTable').style.display = '';
+        document.getElementById('pairsEmpty').style.display = 'none';
+        d.topPairs.forEach(p => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><div class="pair"><b>${p.refName || ('#' + p.productId)}</b><span>→ ${p.targetName || ('#' + p.targetId)}</span></div></td>
+            <td>${chipFor(p.role)}</td>
+            <td style="text-align:right">${fmt(p.impressions)}</td>
+            <td style="text-align:right">${fmt(p.adds)}</td>
+            <td class="rate ${rateClass(p.addRate)}" style="text-align:right">${p.addRate}%</td>`;
+          tbody.appendChild(tr);
+        });
+      }
+
+      // Roles
+      const rtbody = document.querySelector('#rolesTable tbody');
+      rtbody.innerHTML = '';
+      d.byRole.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${chipFor(r.role)}</td>
+          <td style="text-align:right">${fmt(r.impressions)}</td>
+          <td style="text-align:right">${fmt(r.adds)}</td>
+          <td class="rate ${rateClass(r.addRate)}" style="text-align:right">${r.addRate}%</td>`;
+        rtbody.appendChild(tr);
+      });
+    }
+
+    // Store selector
+    const sel = document.getElementById('storeSelect');
+    STORES.forEach((s, i) => {
+      const b = document.createElement('button');
+      b.textContent = s.name;
+      if (s.key === currentStore.key) b.classList.add('active');
+      b.addEventListener('click', () => {
+        currentStore = s;
+        sel.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+        load();
+      });
+      sel.appendChild(b);
+    });
+
+    load();
+  </script>
+</body>
+</html>

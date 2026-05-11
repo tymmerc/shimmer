@@ -79,6 +79,25 @@ model Product {
   @@map("products")
 }
 
+model CrossSellEvent {
+  id         BigInt   @id @default(autoincrement())
+  storeId    Int      @map("store_id")
+  productId  Int      @map("product_id")
+  targetId   Int      @map("target_id")
+  role       String   @db.VarChar(40)
+  eventType  String   @map("event_type") @db.VarChar(20) // impression|click|add|view_target
+  sessionId  String   @map("session_id") @db.VarChar(64)
+  position   Int?     @db.SmallInt
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([storeId, createdAt(sort: Desc)])
+  @@index([storeId, productId, targetId])
+  @@index([sessionId])
+  @@index([storeId, eventType, createdAt(sort: Desc)])
+  @@map("cross_sell_events")
+}
+
 model ProductCrossSell {
   id          Int      @id @default(autoincrement())
   storeId     Int      @map("store_id")
