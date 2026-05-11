@@ -90,14 +90,27 @@ interface CrossSellResponse {
   items: CrossSellItem[];
 }
 
+type CrossSellEventType = 'impression' | 'click' | 'add' | 'view_target' | 'purchase';
+
 interface CrossSellEvent {
-  product_id: number;
-  target_id: number;
+  product_id: number;     // reference product (the one the widget was shown on)
+  target_id: number;      // recommended product
   role: CrossSellRole;
-  event_type: 'impression' | 'click' | 'add' | 'view_target';
+  event_type: CrossSellEventType;
   session_id: string;
   position?: number;
   metadata?: Record<string, unknown>;
+}
+
+/** Attribution intent stored in localStorage when a visitor clicks a cross-sell card.
+ *  Used to fire view_target / purchase events later when they navigate to the
+ *  recommended product or complete checkout. */
+interface CrossSellIntent {
+  ref_id: number;
+  target_id: number;
+  role: CrossSellRole;
+  position: number;
+  ts: number;          // ms epoch — used to expire stale intents
 }
 
 interface CrossSellOptions {
@@ -920,6 +933,48 @@ function getOrCreateSessionId(): string {
   return id;
 }
 
+// Attribution window: a cross-sell click "earns" a view_target / purchase event
+// when the visitor lands on the recommended product within this duration.
+const INTENT_STORAGE_KEY = 'shimmer_xs_intent';
+const INTENT_TTL_MS = 30 * 60 * 1000;     // 30 min
+
+function getIntents(): CrossSellIntent[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(INTENT_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const now = Date.now();
+    return parsed.filter((i: CrossSellIntent) => i && typeof i === 'object' && now - i.ts < INTENT_TTL_MS);
+  } catch { return []; }
+}
+
+function setIntents(intents: CrossSellIntent[]): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    // Cap at 20 to keep storage small. Most recent first.
+    const trimmed = intents.slice(0, 20);
+    localStorage.setItem(INTENT_STORAGE_KEY, JSON.stringify(trimmed));
+  } catch { /* ignore */ }
+}
+
+function recordIntent(intent: CrossSellIntent): void {
+  const all = getIntents();
+  // Dedupe by target_id (a more recent click overwrites the older one)
+  const filtered = all.filter(i => i.target_id !== intent.target_id);
+  setIntents([intent, ...filtered]);
+}
+
+function popIntentsForProduct(productId: number): CrossSellIntent[] {
+  const all = getIntents();
+  const matched = all.filter(i => i.target_id === productId);
+  if (matched.length === 0) return [];
+  const remaining = all.filter(i => i.target_id !== productId);
+  setIntents(remaining);
+  return matched;
+}
+
 class CrossSellWidget {
   private client: ShimmerClient;
   private opts: Required<CrossSellOptions>;
@@ -1055,6 +1110,15 @@ class CrossSellWidget {
           event_type: 'click',
           position,
         });
+        // Record attribution intent so Shimmer.trackProductView() can fire view_target
+        // when the visitor lands on the target product within the TTL.
+        recordIntent({
+          ref_id: data.reference.id,
+          target_id: item.product.id,
+          role: item.role,
+          position,
+          ts: Date.now(),
+        });
         this.flushEvents();
         this.opts.onProductClick(item);
       });
@@ -1073,6 +1137,13 @@ class CrossSellWidget {
           role: item.role,
           event_type: 'add',
           position,
+        });
+        recordIntent({
+          ref_id: data.reference.id,
+          target_id: item.product.id,
+          role: item.role,
+          position,
+          ts: Date.now(),
         });
         this.flushEvents();
         this.opts.onProductClick(item);
@@ -1238,6 +1309,52 @@ export class Shimmer {
     fetch(productId: number, limit = 4): Promise<CrossSellResponse> {
       if (!Shimmer.instance) throw new Error('Shimmer not initialized. Call Shimmer.init() first.');
       return Shimmer.instance.client.crossSell(productId, limit);
+    },
+
+    /** Call on every product page load. If the visitor arrives here from a recent
+     *  cross-sell click/add (intent stored in localStorage, 30 min TTL), fires a
+     *  view_target event so the dashboard knows the recommendation worked. */
+    trackProductView(productId: number): void {
+      if (!Shimmer.instance || !Number.isFinite(productId) || productId <= 0) return;
+      const intents = popIntentsForProduct(productId);
+      if (intents.length === 0) return;
+      const sessionId = getOrCreateSessionId();
+      const events: CrossSellEvent[] = intents.map((i) => ({
+        product_id: i.ref_id,
+        target_id: i.target_id,
+        role: i.role,
+        event_type: 'view_target',
+        session_id: sessionId,
+        position: i.position,
+        metadata: { intent_age_ms: Date.now() - i.ts },
+      }));
+      Shimmer.instance.client.crossSellEvents(events).catch(() => undefined);
+    },
+
+    /** Call at checkout confirmation. For each purchased product id, attribute
+     *  any open cross-sell intent within the TTL — fires a `purchase` event
+     *  on the matching (ref_id, target_id) pairs. */
+    trackPurchase(productIds: number[]): void {
+      if (!Shimmer.instance) return;
+      const sessionId = getOrCreateSessionId();
+      const events: CrossSellEvent[] = [];
+      for (const pid of productIds) {
+        if (!Number.isFinite(pid) || pid <= 0) continue;
+        const intents = popIntentsForProduct(pid);
+        for (const i of intents) {
+          events.push({
+            product_id: i.ref_id,
+            target_id: i.target_id,
+            role: i.role,
+            event_type: 'purchase',
+            session_id: sessionId,
+            position: i.position,
+            metadata: { intent_age_ms: Date.now() - i.ts },
+          });
+        }
+      }
+      if (events.length === 0) return;
+      Shimmer.instance.client.crossSellEvents(events).catch(() => undefined);
     },
   };
 

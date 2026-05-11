@@ -120,7 +120,7 @@
           <span class="price" id="productPrice">38€</span>
           <span class="stock">· en stock</span>
         </div>
-        <button class="cta">Ajouter au panier</button>
+        <button class="cta" id="checkoutBtn">Ajouter au panier puis acheter (simuler)</button>
         <div class="specs" id="productSpecs"></div>
       </div>
     </article>
@@ -200,6 +200,11 @@
 
         // Init Shimmer with the right store API key, then render the widget
         initShimmer(sample.key);
+
+        // Track the product view — fires view_target events if the visitor
+        // arrived here from a recent cross-sell click (attribution loop).
+        window.Shimmer.crossSell.trackProductView(sample.id);
+
         const mount = document.getElementById('csMount');
         mount.innerHTML = ''; // clear
         await window.Shimmer.crossSell.renderInto(mount, sample.id, {
@@ -226,6 +231,18 @@
       // Initial render
       switchTo(0);
       renderSpecs(SAMPLES[0].specs);
+
+      // Simulate purchase → fires `purchase` event with intent attribution
+      document.getElementById('checkoutBtn').addEventListener('click', () => {
+        const currentIdx = ALL_SAMPLES.findIndex(s => s.name === document.getElementById('productName').textContent);
+        const sample = ALL_SAMPLES[currentIdx] || ALL_SAMPLES[0];
+        window.Shimmer.crossSell.trackPurchase([sample.id]);
+        const toast = document.createElement('div');
+        toast.textContent = `✓ Achat simulé : ${sample.name} (${sample.price})`;
+        toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#2f7a37;color:#fff;padding:14px 22px;border-radius:8px;font-family:"JetBrains Mono",monospace;font-size:12px;z-index:9999';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+      });
     });
   </script>
 </body>

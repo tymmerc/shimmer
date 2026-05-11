@@ -31,7 +31,7 @@ const client = new ClaudeClient();
 // Event tracking schemas
 // ─────────────────────────────────────────────────────────────
 
-const VALID_EVENT_TYPES = ['impression', 'click', 'add', 'view_target'] as const;
+const VALID_EVENT_TYPES = ['impression', 'click', 'add', 'view_target', 'purchase'] as const;
 type CrossSellEventType = typeof VALID_EVENT_TYPES[number];
 
 const eventSchema = z.object({
@@ -887,7 +887,7 @@ crossSellRouter.get('/analytics', async (req: Request, res: Response) => {
     type RoleRow = { role: string; impressions: bigint; clicks: bigint; adds: bigint };
     type DayRow = { day: string; impressions: bigint; clicks: bigint; adds: bigint };
 
-    const [funnel, topPairs, byRole, byDay] = await Promise.all([
+    const [funnel, topPairs, byRole, byDay, attributedRevenue] = await Promise.all([
       prisma.$queryRawUnsafe<Row[]>(
         `SELECT event_type, COUNT(*) AS count FROM cross_sell_events
          WHERE store_id = $1 AND created_at >= $2 GROUP BY event_type`,
@@ -932,12 +932,27 @@ crossSellRouter.get('/analytics', async (req: Request, res: Response) => {
          GROUP BY day ORDER BY day`,
         storeId, since,
       ),
+      // Attributed revenue = sum of (target product price) for every 'purchase'
+      // event in the window. The SDK only fires `purchase` for products that
+      // originated from a cross-sell click within 30 minutes, so this is a
+      // tight (under-counted, never inflated) view of incremental revenue.
+      prisma.$queryRawUnsafe<{ revenue: string | null; events: bigint }[]>(
+        `SELECT COALESCE(SUM(p.price), 0)::text AS revenue,
+                COUNT(*) AS events
+         FROM cross_sell_events e
+         JOIN products p ON p.id = e.target_id
+         WHERE e.store_id = $1 AND e.created_at >= $2 AND e.event_type = 'purchase'`,
+        storeId, since,
+      ),
     ]);
 
     const funnelMap = Object.fromEntries(funnel.map(f => [f.event_type, Number(f.count)]));
     const impressions = funnelMap.impression || 0;
     const clicks = funnelMap.click || 0;
     const adds = funnelMap.add || 0;
+    const viewTargets = funnelMap.view_target || 0;
+    const purchases = funnelMap.purchase || 0;
+    const attributedRev = Number(attributedRevenue[0]?.revenue || 0);
 
     res.json({
       windowDays: days,
@@ -946,9 +961,16 @@ crossSellRouter.get('/analytics', async (req: Request, res: Response) => {
         impressions,
         clicks,
         adds,
-        viewTargets: funnelMap.view_target || 0,
+        viewTargets,
+        purchases,
         clickRate: impressions > 0 ? Math.round((clicks / impressions) * 10000) / 100 : 0,
         addRate: impressions > 0 ? Math.round((adds / impressions) * 10000) / 100 : 0,
+        viewThroughRate: clicks > 0 ? Math.round((viewTargets / clicks) * 10000) / 100 : 0,
+        purchaseRate: clicks > 0 ? Math.round((purchases / clicks) * 10000) / 100 : 0,
+      },
+      attributedRevenue: {
+        totalEur: Math.round(attributedRev * 100) / 100,
+        events: Number(attributedRevenue[0]?.events || 0),
       },
       topPairs: topPairs.map(p => ({
         productId: p.product_id,

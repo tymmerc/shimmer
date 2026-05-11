@@ -18,7 +18,8 @@
     .store-select button { padding: 9px 16px; border: 1px solid rgba(10,10,10,0.12); background: #fff; border-radius: 999px; font-family: "JetBrains Mono", monospace; font-size: 12px; cursor: pointer; transition: all 0.2s; }
     .store-select button.active { background: #0a0a0a; color: #fff; border-color: #0a0a0a; }
     .store-select button:hover:not(.active) { border-color: #6a2bf5; color: #6a2bf5; }
-    .funnel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 40px; }
+    .funnel { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 40px; }
+    @media (max-width: 1100px) { .funnel { grid-template-columns: repeat(2, 1fr); } }
     .kpi { background: #fff; border: 1px solid rgba(10,10,10,0.08); border-radius: 16px; padding: 24px; position: relative; }
     .kpi-label { font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #6a5d7f; margin-bottom: 12px; }
     .kpi-value { font-family: "Editorial New", serif; font-size: 48px; font-weight: 500; line-height: 1; letter-spacing: -0.02em; }
@@ -71,12 +72,13 @@
       <div class="store-select" id="storeSelect"></div>
     </header>
 
-    <!-- Funnel -->
+    <!-- Funnel : 5 KPI -->
     <div class="funnel" id="funnel">
       <div class="kpi"><div class="kpi-label">Impressions</div><div class="kpi-value" id="kImp">—</div><div class="kpi-meta" id="kImpMeta">cards vues</div></div>
       <div class="kpi"><div class="kpi-label">Clicks</div><div class="kpi-value" id="kClick">—</div><div class="kpi-meta" id="kClickMeta">taux de clic</div></div>
-      <div class="kpi"><div class="kpi-label">Ajouts panier</div><div class="kpi-value" id="kAdd">—</div><div class="kpi-meta" id="kAddMeta">take rate</div></div>
-      <div class="kpi"><div class="kpi-label">Uplift estimé</div><div class="kpi-value" id="kUplift">—</div><div class="kpi-meta">€ supplémentaires (modèle simplifié)</div></div>
+      <div class="kpi"><div class="kpi-label">Vues attribuées</div><div class="kpi-value" id="kViews">—</div><div class="kpi-meta" id="kViewsMeta">view-through</div></div>
+      <div class="kpi"><div class="kpi-label">Achats attribués</div><div class="kpi-value" id="kPurch">—</div><div class="kpi-meta" id="kPurchMeta">conversion</div></div>
+      <div class="kpi"><div class="kpi-label">Revenu attribué</div><div class="kpi-value" id="kRev">—</div><div class="kpi-meta">€ encaissés grâce aux recos</div></div>
     </div>
 
     <div class="grid-2">
@@ -140,12 +142,15 @@
     function render(d) {
       const f = d.funnel;
       document.getElementById('kImp').innerHTML = fmt(f.impressions);
+      document.getElementById('kImpMeta').textContent = f.adds + ' ajouts au panier';
       document.getElementById('kClick').innerHTML = fmt(f.clicks);
-      document.getElementById('kClickMeta').textContent = f.clickRate + '% de clic';
-      document.getElementById('kAdd').innerHTML = `<em>${fmt(f.adds)}</em>`;
-      document.getElementById('kAddMeta').textContent = f.addRate + '% take rate';
-      const upliftEur = Math.round(f.adds * currentStore.avgPrice);
-      document.getElementById('kUplift').innerHTML = '<em>' + fmt(upliftEur) + '€</em>';
+      document.getElementById('kClickMeta').textContent = (f.clickRate || 0) + '% de clic';
+      document.getElementById('kViews').innerHTML = fmt(f.viewTargets || 0);
+      document.getElementById('kViewsMeta').textContent = (f.viewThroughRate || 0) + '% des clics ont visité la fiche';
+      document.getElementById('kPurch').innerHTML = `<em>${fmt(f.purchases || 0)}</em>`;
+      document.getElementById('kPurchMeta').textContent = (f.purchaseRate || 0) + '% des clics convertis';
+      const rev = d.attributedRevenue?.totalEur || 0;
+      document.getElementById('kRev').innerHTML = '<em>' + fmt(Math.round(rev)) + '€</em>';
 
       // Pairs
       const tbody = document.querySelector('#pairsTable tbody');

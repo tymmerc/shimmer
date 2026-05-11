@@ -1,0 +1,495 @@
+openapi: 3.0.3
+info:
+  title: Shimmer API
+  description: |
+    Vendeur IA pour boutiques en ligne. Recherche conversationnelle, recommandations
+    cross-sell, analytics. Toutes les routes (sauf création de store) requièrent
+    un header `Authorization: Bearer <api_key>` obtenu via `POST /api/stores`.
+  version: "1.0.0"
+  contact:
+    name: Shimmer
+    url: https://tymmerc.eu/shimmer/
+servers:
+  - url: https://tymmerc.eu/shimmer
+    description: Production
+  - url: http://localhost:3003
+    description: Dev local
+
+tags:
+  - name: stores
+    description: Création et configuration de boutique
+  - name: catalog
+    description: Import et gestion du catalogue
+  - name: universe
+    description: Auto-configuration des univers de qualification
+  - name: search
+    description: Conversation avec le vendeur IA (TYPE 1/2/3)
+  - name: cross-sell
+    description: Recommandations complémentaires (fiche produit)
+  - name: analytics
+    description: Tracking et métriques
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key
+  schemas:
+    Store:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        apiKey: { type: string, example: "sk_abc123..." }
+        config: { type: object }
+        createdAt: { type: string, format: date-time }
+    Product:
+      type: object
+      properties:
+        id: { type: integer }
+        sku: { type: string }
+        name: { type: string }
+        brand: { type: string, nullable: true }
+        category: { type: string, nullable: true }
+        price: { type: string }
+        description: { type: string, nullable: true }
+        imageUrl: { type: string, nullable: true }
+        specs: { type: object, additionalProperties: true }
+        stock: { type: integer }
+        isActive: { type: boolean }
+    CrossSellItem:
+      type: object
+      properties:
+        product: { $ref: '#/components/schemas/Product' }
+        role:
+          type: string
+          enum: [apero, repas, dessert, decouverte, cadeau, accessoire, complement]
+        reason: { type: string, example: "Pour ouvrir le repas en fraîcheur" }
+        score: { type: number, minimum: 0, maximum: 1 }
+    CrossSellEvent:
+      type: object
+      required: [product_id, target_id, role, event_type, session_id]
+      properties:
+        product_id: { type: integer, description: "Reference product (where the widget was shown)" }
+        target_id: { type: integer, description: "Recommended product the user interacted with" }
+        role: { type: string }
+        event_type:
+          type: string
+          enum: [impression, click, add, view_target, purchase]
+        session_id: { type: string, description: "Anonymous client-generated id (localStorage, 30d TTL)" }
+        position: { type: integer, minimum: 0, maximum: 20 }
+        metadata: { type: object }
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        details: { type: array, items: { type: object } }
+
+paths:
+  /api/stores:
+    post:
+      tags: [stores]
+      summary: Create a new merchant store
+      description: No auth required. Returns the generated API key — store it securely.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100 }
+                config: { type: object }
+      responses:
+        '201':
+          description: Store created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Store' }
+
+  /api/stores/me/config:
+    get:
+      tags: [stores]
+      summary: Read current store config
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  name: { type: string }
+                  config:
+                    type: object
+                    properties:
+                      tone: { type: string, enum: [tu, vous] }
+                      voice: { type: object }
+                      universe_overrides: { type: object }
+                      cross_sell_rules: { type: object }
+    patch:
+      tags: [stores]
+      summary: Update store config (shallow merge)
+      description: |
+        Send only the keys you want to update. Send `null` on a top-level key to clear it.
+        Other config keys remain unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tone: { type: string, enum: [tu, vous], nullable: true }
+                voice:
+                  type: object
+                  nullable: true
+                  properties:
+                    intro_phrases: { type: array, items: { type: string } }
+                    signature: { type: string }
+                    vocabulary: { type: object, additionalProperties: { type: string } }
+                universe_overrides: { type: object, nullable: true }
+                cross_sell_rules:
+                  type: object
+                  nullable: true
+                  properties:
+                    exclude:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          from_sku: { type: string }
+                          to_sku: { type: string }
+                    force:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          from_sku: { type: string }
+                          from_category: { type: string }
+                          to_sku: { type: string }
+                          to_category: { type: string }
+                          role: { type: string }
+                          reason: { type: string, maxLength: 280 }
+                    reason_overrides:
+                      type: object
+                      additionalProperties: { type: string, maxLength: 280 }
+                      example:
+                        "SKU-A→SKU-B": "Notre apéro signature"
+      responses:
+        '200':
+          description: Config updated
+        '400':
+          description: Validation error
+
+  /api/catalog/import:
+    post:
+      tags: [catalog]
+      summary: Bulk import products (JSON or { products: [...] })
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: array
+                  items: { $ref: '#/components/schemas/Product' }
+                - type: object
+                  properties:
+                    products:
+                      type: array
+                      items: { $ref: '#/components/schemas/Product' }
+      responses:
+        '200':
+          description: Import summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  imported: { type: integer }
+                  updated: { type: integer }
+                  skipped: { type: integer }
+                  total: { type: integer }
+                  totalMs: { type: integer }
+
+  /api/catalog/products:
+    get:
+      tags: [catalog]
+      summary: List products
+      parameters:
+        - { in: query, name: limit,    schema: { type: integer, default: 50, maximum: 200 } }
+        - { in: query, name: offset,   schema: { type: integer, default: 0 } }
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: brand,    schema: { type: string } }
+        - { in: query, name: q,        schema: { type: string, description: "Full-text on name/description/sku" } }
+      responses:
+        '200':
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Product' } }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+
+  /api/catalog/products/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: integer } }
+    get:
+      tags: [catalog]
+      summary: Single product
+      responses:
+        '200': { description: Product }
+        '404': { description: Not found }
+    patch:
+      tags: [catalog]
+      summary: Update a product (partial)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Product' }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [catalog]
+      summary: Soft delete (isActive = false)
+      responses:
+        '200': { description: OK }
+
+  /api/universe/generate:
+    post:
+      tags: [universe]
+      summary: Auto-generate qualification universes from catalog
+      description: |
+        Analyzes the active catalog, derives one universe per category, computes
+        differentiating criteria from spec variance, enriches with LLM-generated
+        keywords and deductions. Synchronous, 60-150 s typical depending on
+        catalog size and LLM speed.
+      responses:
+        '200': { description: Universes created }
+
+  /api/universe:
+    get:
+      tags: [universe]
+      summary: List the store's active universes
+      responses:
+        '200': { description: List }
+
+  /api/search/assist:
+    post:
+      tags: [search]
+      summary: AI sales assistant conversation
+      description: |
+        Single endpoint that handles TYPE 1 (exact match), TYPE 2 (need
+        qualification), TYPE 3 (similarity), out-of-scope, and FSM transitions
+        (ACCEPT / CLOSE / need_change). Stateful via sessionToken.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string, maxLength: 1000 }
+                sessionToken: { type: string }
+                history:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      role: { type: string, enum: [user, assistant] }
+                      content: { type: string }
+                knownCriteria: { type: object, additionalProperties: { type: string } }
+      responses:
+        '200':
+          description: Agent response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  suggestedQuestions: { type: array, items: { type: string } }
+                  highlightedProducts: { type: array, items: { $ref: '#/components/schemas/Product' } }
+                  needsMoreInfo: { type: boolean }
+                  qualificationStep: { type: string }
+                  sessionToken: { type: string }
+                  knownCriteria: { type: object }
+                  qualification:
+                    type: object
+                    properties:
+                      universe: { type: string, nullable: true }
+                      score: { type: integer, minimum: 0, maximum: 100 }
+                      type: { type: string, enum: [TYPE_1, TYPE_2, TYPE_3, HYBRID, OUT_OF_SCOPE, PURCHASE, CLOSURE] }
+                  searchMeta:
+                    type: object
+                    properties:
+                      totalMs: { type: integer }
+
+  /api/catalog/cross-sell/generate:
+    post:
+      tags: [cross-sell]
+      summary: Precompute cross-sell pairs for the entire catalog
+      description: |
+        Generates 4 picks per product. Uses the LLM if `CROSS_SELL_USE_LLM=true`
+        is set on the server, otherwise the deterministic algorithmic engine
+        (category hints + price ladder, vertical-aware). Wipes existing pairs
+        and recreates from scratch.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                async: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Generation complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  products: { type: integer }
+                  pairs: { type: integer }
+                  ms: { type: integer }
+        '202': { description: Accepted (async mode) }
+
+  /api/catalog/cross-sell/product/{id}:
+    get:
+      tags: [cross-sell]
+      summary: Get cross-sell recommendations for a product
+      description: |
+        Returns precomputed pairs ordered by score. Applies merchant rules
+        (exclude / force / reason_overrides) at lookup time. Sub-20ms.
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+        - { in: query, name: limit, schema: { type: integer, default: 4, maximum: 12 } }
+      responses:
+        '200':
+          description: Picks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reference: { $ref: '#/components/schemas/Product' }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CrossSellItem' }
+
+  /api/catalog/cross-sell/stats:
+    get:
+      tags: [cross-sell]
+      summary: Cross-sell catalog stats
+      responses:
+        '200': { description: Total + by role }
+
+  /api/catalog/cross-sell/events:
+    post:
+      tags: [analytics]
+      summary: Ingest cross-sell tracking events
+      description: |
+        Accepts a single event or a batch (max 50). Called automatically by the
+        SDK widget; merchants can also call directly for server-side events
+        (e.g. purchase confirmation).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/CrossSellEvent'
+                - type: object
+                  properties:
+                    events: { type: array, items: { $ref: '#/components/schemas/CrossSellEvent' } }
+      responses:
+        '204': { description: Accepted }
+        '400': { description: Validation error }
+
+  /api/catalog/cross-sell/analytics:
+    get:
+      tags: [analytics]
+      summary: Aggregated cross-sell metrics
+      description: |
+        Funnel impressions → clicks → view_target → purchase, top converting
+        pairs, per-role take rates, time series, and revenue attributed via the
+        session-based intent window (30 min TTL on the client).
+      parameters:
+        - { in: query, name: days, schema: { type: integer, default: 30, minimum: 1, maximum: 365 } }
+      responses:
+        '200':
+          description: Analytics payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  windowDays: { type: integer }
+                  since: { type: string, format: date-time }
+                  funnel:
+                    type: object
+                    properties:
+                      impressions: { type: integer }
+                      clicks: { type: integer }
+                      adds: { type: integer }
+                      viewTargets: { type: integer }
+                      purchases: { type: integer }
+                      clickRate: { type: number }
+                      addRate: { type: number }
+                      viewThroughRate: { type: number }
+                      purchaseRate: { type: number }
+                  attributedRevenue:
+                    type: object
+                    properties:
+                      totalEur: { type: number }
+                      events: { type: integer }
+                  topPairs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        productId: { type: integer }
+                        targetId: { type: integer }
+                        refName: { type: string }
+                        targetName: { type: string }
+                        role: { type: string }
+                        impressions: { type: integer }
+                        clicks: { type: integer }
+                        adds: { type: integer }
+                        addRate: { type: number }
+                  byRole: { type: array, items: { type: object } }
+                  byDay: { type: array, items: { type: object } }
+
+  /health:
+    get:
+      tags: [stores]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200': { description: ok }
+
+  /health/ready:
+    get:
+      tags: [stores]
+      summary: Readiness probe (DB + Redis + embedding sidecar)
+      security: []
+      responses:
+        '200': { description: ready }
+        '503': { description: degraded }

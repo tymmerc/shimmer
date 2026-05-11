@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shimmer — API Reference</title>
+  <link rel="icon" href="data:," />
+  <style>
+    body { margin: 0; }
+    redoc { display: block; }
+    .top-bar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+      padding: 14px 28px;
+      background: rgba(245, 241, 234, 0.94);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(10,10,10,0.08);
+      display: flex; justify-content: space-between; align-items: center;
+      font-family: "Space Grotesk", system-ui, sans-serif;
+    }
+    .top-bar .logo { font-weight: 700; letter-spacing: 0.16em; font-size: 14px; }
+    .top-bar nav a { font-size: 13px; margin-left: 20px; color: #3b2e54; text-decoration: none; }
+    .top-bar nav a:hover { color: #6a2bf5; }
+    redoc { padding-top: 56px; }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="top-bar">
+    <span class="logo">SHIMMER · API REFERENCE</span>
+    <nav>
+      <a href="/shimmer/">Site</a>
+      <a href="/shimmer/cross-sell-demo.html">Demo</a>
+      <a href="/shimmer/cross-sell-dashboard.html">Dashboard</a>
+      <a href="/shimmer/cross-sell-admin.html">Admin</a>
+      <a href="/shimmer/docs/openapi.yaml">YAML</a>
+    </nav>
+  </div>
+  <redoc spec-url="/shimmer/docs/openapi.yaml" hide-loading></redoc>
+  <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+</body>
+</html>
