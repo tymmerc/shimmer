@@ -3,6 +3,8 @@ import {
   compactProduct,
   validateLLMResponse,
   applyRules,
+  detectVertical,
+  algorithmicFallback,
   type CrossSellSuggestion,
   type CrossSellRuleSet,
 } from '../routes/cross-sell.js';
@@ -233,5 +235,91 @@ describe('applyRules', () => {
     // With a no-op rule, the function does apply its slice(0, 6) cap
     const out = applyRules(manyPicks, 'X', null, { exclude: [] }, candidates);
     expect(out.length).toBeLessThanOrEqual(6);
+  });
+});
+
+describe('detectVertical', () => {
+  it('detects drinks vertical from wine categories', () => {
+    expect(detectVertical(['Vin rouge', 'Vin blanc', 'Champagne'])).toBe('drinks');
+    expect(detectVertical(['Crémant', 'Prosecco'])).toBe('drinks');
+    expect(detectVertical(['Bière artisanale'])).toBe('drinks');
+  });
+
+  it('detects lighting vertical from lamp categories', () => {
+    expect(detectVertical(['Suspension', 'Lampadaire'])).toBe('lighting');
+    expect(detectVertical(['Applique', 'Lampe table'])).toBe('lighting');
+  });
+
+  it('detects fashion vertical', () => {
+    expect(detectVertical(['Robes', 'Jeans'])).toBe('fashion');
+  });
+
+  it('falls back to generic for unknown categories', () => {
+    expect(detectVertical(['Outils', 'Vis'])).toBe('generic');
+    expect(detectVertical([])).toBe('generic');
+  });
+});
+
+describe('algorithmicFallback', () => {
+  const drinkCandidates = new Map([
+    ['Vin blanc', [
+      { id: 100, sku: 'B-100', name: 'Chablis', brand: 'X', category: 'Vin blanc', price: 24, specs: { accord: ['huitres', 'poisson'], occasion: 'apero' } },
+    ]],
+    ['Champagne', [
+      { id: 200, sku: 'C-200', name: 'Brut', brand: 'Y', category: 'Champagne', price: 42, specs: { accord: ['apero', 'fete'], occasion: 'cadeau' } },
+    ]],
+    ['Vin rouge', [
+      { id: 300, sku: 'R-300', name: 'Magret-ready', brand: 'Z', category: 'Vin rouge', price: 28, specs: { accord: ['magret', 'gibier'] } },
+    ]],
+  ]);
+
+  it('picks from other categories only (never same category as reference)', () => {
+    const ref = { id: 999, sku: 'X', name: 'Other red', brand: null, category: 'Vin rouge', price: 25, specs: { accord: ['magret'] } };
+    const picks = algorithmicFallback(ref, drinkCandidates);
+    expect(picks.every(p => p.target_id !== 300)).toBe(true); // same category excluded
+  });
+
+  it('returns at most 4 picks', () => {
+    const ref = { id: 999, sku: 'X', name: 'X', brand: null, category: 'Autre', price: 30, specs: {} };
+    const picks = algorithmicFallback(ref, drinkCandidates);
+    expect(picks.length).toBeLessThanOrEqual(4);
+  });
+
+  it('one pick per distinct category', () => {
+    const ref = { id: 999, sku: 'X', name: 'X', brand: null, category: 'Autre', price: 30, specs: {} };
+    const picks = algorithmicFallback(ref, drinkCandidates);
+    const cats = new Set(picks.map(p => {
+      for (const [cat, prods] of drinkCandidates) {
+        if (prods.some(prod => prod.id === p.target_id)) return cat;
+      }
+      return 'Autre';
+    }));
+    expect(cats.size).toBe(picks.length);
+  });
+
+  it('uses drinks vocabulary for drinks vertical', () => {
+    const ref = { id: 999, sku: 'X', name: 'X', brand: null, category: 'Vin rosé', price: 22, specs: { accord: ['poisson'], occasion: 'apero' } };
+    const picks = algorithmicFallback(ref, drinkCandidates);
+    // Drinks vertical → no 'piece' wording in reasons
+    expect(picks.every(p => !/pièce/i.test(p.reason))).toBe(true);
+  });
+
+  it('uses lighting vocabulary for lighting vertical', () => {
+    const lightCandidates = new Map([
+      ['Lampe table', [{ id: 100, sku: 'L-100', name: 'AJ', brand: 'P', category: 'Lampe table', price: 520, specs: { piece: ['salon', 'chambre'], style: ['scandinave'] } }]],
+      ['Lampadaire', [{ id: 200, sku: 'L-200', name: 'Arco', brand: 'F', category: 'Lampadaire', price: 2980, specs: { piece: ['salon'], style: ['vintage'] } }]],
+    ]);
+    const ref = { id: 999, sku: 'X', name: 'PH5', brand: null, category: 'Suspension', price: 1290, specs: { piece: ['salon', 'salle a manger'], style: ['scandinave'] } };
+    const picks = algorithmicFallback(ref, lightCandidates);
+    // Lighting vertical → no apero/repas/dessert wording
+    expect(picks.every(p => !/apéro|repas|dessert/i.test(p.reason))).toBe(true);
+  });
+
+  it('returns empty when no candidates in other categories', () => {
+    const refOnlyCat = new Map([
+      ['Vin rouge', [{ id: 100, sku: 'A', name: 'A', brand: null, category: 'Vin rouge', price: 20, specs: {} }]],
+    ]);
+    const ref = { id: 999, sku: 'X', name: 'X', brand: null, category: 'Vin rouge', price: 20, specs: {} };
+    expect(algorithmicFallback(ref, refOnlyCat)).toEqual([]);
   });
 });

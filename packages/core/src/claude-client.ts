@@ -12,16 +12,27 @@ const DEFAULT_TIMEOUT = 30_000;
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 2000, 4000];
 
+export interface ClaudeClientOptions {
+  apiKey?: string;
+  /** Force a provider, overriding LLM_PROVIDER env. Use "claude" for quality-critical
+   *  flows that should not fall back to the local ollama instance. */
+  provider?: 'claude' | 'ollama';
+}
+
 export class ClaudeClient {
   private client: Anthropic | null = null;
   private provider: string;
 
-  constructor(apiKey?: string) {
-    this.provider = LLM_PROVIDER;
+  constructor(apiKeyOrOptions?: string | ClaudeClientOptions) {
+    const opts: ClaudeClientOptions = typeof apiKeyOrOptions === 'string'
+      ? { apiKey: apiKeyOrOptions }
+      : (apiKeyOrOptions || {});
+
+    this.provider = opts.provider || LLM_PROVIDER;
 
     if (this.provider === 'claude') {
       this.client = new Anthropic({
-        apiKey: apiKey || process.env.CLAUDE_API_KEY,
+        apiKey: opts.apiKey || process.env.CLAUDE_API_KEY,
       });
     }
   }

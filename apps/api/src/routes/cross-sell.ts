@@ -19,6 +19,10 @@ import { z } from 'zod';
 import { getPrisma, ClaudeClient, logger } from '@shimmer/core';
 
 export const crossSellRouter = Router();
+
+// Uses whatever LLM is configured globally (Claude in prod with key,
+// Ollama in dev). If LLM fails or is misconfigured, the algo fallback
+// ensures we never deliver an empty result to the merchant.
 const client = new ClaudeClient();
 
 // ─────────────────────────────────────────────────────────────
@@ -224,6 +228,120 @@ interface CatalogProduct {
   category: string | null; price: unknown; specs: unknown;
 }
 
+/** Sniff the store vertical from category names. Picks the role vocabulary
+ *  that makes sense for the merchant (a caviste shouldn't talk about "pièces",
+ *  a lighting shop shouldn't talk about "apéro"). */
+export type StoreVertical = 'drinks' | 'lighting' | 'fashion' | 'generic';
+
+export function detectVertical(categories: Iterable<string>): StoreVertical {
+  const cats = [...categories].map(c => c.toLowerCase());
+  if (cats.some(c => /\b(vin|champagne|cr[ée]mant|prosecco|bi[èe]re|whisky|spiritueux|alcool|liqueur)\b/.test(c))) return 'drinks';
+  if (cats.some(c => /\b(suspension|lampe|lampadaire|applique|luminaire|spot|plafonnier)\b/.test(c))) return 'lighting';
+  if (cats.some(c => /\b(robe|jean|chemise|veste|manteau|pantalon|chaussur|sneaker|accessoire mode)/.test(c))) return 'fashion';
+  return 'generic';
+}
+
+interface RoleReason { role: CrossSellRole; reason: string; }
+
+function reasonForSharedKey(vertical: StoreVertical, sharedKeys: string[], refOccasion: string): RoleReason {
+  if (sharedKeys.includes('occasion')) {
+    if (refOccasion.includes('apero') || refOccasion.includes('apéro')) {
+      if (vertical === 'drinks') return { role: 'apero', reason: "Pour l'apéro, ils vont bien ensemble" };
+    }
+    if (refOccasion.includes('cadeau')) return { role: 'cadeau', reason: 'À offrir en duo' };
+    if (refOccasion.includes('dessert') && vertical === 'drinks') return { role: 'dessert', reason: 'Pour finir le repas' };
+    return { role: 'complement', reason: 'Pour la même occasion' };
+  }
+  if (sharedKeys.includes('accord') && vertical === 'drinks') return { role: 'repas', reason: 'Va aussi très bien avec ce plat' };
+  if (sharedKeys.includes('piece')) return { role: 'complement', reason: 'Pour la même pièce' };
+  if (sharedKeys.includes('style')) return { role: 'decouverte', reason: 'Même style, autre catégorie' };
+  return { role: 'complement', reason: 'Complète bien ce produit' };
+}
+
+function reasonForPriceLadder(vertical: StoreVertical, candPrice: number, refPrice: number): RoleReason {
+  if (candPrice > refPrice * 1.8) return { role: 'cadeau', reason: 'Pour les grandes occasions' };
+  if (candPrice < refPrice * 0.6) return { role: 'decouverte', reason: 'Plus accessible, pour découvrir' };
+  if (vertical === 'drinks') return { role: 'complement', reason: 'Va bien avec celui-ci' };
+  if (vertical === 'lighting') return { role: 'complement', reason: 'Une autre pièce assortie' };
+  if (vertical === 'fashion') return { role: 'complement', reason: 'Pour compléter la tenue' };
+  return { role: 'complement', reason: 'Un complément possible' };
+}
+
+/**
+ * Algorithmic fallback when the LLM is unavailable, slow, or returns nothing valid.
+ * Guarantees up to 4 picks even when no specs overlap, by falling back to
+ * "one representative product per other category" with price-stratified roles.
+ */
+export function algorithmicFallback(
+  reference: CatalogProduct,
+  candidatesByCategory: Map<string, CatalogProduct[]>,
+): CrossSellSuggestion[] {
+  const vertical = detectVertical(candidatesByCategory.keys());
+  const refSpecs = (reference.specs as Record<string, unknown>) || {};
+  const refCategory = reference.category;
+  const refPrice = Number(reference.price) || 0;
+  const SHARED_KEYS = ['accord', 'occasion', 'usage', 'piece', 'style', 'profil'];
+  const refValues = new Map<string, string[]>();
+  for (const k of SHARED_KEYS) {
+    const v = refSpecs[k];
+    if (Array.isArray(v)) refValues.set(k, v.map(String).map(s => s.toLowerCase()));
+    else if (typeof v === 'string') {
+      refValues.set(k, v.toLowerCase().split(/[,;]/).map(s => s.trim()).filter(Boolean));
+    }
+  }
+
+  // Score candidates: shared signals weighted strongly, then "price ladder" diversity
+  const pool: { product: CatalogProduct; sharedCount: number; sharedKeys: string[] }[] = [];
+  for (const [cat, prods] of candidatesByCategory) {
+    if (cat === refCategory) continue;
+    for (const p of prods) {
+      if (p.id === reference.id) continue;
+      const pSpecs = (p.specs as Record<string, unknown>) || {};
+      let shared = 0;
+      const sharedKeys: string[] = [];
+      for (const [k, refList] of refValues) {
+        const pv = pSpecs[k];
+        const pList = Array.isArray(pv)
+          ? pv.map(String).map(s => s.toLowerCase())
+          : typeof pv === 'string' ? pv.toLowerCase().split(/[,;]/).map(s => s.trim()).filter(Boolean) : [];
+        const inter = refList.filter(x => pList.includes(x)).length;
+        if (inter > 0) { shared += inter; sharedKeys.push(k); }
+      }
+      pool.push({ product: p, sharedCount: shared, sharedKeys });
+    }
+  }
+
+  // Sort: shared signals first, then by closeness to reference price (gentle ladder)
+  pool.sort((a, b) => {
+    if (b.sharedCount !== a.sharedCount) return b.sharedCount - a.sharedCount;
+    const dA = Math.abs(Number(a.product.price) - refPrice);
+    const dB = Math.abs(Number(b.product.price) - refPrice);
+    return dA - dB;
+  });
+
+  // One pick per category for diversity.
+  const seenCategories = new Set<string>();
+  const picks: CrossSellSuggestion[] = [];
+  const refOccasion = refValues.get('occasion')?.[0] || '';
+
+  for (const cand of pool) {
+    const cat = cand.product.category || 'Autre';
+    if (seenCategories.has(cat)) continue;
+    seenCategories.add(cat);
+
+    const candPrice = Number(cand.product.price) || 0;
+    const { role, reason } = cand.sharedKeys.length > 0
+      ? reasonForSharedKey(vertical, cand.sharedKeys, refOccasion)
+      : reasonForPriceLadder(vertical, candPrice, refPrice);
+
+    const score = Math.min(0.9, 0.5 + cand.sharedCount * 0.1);
+    picks.push({ target_id: cand.product.id, role, reason, score });
+    if (picks.length >= 4) break;
+  }
+
+  return picks;
+}
+
 async function generateForProduct(
   reference: CatalogProduct,
   candidatesByCategory: Map<string, CatalogProduct[]>,
@@ -243,16 +361,60 @@ async function generateForProduct(
   const refCompact = compactProduct(reference);
   const prompt = buildPrompt(reference, refCompact, compactByCat, storeContext);
 
+  // Try the LLM first
   try {
     const response = await client.complete(
       [{ role: 'user', content: prompt }],
-      { maxTokens: 700, temperature: 0.3, timeout: 90_000, maxRetries: 1 },
+      { maxTokens: 700, temperature: 0.3, timeout: 45_000, maxRetries: 1 },
     );
-    return validateLLMResponse(response, reference.id, validIds);
+    const llmPicks = validateLLMResponse(response, reference.id, validIds);
+    if (llmPicks.length > 0) return llmPicks;
+    logger.warn({ productId: reference.id }, 'cross_sell.gen.llm.empty_fallback');
   } catch (err) {
-    logger.warn({ productId: reference.id, err: (err as Error).message }, 'cross_sell.gen.product.failed');
-    return [];
+    logger.warn({ productId: reference.id, err: (err as Error).message }, 'cross_sell.gen.llm.failed_fallback');
   }
+
+  // Algorithmic fallback: never deliver an empty result
+  const algoPicks = algorithmicFallback(reference, candidatesByCategory);
+  if (algoPicks.length > 0) {
+    logger.info({ productId: reference.id, picks: algoPicks.length }, 'cross_sell.gen.algo_used');
+  }
+  return algoPicks;
+}
+
+/** Same as generateForProduct but also reports which engine was used. */
+async function generateForProductWithSource(
+  reference: CatalogProduct,
+  candidatesByCategory: Map<string, CatalogProduct[]>,
+  storeContext: { name: string; voice?: string },
+): Promise<{ picks: CrossSellSuggestion[]; source: 'llm' | 'rule' }> {
+  // Build catalog & validate
+  const validIds = new Set<number>();
+  const compactByCat = new Map<string, string[]>();
+  for (const [cat, prods] of candidatesByCategory) {
+    const sample = prods.filter(p => p.id !== reference.id).slice(0, 8);
+    if (sample.length === 0) continue;
+    compactByCat.set(cat, sample.map(p => compactProduct(p)));
+    for (const p of sample) validIds.add(p.id);
+  }
+  if (validIds.size === 0) return { picks: [], source: 'rule' };
+
+  const refCompact = compactProduct(reference);
+  const prompt = buildPrompt(reference, refCompact, compactByCat, storeContext);
+
+  try {
+    const response = await client.complete(
+      [{ role: 'user', content: prompt }],
+      { maxTokens: 700, temperature: 0.3, timeout: 45_000, maxRetries: 1 },
+    );
+    const llmPicks = validateLLMResponse(response, reference.id, validIds);
+    if (llmPicks.length > 0) return { picks: llmPicks, source: 'llm' };
+  } catch {
+    /* fall through */
+  }
+
+  const algoPicks = algorithmicFallback(reference, candidatesByCategory);
+  return { picks: algoPicks, source: 'rule' };
 }
 
 async function generateForStore(storeId: number): Promise<{ products: number; pairs: number; ms: number }> {
@@ -287,10 +449,25 @@ async function generateForStore(storeId: number): Promise<{ products: number; pa
   await prisma.productCrossSell.deleteMany({ where: { storeId } });
 
   let pairCount = 0;
+  let llmCount = 0;
+  let algoCount = 0;
+  let consecutiveLlmFailures = 0;
+  let skipLlm = false; // becomes true after 3 consecutive failures
   let i = 0;
   for (const ref of products) {
     i += 1;
-    const picks = await generateForProduct(ref, byCategory, storeContext);
+    const { picks, source } = skipLlm
+      ? { picks: algorithmicFallback(ref, byCategory), source: 'rule' as const }
+      : await generateForProductWithSource(ref, byCategory, storeContext);
+
+    if (!skipLlm) {
+      if (source === 'rule') consecutiveLlmFailures += 1;
+      else consecutiveLlmFailures = 0;
+      if (consecutiveLlmFailures >= 3) {
+        skipLlm = true;
+        logger.warn({ storeId, processed: i }, 'cross_sell.gen.llm_disabled_after_failures');
+      }
+    }
     if (picks.length === 0) continue;
     for (const pk of picks) {
       try {
@@ -302,7 +479,7 @@ async function generateForStore(storeId: number): Promise<{ products: number; pa
             role: pk.role,
             reason: pk.reason,
             score: pk.score,
-            source: 'llm',
+            source,
           },
         });
         pairCount += 1;
@@ -310,8 +487,9 @@ async function generateForStore(storeId: number): Promise<{ products: number; pa
         // Duplicate (already covered by unique constraint); skip silently
       }
     }
+    if (source === 'llm') llmCount += 1; else if (source === 'rule') algoCount += 1;
     if (i % 10 === 0) {
-      logger.info({ storeId, processed: i, total: products.length, pairs: pairCount }, 'cross_sell.gen.progress');
+      logger.info({ storeId, processed: i, total: products.length, pairs: pairCount, llm: llmCount, algo: algoCount }, 'cross_sell.gen.progress');
     }
   }
 
