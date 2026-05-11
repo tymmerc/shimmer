@@ -57,6 +57,55 @@ interface ChatMessage {
   content: string;
 }
 
+type CrossSellRole = 'apero' | 'repas' | 'dessert' | 'decouverte' | 'cadeau' | 'accessoire' | 'complement';
+
+interface CrossSellProduct {
+  id: number;
+  sku: string;
+  name: string;
+  brand: string | null;
+  category: string | null;
+  price: string;
+  imageUrl?: string | null;
+  description?: string | null;
+  specs?: Record<string, unknown>;
+}
+
+interface CrossSellItem {
+  product: CrossSellProduct;
+  role: CrossSellRole;
+  reason: string;
+  score: number;
+}
+
+interface CrossSellResponse {
+  reference: {
+    id: number;
+    sku: string;
+    name: string;
+    brand: string | null;
+    category: string | null;
+    price: string;
+  };
+  items: CrossSellItem[];
+}
+
+interface CrossSellOptions {
+  /** CSS selector for mount points. Default: `[data-shimmer-crosssell]`. Each matching element
+   *  must carry the product id as `data-shimmer-crosssell="123"`. */
+  selector?: string;
+  /** Number of picks to fetch and render per product (1-12). Default 4. */
+  limit?: number;
+  /** Heading shown above the cards. Default: `"On a aussi pensé à"`. */
+  title?: string;
+  /** Hook invoked when a user clicks a card. If absent, the card behaves as a link to
+   *  `/products/{id}` if the product href attribute is set, or no-op otherwise. */
+  onProductClick?: (item: CrossSellItem) => void;
+  /** Format used to render the URL of each pick. `{id}` and `{sku}` get substituted.
+   *  Default `null` — no auto-navigation; pair with `onProductClick`. */
+  productUrl?: string | null;
+}
+
 interface ReviewStats {
   averageRating: number;
   totalReviews: number;
@@ -209,6 +258,10 @@ class ShimmerClient {
   productReviews(productId: number, page = 1): Promise<{ reviews: any[]; total: number }> {
     return this.request('GET', `/api/reviews/product/${productId}?page=${page}&limit=10`);
   }
+
+  crossSell(productId: number, limit = 4): Promise<CrossSellResponse> {
+    return this.request('GET', `/api/catalog/cross-sell/product/${productId}?limit=${limit}`);
+  }
 }
 
 // ─── CSS Injection ───────────────────────────────────────────────────────────
@@ -324,6 +377,141 @@ function injectStyles(theme: ShimmerTheme) {
     }
     .shimmer-typing span:nth-child(2) { animation-delay: 0.2s; }
     .shimmer-typing span:nth-child(3) { animation-delay: 0.4s; }
+    /* ── Cross-sell widget ────────────────────────────────────────── */
+    .sx-wrap {
+      font-family: ${theme.fontFamily};
+      color: #0e0a1c;
+      width: 100%;
+    }
+    .sx-title {
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #6a5d7f;
+      margin: 0 0 16px;
+      font-weight: 500;
+    }
+    .sx-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 14px;
+    }
+    .sx-card {
+      display: flex;
+      flex-direction: column;
+      padding: 18px 16px;
+      background: #fff;
+      border: 1px solid rgba(14,10,28,0.08);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+      text-decoration: none;
+      color: inherit;
+      position: relative;
+    }
+    .sx-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 30px -16px rgba(106, 43, 245, 0.28);
+      border-color: rgba(106, 43, 245, 0.22);
+    }
+    .sx-chip {
+      align-self: flex-start;
+      font-family: ${theme.fontFamily};
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+    .sx-chip-apero      { background: #fff3e6; color: #9c4d00; }
+    .sx-chip-repas      { background: #fff0d9; color: #875f00; }
+    .sx-chip-dessert    { background: #fde7f3; color: #a3236e; }
+    .sx-chip-decouverte { background: #e6f4ff; color: #1b5b91; }
+    .sx-chip-cadeau     { background: #ece4ff; color: #4a23c0; }
+    .sx-chip-accessoire { background: #ecf6ec; color: #2f7a37; }
+    .sx-chip-complement { background: #efefef; color: #3b2e54; }
+
+    .sx-img {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: cover;
+      border-radius: 8px;
+      background: #f3f0ea;
+      margin-bottom: 12px;
+    }
+    .sx-img-placeholder {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: linear-gradient(135deg, #f3f0ea 0%, #e7dfd0 100%);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      display: flex; align-items: center; justify-content: center;
+      color: #b3a99a; font-size: 28px;
+    }
+    .sx-name {
+      font-size: 14.5px;
+      font-weight: 500;
+      line-height: 1.3;
+      margin-bottom: 4px;
+      color: #0e0a1c;
+    }
+    .sx-brand {
+      font-size: 11px;
+      color: #6a5d7f;
+      letter-spacing: 0.04em;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+    .sx-reason {
+      font-size: 12.5px;
+      color: #3b2e54;
+      line-height: 1.45;
+      margin-bottom: 14px;
+      font-style: italic;
+    }
+    .sx-foot {
+      margin-top: auto;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+    .sx-price {
+      font-size: 16px;
+      font-weight: 600;
+      color: #0e0a1c;
+    }
+    .sx-add {
+      background: #0e0a1c;
+      color: #fff;
+      border: 0;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .sx-add:hover { background: #6a2bf5; }
+
+    .sx-loading {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 14px;
+    }
+    .sx-skel {
+      height: 250px;
+      background: linear-gradient(90deg, #f3f0ea 0%, #ecebe7 50%, #f3f0ea 100%);
+      background-size: 200% 100%;
+      border-radius: 12px;
+      animation: sx-shimmer 1.4s infinite;
+    }
+    @keyframes sx-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
     @keyframes shimmer-bounce {
       0%, 60%, 100% { transform: translateY(0); }
       30% { transform: translateY(-6px); }
@@ -661,6 +849,138 @@ function esc(s: string): string {
   return el.innerHTML;
 }
 
+// ─── Cross-sell Widget ───────────────────────────────────────────────────────
+
+const CROSS_SELL_ROLE_LABELS: Record<CrossSellRole, string> = {
+  apero: 'Apéritif',
+  repas: 'Repas',
+  dessert: 'Dessert',
+  decouverte: 'Découverte',
+  cadeau: 'Cadeau',
+  accessoire: 'Accessoire',
+  complement: 'À associer',
+};
+
+class CrossSellWidget {
+  private client: ShimmerClient;
+  private opts: Required<CrossSellOptions>;
+  private mounted = new WeakSet<Element>();
+
+  constructor(client: ShimmerClient, opts: CrossSellOptions = {}) {
+    this.client = client;
+    this.opts = {
+      selector: opts.selector ?? '[data-shimmer-crosssell]',
+      limit: Math.min(Math.max(opts.limit ?? 4, 1), 12),
+      title: opts.title ?? 'On a aussi pensé à',
+      onProductClick: opts.onProductClick ?? (() => {}),
+      productUrl: opts.productUrl ?? null,
+    };
+  }
+
+  /** Scan the DOM for mount points and render cross-sell cards into each. */
+  async render(): Promise<void> {
+    const nodes = document.querySelectorAll(this.opts.selector);
+    await Promise.all([...nodes].map((el) => this.mount(el)));
+  }
+
+  /** Render cross-sells into a specific element with an explicit product id. */
+  async renderInto(target: Element | string, productId: number): Promise<void> {
+    const el = typeof target === 'string' ? document.querySelector(target) : target;
+    if (!el) return;
+    el.setAttribute('data-shimmer-crosssell', String(productId));
+    await this.mount(el);
+  }
+
+  private async mount(el: Element): Promise<void> {
+    if (this.mounted.has(el)) return;
+    this.mounted.add(el);
+
+    const rawId = el.getAttribute('data-shimmer-crosssell');
+    const productId = Number(rawId);
+    if (!Number.isFinite(productId) || productId <= 0) return;
+
+    el.classList.add('shimmer-widget', 'sx-wrap');
+    el.innerHTML = `
+      <p class="sx-title">${esc(this.opts.title)}</p>
+      <div class="sx-loading">
+        <div class="sx-skel"></div><div class="sx-skel"></div>
+        <div class="sx-skel"></div><div class="sx-skel"></div>
+      </div>
+    `;
+
+    try {
+      const data = await this.client.crossSell(productId, this.opts.limit);
+      if (!data.items.length) {
+        el.innerHTML = ''; // silent: no recos available
+        return;
+      }
+      this.renderCards(el, data);
+    } catch {
+      el.innerHTML = ''; // silent failure
+    }
+  }
+
+  private renderCards(container: Element, data: CrossSellResponse): void {
+    const tag = this.opts.productUrl ? 'a' : 'div';
+    const cards = data.items
+      .map((item) => {
+        const url = this.opts.productUrl
+          ? this.opts.productUrl
+              .replace('{id}', String(item.product.id))
+              .replace('{sku}', item.product.sku || '')
+          : null;
+        const href = url ? `href="${esc(url)}"` : '';
+        const img = item.product.imageUrl
+          ? `<img class="sx-img" src="${esc(item.product.imageUrl)}" alt="${esc(item.product.name)}" loading="lazy" />`
+          : `<div class="sx-img-placeholder">◇</div>`;
+        const roleLabel = CROSS_SELL_ROLE_LABELS[item.role] || item.role;
+        const brand = item.product.brand ? `<p class="sx-brand">${esc(item.product.brand)}</p>` : '';
+        return `
+          <${tag} ${href} class="sx-card" data-product-id="${item.product.id}">
+            <span class="sx-chip sx-chip-${esc(item.role)}">${esc(roleLabel)}</span>
+            ${img}
+            <p class="sx-name">${esc(item.product.name)}</p>
+            ${brand}
+            <p class="sx-reason">« ${esc(item.reason)} »</p>
+            <div class="sx-foot">
+              <span class="sx-price">${esc(item.product.price)}€</span>
+              <button type="button" class="sx-add" data-add="${item.product.id}">Ajouter</button>
+            </div>
+          </${tag}>
+        `;
+      })
+      .join('');
+
+    container.innerHTML = `
+      <p class="sx-title">${esc(this.opts.title)}</p>
+      <div class="sx-grid">${cards}</div>
+    `;
+
+    // Wire click handlers
+    container.querySelectorAll<HTMLElement>('.sx-card').forEach((card) => {
+      const id = Number(card.dataset.productId);
+      const item = data.items.find((it) => it.product.id === id);
+      if (!item) return;
+
+      card.addEventListener('click', (e) => {
+        // Don't intercept clicks on the "Ajouter" button — handled below
+        if ((e.target as Element).closest('.sx-add')) return;
+        this.opts.onProductClick(item);
+      });
+    });
+    container.querySelectorAll<HTMLElement>('.sx-add').forEach((btn) => {
+      const id = Number(btn.dataset.add);
+      const item = data.items.find((it) => it.product.id === id);
+      if (!item) return;
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.opts.onProductClick(item);
+      });
+    });
+  }
+}
+
 // ─── Main Class ──────────────────────────────────────────────────────────────
 
 export class Shimmer {
@@ -753,6 +1073,30 @@ export class Shimmer {
     if (!Shimmer.instance) throw new Error('Shimmer not initialized. Call Shimmer.init() first.');
     return Shimmer.instance.client.reviewStats(productId);
   }
+
+  /** Cross-sell namespace — render product-page recommendations. */
+  static crossSell = {
+    /** Render cards into every `[data-shimmer-crosssell="<id>"]` on the page.
+     *  Returns a promise that resolves when all mounts are populated. */
+    async render(opts: CrossSellOptions = {}): Promise<void> {
+      if (!Shimmer.instance) throw new Error('Shimmer not initialized. Call Shimmer.init() first.');
+      const widget = new CrossSellWidget(Shimmer.instance.client, opts);
+      await widget.render();
+    },
+
+    /** Mount the widget on a specific element with an explicit product id. */
+    async renderInto(target: Element | string, productId: number, opts: CrossSellOptions = {}): Promise<void> {
+      if (!Shimmer.instance) throw new Error('Shimmer not initialized. Call Shimmer.init() first.');
+      const widget = new CrossSellWidget(Shimmer.instance.client, opts);
+      await widget.renderInto(target, productId);
+    },
+
+    /** Fetch raw cross-sell data without rendering anything. */
+    fetch(productId: number, limit = 4): Promise<CrossSellResponse> {
+      if (!Shimmer.instance) throw new Error('Shimmer not initialized. Call Shimmer.init() first.');
+      return Shimmer.instance.client.crossSell(productId, limit);
+    },
+  };
 
   /** Tear down all widgets and clean up. */
   static destroy() {

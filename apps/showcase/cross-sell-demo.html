@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cross-sell — démo fiche produit</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=editorial-new@400,500,500i&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Inter Tight", system-ui, sans-serif;
+      background: #f5f1ea;
+      color: #0a0a0a;
+      padding: 60px clamp(20px, 5vw, 80px);
+      line-height: 1.55;
+      min-height: 100vh;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    header { margin-bottom: 50px; }
+    .breadcrumb { font-family: "JetBrains Mono", monospace; font-size: 11px; color: #6a5d7f; letter-spacing: 0.08em; }
+    h1 { font-family: "Editorial New", Georgia, serif; font-size: clamp(36px, 5vw, 56px); line-height: 1.05; letter-spacing: -0.02em; margin: 16px 0 8px; font-weight: 400; }
+    h1 em { font-style: italic; color: #6a2bf5; }
+    .sub { color: #6a5d7f; font-size: 16px; max-width: 60ch; }
+
+    .product {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 60px;
+      padding: 40px;
+      background: #fff;
+      border: 1px solid rgba(10, 10, 10, 0.08);
+      border-radius: 16px;
+      margin-bottom: 60px;
+    }
+    .product-img {
+      aspect-ratio: 1;
+      background: linear-gradient(135deg, #f3f0ea 0%, #e7dfd0 50%, #efe8dc 100%);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: "Editorial New", serif;
+      font-style: italic;
+      font-size: 72px;
+      color: #b3a99a;
+    }
+    .product-info h2 { font-family: "Editorial New", serif; font-style: italic; font-size: 36px; font-weight: 400; line-height: 1.1; margin-bottom: 8px; }
+    .product-info .brand { font-family: "JetBrains Mono", monospace; font-size: 11px; color: #6a2bf5; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 24px; }
+    .product-info .desc { color: #3b2e54; font-size: 15px; margin-bottom: 32px; }
+    .product-info .price-row { display: flex; align-items: baseline; gap: 16px; margin-bottom: 24px; }
+    .product-info .price { font-family: "Editorial New", serif; font-size: 42px; font-weight: 500; }
+    .product-info .stock { font-family: "JetBrains Mono", monospace; font-size: 12px; color: #2f7a37; }
+    .product-info .cta { width: 100%; padding: 16px; background: #0a0a0a; color: #f5f1ea; border: 0; border-radius: 10px; font-family: "Inter Tight", sans-serif; font-size: 15px; font-weight: 500; cursor: pointer; transition: background 0.2s; }
+    .product-info .cta:hover { background: #6a2bf5; }
+    .product-info .specs { margin-top: 28px; padding-top: 24px; border-top: 1px solid rgba(10, 10, 10, 0.08); display: flex; flex-direction: column; gap: 6px; }
+    .product-info .spec { display: flex; justify-content: space-between; font-size: 13px; }
+    .product-info .spec b { font-family: "JetBrains Mono", monospace; font-weight: 500; color: #6a5d7f; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+    .cross-sell-section {
+      padding: 40px;
+      background: #fff;
+      border: 1px solid rgba(10, 10, 10, 0.08);
+      border-radius: 16px;
+    }
+    .picker {
+      display: flex; gap: 8px; flex-wrap: wrap; margin: 30px 0 14px;
+    }
+    .picker button {
+      padding: 8px 14px;
+      border: 1px solid rgba(10, 10, 10, 0.12);
+      background: #fff;
+      border-radius: 999px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11.5px;
+      color: #3b2e54;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .picker button:hover { border-color: #6a2bf5; color: #6a2bf5; }
+    .picker button.active { background: #0a0a0a; color: #fff; border-color: #0a0a0a; }
+    .store-tag {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #6a5d7f;
+      margin-bottom: 6px;
+    }
+    .footer-info {
+      margin-top: 30px;
+      padding-top: 30px;
+      border-top: 1px solid rgba(10, 10, 10, 0.08);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11.5px;
+      color: #6a5d7f;
+    }
+    .footer-info code { color: #0a0a0a; background: #f5f1ea; padding: 2px 6px; border-radius: 4px; }
+
+    @media (max-width: 880px) {
+      .product { grid-template-columns: 1fr; gap: 30px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <p class="breadcrumb">SHIMMER · démo widget cross-sell</p>
+      <h1>Voici comment <em>ça s'affiche</em> sur une fiche produit.</h1>
+      <p class="sub">Le widget se branche en deux lignes. Les recommandations sont pré-calculées côté serveur, le lookup est sous 20 ms.</p>
+    </header>
+
+    <!-- Mock product page -->
+    <article class="product" id="product">
+      <div class="product-img" id="productEmoji">🍷</div>
+      <div class="product-info">
+        <p class="store-tag" id="storeName">Caves Forty-Two</p>
+        <h2 id="productName">Châteauneuf-du-Pape 2019</h2>
+        <p class="brand" id="productBrand">Domaine du Vieux Télégraphe</p>
+        <p class="desc" id="productDesc">Châteauneuf-du-Pape sur galets roulés, grenache dominant. Puissant, épicé, garrigue. Sur civet, daube provençale.</p>
+        <div class="price-row">
+          <span class="price" id="productPrice">38€</span>
+          <span class="stock">· en stock</span>
+        </div>
+        <button class="cta">Ajouter au panier</button>
+        <div class="specs" id="productSpecs"></div>
+      </div>
+    </article>
+
+    <!-- Cross-sell widget -->
+    <section class="cross-sell-section">
+      <div data-shimmer-crosssell="2042" id="csMount"></div>
+
+      <div class="picker">
+        <span class="store-tag" style="align-self:center">essayer un autre produit :</span>
+      </div>
+      <div class="picker" id="storePicker"></div>
+
+      <div class="footer-info">
+        Branchement côté marchand → <code>&lt;div data-shimmer-crosssell="123"&gt;&lt;/div&gt;</code>
+        + <code>Shimmer.crossSell.render()</code>
+      </div>
+    </section>
+  </div>
+
+  <script src="sdk/shimmer.js" defer></script>
+  <script defer>
+    document.addEventListener('DOMContentLoaded', () => {
+      const apiUrl = window.location.port === '8080' ? 'http://localhost:3003' : '/shimmer';
+
+      // Sample products from Caves + Atelier for the picker
+      const SAMPLES = [
+        { id: 2042, store: 'Caves Forty-Two',  key: 'sk_fc215c787b2c48d9808a4638e2d51899', emoji: '🍷', name: 'Châteauneuf-du-Pape 2019', brand: 'Domaine du Vieux Télégraphe', desc: 'Châteauneuf-du-Pape sur galets roulés, grenache dominant. Puissant, épicé, garrigue.', price: '38€', specs: { Région: 'Rhône', Cépage: 'Grenache, Syrah', Profil: 'Puissant' } },
+        { id: 2074, store: 'Caves Forty-Two',  key: 'sk_fc215c787b2c48d9808a4638e2d51899', emoji: '🥂', name: 'Chablis 2022',          brand: 'Domaine William Fèvre',       desc: 'Chablis classique, chardonnay sur Kimméridgien. Tendu, citron, iode. Sur huîtres.', price: '24€', specs: { Région: 'Bourgogne', Cépage: 'Chardonnay', Profil: 'Frais' } },
+        { id: 2110, store: 'Caves Forty-Two',  key: 'sk_fc215c787b2c48d9808a4638e2d51899', emoji: '🍾', name: 'Prosecco Superiore',     brand: 'Bisol Crede',                  desc: 'Prosecco DOCG Valdobbiadene. Fin, frais, idéal apéritif.', price: '18€', specs: { Région: 'Italie', Cépage: 'Glera', Profil: 'Effervescent' } },
+        { id: 2114, store: 'Caves Forty-Two',  key: 'sk_fc215c787b2c48d9808a4638e2d51899', emoji: '🍷', name: 'Maury Tuilé 10 ans',     brand: 'Mas Amiel',                    desc: 'Vin doux naturel, élevé 10 ans en barrique. Notes de pruneau, cacao, garrigue.', price: '22€', specs: { Région: 'Roussillon', Cépage: 'Grenache', Profil: 'Doux' } },
+      ];
+
+      // Atelier samples — pick first 2 produits
+      // We need actual product ids; we use ones we know exist
+      const ATELIER_SAMPLES = [
+        { id: 2115, store: "L'Atelier Lumière", key: 'sk_5542d50630c448dfa6a2873e3b5a55bf', emoji: '💡', name: 'Suspension PH 5',           brand: 'Louis Poulsen', desc: 'Suspension PH 5 design Poul Henningsen. Lumière douce, signature scandinave.', price: '1290€', specs: { Style: 'Scandinave', Pièce: 'Salle à manger', Couleur: 'Blanc' } },
+        { id: 2118, store: "L'Atelier Lumière", key: 'sk_5542d50630c448dfa6a2873e3b5a55bf', emoji: '🪔', name: 'Suspension Artichoke',      brand: 'Louis Poulsen', desc: 'Pièce iconique en feuilles de cuivre. Pour les grands espaces de réception.', price: '4200€', specs: { Style: 'Scandinave premium', Pièce: 'Salon', Couleur: 'Cuivre' } },
+      ];
+
+      const ALL_SAMPLES = [...SAMPLES, ...ATELIER_SAMPLES];
+
+      // Render the picker buttons
+      const pickerEl = document.getElementById('storePicker');
+      ALL_SAMPLES.forEach((s, idx) => {
+        const b = document.createElement('button');
+        b.textContent = `${s.emoji}  ${s.name}`;
+        b.dataset.idx = String(idx);
+        if (idx === 0) b.classList.add('active');
+        b.addEventListener('click', () => switchTo(idx));
+        pickerEl.appendChild(b);
+      });
+
+      let currentShimmer = null;
+      function initShimmer(apiKey) {
+        if (currentShimmer) currentShimmer.destroy();
+        currentShimmer = window.Shimmer.init({ apiUrl, apiKey });
+        return currentShimmer;
+      }
+
+      function renderSpecs(specs) {
+        const el = document.getElementById('productSpecs');
+        el.innerHTML = Object.entries(specs).map(([k, v]) => `<div class="spec"><b>${k}</b><span>${v}</span></div>`).join('');
+      }
+
+      async function switchTo(idx) {
+        const sample = ALL_SAMPLES[idx];
+        // Update UI
+        document.querySelectorAll('#storePicker button').forEach((b, i) => b.classList.toggle('active', i === idx));
+        document.getElementById('productEmoji').textContent = sample.emoji;
+        document.getElementById('storeName').textContent = sample.store;
+        document.getElementById('productName').textContent = sample.name;
+        document.getElementById('productBrand').textContent = sample.brand;
+        document.getElementById('productDesc').textContent = sample.desc;
+        document.getElementById('productPrice').textContent = sample.price;
+        renderSpecs(sample.specs);
+
+        // Init Shimmer with the right store API key, then render the widget
+        initShimmer(sample.key);
+        const mount = document.getElementById('csMount');
+        mount.innerHTML = ''; // clear
+        await window.Shimmer.crossSell.renderInto(mount, sample.id, {
+          title: 'On a aussi pensé à',
+          onProductClick: (item) => {
+            // Find this product in our sample list and switch to it
+            const next = ALL_SAMPLES.findIndex((s) => s.id === item.product.id);
+            if (next >= 0) {
+              switchTo(next);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+              // Not in our sample set — just toast it
+              const stamp = `${item.role.toUpperCase()} → ${item.product.name} (${item.product.price}€)`;
+              const t = document.createElement('div');
+              t.textContent = stamp;
+              t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0a0a0a;color:#f5f1ea;padding:14px 20px;border-radius:8px;font-family:"JetBrains Mono",monospace;font-size:12px;z-index:9999';
+              document.body.appendChild(t);
+              setTimeout(() => t.remove(), 2500);
+            }
+          },
+        });
+      }
+
+      // Initial render
+      switchTo(0);
+      renderSpecs(SAMPLES[0].specs);
+    });
+  </script>
+</body>
+</html>
