@@ -11,7 +11,7 @@
     "prisma": "prisma"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@anthropic-ai/sdk": "^0.116.0",
     "@prisma/client": "^6.4.0",
     "bullmq": "^5.0.0",
     "ioredis": "^5.4.0",
