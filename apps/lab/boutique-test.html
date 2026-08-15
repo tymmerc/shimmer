@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>La Cave de Démo — fausse boutique</title>
+<style>
+  body { margin:0; font:16px/1.6 -apple-system,system-ui,"Segoe UI",sans-serif; color:#1a1a1a; background:#faf8f4; }
+  .banner { background:#1a1a1a; color:#f4f1ea; text-align:center; padding:10px; font-size:13px; }
+  .banner code { background:rgba(244,241,234,.12); padding:2px 6px; border-radius:5px; }
+  header { padding:18px 32px; border-bottom:1px solid #e7e2d8; display:flex; align-items:center; gap:24px; }
+  header .logo { font-size:22px; font-weight:700; letter-spacing:-0.01em; white-space:nowrap; }
+  /* La barre de recherche du marchand. Shimmer se greffe dessus (input[type=search]). */
+  .searchwrap { flex:1; max-width:520px; }
+  .searchwrap input { width:100%; padding:12px 16px; border:1px solid #d9d3c7; border-radius:10px;
+    font-size:15px; background:#fff; outline:none; }
+  .searchwrap input:focus { border-color:#6a2bf5; }
+  header nav { margin-left:auto; }
+  header nav a { margin-left:20px; color:#555; text-decoration:none; font-size:14px; white-space:nowrap; }
+  .hero { padding:56px 32px; text-align:center; }
+  .hero h1 { font-size:36px; margin:0 0 10px; }
+  .hero p { color:#666; max-width:50ch; margin:0 auto; }
+  .hint { margin-top:18px; display:inline-block; background:#efe7ff; color:#5b2bd4; padding:8px 14px; border-radius:999px; font-size:14px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:22px; padding:20px 32px 80px; max-width:1100px; margin:0 auto; }
+  .card { background:#fff; border:1px solid #ece7dd; border-radius:14px; overflow:hidden; }
+  .card .img { aspect-ratio:3/4; background:linear-gradient(135deg,#6a2bf5,#d4ff3a); opacity:.85; }
+  .card .body { padding:14px 16px; }
+  .card .name { font-weight:600; }
+  .card .price { color:#7a5; font-family:ui-monospace,monospace; margin-top:4px; }
+</style>
+</head>
+<body>
+<div class="banner">
+  Fausse boutique de test. Shimmer est branché par <strong>une seule ligne</strong> en bas de page, et se greffe sur la <strong>barre de recherche</strong> ci-dessous.
+</div>
+
+<header>
+  <div class="logo">La Cave de Démo</div>
+  <div class="searchwrap">
+    <input type="search" placeholder="Rechercher un vin, ou décrivez votre besoin…" />
+  </div>
+  <nav><a href="#">Vins</a><a href="#">Champagnes</a><a href="#">Coffrets</a></nav>
+</header>
+
+<section class="hero">
+  <h1>Tapez dans la barre de recherche en haut</h1>
+  <p>Essayez « un rouge pour un barbecue » ou « un cadeau à 40 euros ». La recherche n'est pas une liste de mots-clés : c'est le vendeur qui comprend et conseille.</p>
+  <div class="hint">↑ Cliquez la barre de recherche et décrivez ce que vous cherchez</div>
+</section>
+
+<div class="grid">
+  <div class="card"><div class="img"></div><div class="body"><div class="name">Gevrey-Chambertin 2020</div><div class="price">48,00 €</div></div></div>
+  <div class="card"><div class="img"></div><div class="body"><div class="name">Sancerre Blanc 2022</div><div class="price">21,00 €</div></div></div>
+  <div class="card"><div class="img"></div><div class="body"><div class="name">Brouilly 2022</div><div class="price">15,00 €</div></div></div>
+  <div class="card"><div class="img"></div><div class="body"><div class="name">Champagne Brut Tradition</div><div class="price">42,00 €</div></div></div>
+</div>
+
+<!-- ↓↓↓ LA SEULE LIGNE SHIMMER ↓↓↓ — se greffe sur input[type=search], pas de chatbot -->
+<script src="https://tymmerc.eu/shimmer/sdk/shimmer.iife.js?v=20260626"
+        data-shimmer
+        data-store="4"
+        data-key="pk_uUrPNXjew9_HENo4ZkS5k2iLu77sKjWCpn7hd8e5"
+        defer></script>
+</body>
+</html>

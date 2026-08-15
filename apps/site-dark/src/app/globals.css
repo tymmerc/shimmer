@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html, body {
+  background: #fbf9f4;
+  color: #0d0b14;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: #6a2bf5;
+  color: #fbf9f4;
+}
+
+@layer utilities {
+  .grain {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/></svg>");
+  }
+  .text-balance { text-wrap: balance; }
+  .text-pretty { text-wrap: pretty; }
+}
+
+/* Subtle animated shimmer line, used as accent under titles */
+.shimmer-line {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer-line::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(106,43,245,0.65), transparent);
+  transform: translateX(-100%);
+  animation: shimmer-line 4s ease-in-out infinite;
+}
+@keyframes shimmer-line {
+  0% { transform: translateX(-100%); }
+  60% { transform: translateX(100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Lenis smooth scroll */
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
+.lenis.lenis-stopped { overflow: hidden; }

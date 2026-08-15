@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Shimmer · Banc d'essai des automatisations</title>
+<style>
+  :root {
+    --ink:#0d0b14; --ink-2:#15121f; --ink-3:#1c1828; --paper:#f4f1ea; --acid:#d4ff3a;
+    --line:rgba(244,241,234,0.10); --line-2:rgba(244,241,234,0.18); --muted:rgba(244,241,234,0.55);
+    --ok:#5fd08a; --warn:#f0b440; --err:#ff6b6b; --info:#6ab0ff;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--ink); color:var(--paper);
+    font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .mono,code { font-family:ui-monospace,"SF Mono",Menlo,monospace; }
+  header.top { position:sticky; top:0; z-index:20; background:rgba(13,11,20,0.94); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line); padding:14px 28px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header.top h1 { font-size:16px; margin:0; font-weight:600; letter-spacing:-0.01em; }
+  header.top h1 .dot { color:var(--acid); }
+  .tag { font:10px/1 ui-monospace,monospace; text-transform:uppercase; letter-spacing:.18em; color:var(--muted);
+    border:1px solid var(--line); border-radius:999px; padding:5px 9px; }
+  .keyrow { display:flex; gap:8px; align-items:center; margin-left:auto; }
+  .keyrow input { background:var(--ink-2); border:1px solid var(--line); color:var(--paper); border-radius:8px;
+    padding:8px 10px; width:300px; font-family:ui-monospace,monospace; font-size:12px; }
+  .strip { display:flex; gap:24px; flex-wrap:wrap; padding:14px 28px; border-bottom:1px solid var(--line); background:var(--ink-2); }
+  .strip .group h2 { margin:0 0 6px; font-size:10px; text-transform:uppercase; letter-spacing:.18em; color:var(--muted); }
+  .pill { display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:4px 10px; border-radius:999px;
+    border:1px solid var(--line); margin:0 4px 0 0; }
+  .pill .led { width:7px; height:7px; border-radius:50%; background:var(--muted); }
+  .pill.ready .led{background:var(--ok)} .pill.degraded .led{background:var(--warn)} .pill.alert .led{background:var(--err)}
+  .warn-banner { margin:16px 28px 0; background:rgba(240,180,64,.09); border:1px solid rgba(240,180,64,.28);
+    color:var(--warn); border-radius:10px; padding:10px 14px; font-size:13px; }
+  main { padding:20px 28px 60px; display:grid; grid-template-columns:repeat(auto-fill,minmax(440px,1fr)); gap:18px; align-items:start; }
+  .card { background:var(--ink-2); border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+  .card .head { padding:18px 20px 0; }
+  .engine { font:10px/1 ui-monospace,monospace; text-transform:uppercase; letter-spacing:.16em; color:var(--acid); }
+  .engine .slow { color:var(--warn); margin-left:8px; }
+  .card h3 { margin:6px 0 2px; font-size:17px; }
+  .card .desc { color:var(--muted); font-size:13px; margin:0 0 14px; }
+  .scenarios { display:flex; gap:7px; flex-wrap:wrap; padding:0 20px 14px; }
+  .scenarios button { background:transparent; border:1px solid var(--line); color:var(--paper); border-radius:999px;
+    padding:6px 12px; font-size:12px; cursor:pointer; transition:.15s; }
+  .scenarios button:hover { border-color:var(--acid); color:var(--acid); }
+  .scenarios button.sel { background:var(--acid); color:var(--ink); border-color:var(--acid); font-weight:600; }
+  .actions { display:flex; align-items:center; gap:12px; padding:0 20px 16px; }
+  .run { background:var(--acid); color:var(--ink); border:none; border-radius:999px; padding:10px 22px; font-size:13px;
+    font-weight:600; cursor:pointer; transition:.15s; }
+  .run:disabled { opacity:.55; cursor:wait; }
+  .editlink { font-size:12px; color:var(--muted); cursor:pointer; text-decoration:underline dotted; }
+  .editlink:hover { color:var(--paper); }
+  .payload { display:none; padding:0 20px 14px; }
+  .payload textarea { width:100%; background:var(--ink); border:1px solid var(--line); color:var(--paper); border-radius:8px;
+    padding:10px; font-family:ui-monospace,monospace; font-size:12px; resize:vertical; min-height:80px; }
+  /* flow */
+  .flow { display:flex; align-items:stretch; gap:0; flex-wrap:wrap; padding:4px 20px 0; }
+  .node { display:flex; align-items:center; gap:8px; background:var(--ink-3); border:1px solid var(--line);
+    border-radius:10px; padding:8px 12px; font-size:12px; color:var(--muted); position:relative; transition:.25s; }
+  .node .ic { width:16px; height:16px; border-radius:50%; border:2px solid var(--line-2); display:grid; place-items:center;
+    font-size:10px; flex:0 0 auto; }
+  .node.run { border-color:var(--acid); color:var(--paper); box-shadow:0 0 0 1px var(--acid) inset; }
+  .node.run .ic { border-color:var(--acid); animation:pulse 1s infinite; }
+  .node.done { border-color:rgba(95,208,138,.5); color:var(--paper); }
+  .node.done .ic { border-color:var(--ok); background:var(--ok); color:var(--ink); }
+  .node.err { border-color:rgba(255,107,107,.5); color:var(--paper); }
+  .node.err .ic { border-color:var(--err); background:var(--err); color:#fff; }
+  .arrow { display:flex; align-items:center; color:var(--line-2); padding:0 6px; font-size:14px; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  /* result */
+  .result { padding:14px 20px 18px; border-top:1px solid var(--line); margin-top:14px; display:none; }
+  .result.show { display:block; }
+  .bubble { background:var(--ink-3); border:1px solid var(--line); border-radius:14px 14px 14px 4px; padding:12px 14px;
+    font-size:14px; max-width:90%; }
+  .prodcard { display:flex; justify-content:space-between; gap:10px; background:var(--ink); border:1px solid var(--line);
+    border-radius:10px; padding:10px 12px; margin-top:8px; }
+  .prodcard .nm { font-size:14px; } .prodcard .br { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.12em; }
+  .prodcard .pr { color:var(--acid); font-family:ui-monospace,monospace; font-size:13px; }
+  .badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:600; margin:2px 4px 2px 0; }
+  .b-ok{background:rgba(95,208,138,.15);color:var(--ok)} .b-warn{background:rgba(240,180,64,.15);color:var(--warn)}
+  .b-err{background:rgba(255,107,107,.15);color:var(--err)} .b-info{background:rgba(106,176,255,.15);color:var(--info)}
+  .b-mut{background:rgba(244,241,234,.08);color:var(--muted)}
+  .kv { display:flex; gap:8px; font-size:13px; margin:3px 0; } .kv .k { color:var(--muted); min-width:96px; }
+  .email-preview { background:var(--ink); border:1px solid var(--line); border-radius:10px; overflow:hidden; margin-top:10px; }
+  .email-preview .eh { background:var(--ink-3); padding:8px 12px; font-size:12px; color:var(--muted); border-bottom:1px solid var(--line); }
+  .email-preview .eb { padding:12px 14px; font-size:13px; white-space:pre-wrap; }
+  .timeline { margin-top:10px; }
+  .timeline .ev { display:flex; gap:10px; align-items:center; font-size:13px; padding:5px 0; }
+  .timeline .ev .t { color:var(--acid); font-family:ui-monospace,monospace; font-size:12px; min-width:70px; }
+  .holdout-box { text-align:center; padding:18px; border-radius:12px; border:1px solid var(--line); margin-top:6px; }
+  .holdout-box .big { font-size:26px; font-weight:700; letter-spacing:-.01em; }
+  .holdout-box.control { background:rgba(240,180,64,.08); border-color:rgba(240,180,64,.3); }
+  .holdout-box.treat { background:rgba(95,208,138,.08); border-color:rgba(95,208,138,.3); }
+  details.raw { margin-top:12px; } details.raw summary { cursor:pointer; color:var(--muted); font-size:12px; }
+  details.raw pre { background:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px; font-size:11px;
+    overflow:auto; white-space:pre-wrap; word-break:break-word; max-height:240px; color:rgba(244,241,234,.8); }
+  .err-line { color:var(--err); font-size:13px; }
+  .muted { color:var(--muted); }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Shimmer <span class="dot">·</span> Banc d'essai</h1>
+  <span class="tag" id="storeTag">boutique démo</span>
+  <div class="keyrow">
+    <span class="muted" style="font-size:12px">Clé API</span>
+    <input id="apiKey" placeholder="sk_..." autocomplete="off" spellcheck="false" />
+  </div>
+</header>
+
+<div class="strip">
+  <div class="group"><h2>État des intégrations</h2><div id="readiness"><span class="muted">chargement…</span></div></div>
+  <div class="group"><h2>File d'automatisation</h2><div id="queues"><span class="muted">chargement…</span></div></div>
+</div>
+
+<div class="warn-banner">
+  Page interne. Chaque test crée de vraies données dans la boutique de la clé (laisse la démo). Les étapes marquées <span class="badge b-warn">IA</span> tournent en local : 30 à 60 s.
+</div>
+
+<main id="cards"></main>
+
+<script>
+const API = '/shimmer/api';
+const DEMO_KEY = ''; // clé de démo : collez-la dans le champ (mémorisée en localStorage)
+const keyInput = document.getElementById('apiKey');
+keyInput.value = localStorage.getItem('shimmer_lab_key') || DEMO_KEY;
+keyInput.addEventListener('change', () => localStorage.setItem('shimmer_lab_key', keyInput.value.trim()));
+const H = () => ({ 'Content-Type':'application/json', 'Authorization':'Bearer ' + keyInput.value.trim() });
+const esc = s => String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const eur = v => (v==null?'—':(typeof v==='number'?v:parseFloat(v)).toFixed(2).replace('.',',')+' €');
+
+async function api(method, path, payload) {
+  const t = performance.now();
+  const res = await fetch(API + path, { method, headers:H(), body: method==='GET'?undefined:JSON.stringify(payload) });
+  const txt = await res.text(); let body; try { body = JSON.parse(txt); } catch { body = txt; }
+  return { ok:res.ok, status:res.status, body, ms:Math.round(performance.now()-t) };
+}
+
+// status strip
+async function refreshStatus() {
+  try {
+    const r = await fetch(API+'/admin-stats/readiness',{headers:H()}).then(x=>x.json());
+    document.getElementById('readiness').innerHTML = r.items.map(i=>
+      `<span class="pill ${i.level}" title="${esc(i.detail)}"><span class="led"></span>${i.key}</span>`).join('')
+      + `<span class="badge ${r.productionReady?'b-ok':'b-warn'}" style="margin-left:4px">${r.productionReady?'prod-ready':'mode dégradé'}</span>`;
+  } catch { document.getElementById('readiness').innerHTML = '<span class="muted">clé invalide / API injoignable</span>'; }
+  try {
+    const q = await fetch(API+'/admin-stats/queues',{headers:H()}).then(x=>x.json());
+    const c = q.counts;
+    document.getElementById('queues').innerHTML =
+      `<span class="pill"><span class="led"></span>en attente ${c.waiting}</span>`+
+      `<span class="pill"><span class="led"></span>planifiés ${c.delayed}</span>`+
+      `<span class="pill ${c.failed?'alert':'ready'}"><span class="led"></span>échecs ${c.failed}</span>`;
+  } catch { document.getElementById('queues').innerHTML = '<span class="muted">indisponible</span>'; }
+}
+
+// ── render helpers per automation ─────────────────────────
+const badgeFor = {
+  urgency:{critical:'b-err',high:'b-warn',medium:'b-info',low:'b-mut'},
+  sentiment:{angry:'b-err',negative:'b-warn',neutral:'b-mut',positive:'b-ok'},
+};
+function prodList(prods){ return (prods||[]).map(p=>
+  `<div class="prodcard"><div><div class="nm">${esc(p.name)}</div><div class="br">${esc(p.brand||'')}${p.category?' · '+esc(p.category):''}</div></div><div class="pr">${eur(p.price)}</div></div>`).join(''); }
+
+let lastCartId = null;
+
+const automations = [
+  {
+    id:'vendeur', title:'Vendeur IA', engine:'chat/message', slow:true,
+    desc:"Le visiteur pose sa question, le vendeur fouille le catalogue et conseille.",
+    flow:['Question reçue','Recherche catalogue','Vendeur IA','Réponse + produits'],
+    scenarios:{ 'Rouge barbecue':{message:'un rouge pour un barbecue'},
+      'Cadeau 40€':{message:'un cadeau à 40 euros pour un amateur'},
+      'Blanc huîtres':{message:'un blanc sec pour des huîtres'} },
+    call:p=>api('POST','/chat/message',p),
+    view:b=>`<div class="bubble">${esc(b.message)}</div>${prodList(b.recommendedProducts)}`,
+  },
+  {
+    id:'cart', title:'Panier abandonné', engine:'cart-recovery/abandon · BullMQ',
+    desc:"Enregistre un panier abandonné et programme les 2 relances (+1h, +24h).",
+    flow:['Panier reçu','Enregistré','Relance +1h','Relance +24h'],
+    scenarios:{ '1 bouteille':{customerEmail:'lea.mercier@example.com',totalAmount:48,
+        items:[{productId:2036,name:'Gevrey-Chambertin 2020',price:48,quantity:1}]},
+      'Panier multi':{customerEmail:'pierre.dubois@example.com',totalAmount:85,
+        items:[{productId:2035,name:'Bourgogne Pinot Noir 2022',price:18.5,quantity:2},
+          {productId:2036,name:'Gevrey-Chambertin 2020',price:48,quantity:1}]} },
+    call:async p=>{ const r=await api('POST','/cart-recovery/abandon',p);
+      const c=r.body&&r.body.cart; if(c&&c.id){lastCartId=c.id;} refreshStatus(); return r; },
+    view:b=>{ const c=b.cart||{}; const items=(c.items||[]).map(i=>`<div class="kv"><span class="k">${i.quantity}×</span><span>${esc(i.name)} — ${eur(i.price)}</span></div>`).join('');
+      return `<div class="kv"><span class="k">Panier</span><span>#${c.id} · total ${eur(c.totalAmount)}</span></div>${items}
+      <div class="timeline"><div class="ev"><span class="t">+1h</span><span class="badge b-info">relance 1 programmée</span></div>
+      <div class="ev"><span class="t">+24h</span><span class="badge b-info">relance 2 programmée (–10%)</span></div></div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Panier #${c.id} mémorisé pour la relance manuelle ci-dessous.</p>`; },
+  },
+  {
+    id:'reminder', title:'Relance panier (manuelle)', engine:'cart-recovery/:id/send-reminder',
+    desc:"Force l'envoi d'une relance sur le dernier panier créé, sans attendre le délai.",
+    flow:['Panier ciblé','Message rédigé','Envoi'],
+    scenarios:{ 'Relance étape 1':{step:1}, 'Relance étape 2 (–10%)':{step:2} },
+    call:p=> lastCartId ? api('POST',`/cart-recovery/${lastCartId}/send-reminder`,p)
+      : Promise.resolve({ok:false,status:0,body:{error:"Crée d'abord un panier ci-dessus"},ms:0}),
+    view:b=>{ const r=b.reminder||{}; const st=(b.email&&b.email.status)||'?';
+      return `<div class="email-preview"><div class="eh">Objet : ${esc(r.subject||'—')} · canal ${esc(r.channel||'EMAIL')}</div>
+      <div class="eb">${esc(r.body||'')}</div></div>
+      <div style="margin-top:8px">${statusBadge(st)}</div>`; },
+  },
+  {
+    id:'order', title:'Statut de commande', engine:'PATCH orders/:id/status',
+    desc:"Change le statut d'une commande. 'Livrée' notifie le client et programme la demande d'avis.",
+    flow:['Statut changé','Message client','Notification','Suite éventuelle'],
+    scenarios:{ 'Expédiée':{_id:14,status:'shipped',carrier:'Colissimo',trackingNumber:'6A12345678901'},
+      'Livrée → avis':{_id:14,status:'delivered'}, 'Confirmée':{_id:14,status:'confirmed'} },
+    call:p=>{ const {_id,...body}=p; return api('PATCH',`/orders/${_id}/status`,body); },
+    view:b=>{ const o=b.order||{}; const n=b.notification||{};
+      let extra=''; if(b.reviewRequestId) extra=`<div class="ev"><span class="t">suite</span><span class="badge b-ok">demande d'avis programmée</span></div>`;
+      return `<div class="kv"><span class="k">Commande</span><span>${esc(o.orderNumber||'')} → <span class="badge b-info">${esc(o.status)}</span></span></div>
+      <div class="bubble" style="margin-top:6px">${esc(n.message||'')}</div>
+      <div class="timeline"><div class="ev"><span class="t">${esc(n.channel||'—')}</span>${statusBadge((b.email&&b.email.status)||(b.sms&&b.sms.status)||'?')}</div>${extra}</div>`; },
+  },
+  {
+    id:'sav', title:'Ticket SAV', engine:'sav/tickets · BullMQ',
+    desc:"Crée un ticket. Selon la priorité, l'escalade est programmée.",
+    flow:['Demande reçue','Ticket créé','Escalade planifiée'],
+    scenarios:{ 'Colis cassé (haute)':{customerId:13,type:'product_defect',priority:'high',description:'Bouteille arrivée brisée, carton détrempé.',source:'mail'},
+      'Question (normale)':{customerId:11,type:'question',priority:'normal',description:'Quelle est la durée de garde du Gevrey ?',source:'chat'},
+      'Remboursement':{customerId:12,type:'refund',priority:'high',description:'Je souhaite être remboursé, commande non conforme.',source:'manual'} },
+    call:p=>api('POST','/sav/tickets',p),
+    view:b=>{ const t=b.ticket||{};
+      return `<div class="kv"><span class="k">Ticket</span><span class="mono">${esc(t.requestNumber||('#'+t.id))}</span></div>
+      <div class="kv"><span class="k">Type</span><span>${esc(t.type)}</span></div>
+      <div class="kv"><span class="k">Statut</span><span>${statusBadge(t.status)}</span></div>`; },
+  },
+  {
+    id:'mail', title:'Triage mail entrant', engine:'mail/classify · IA', slow:true,
+    desc:"Classe le mail (catégorie, urgence, sentiment), rédige un brouillon, le met en file. Réclamation → ticket SAV.",
+    flow:['Mail reçu','Classé','Brouillon rédigé','En file'],
+    scenarios:{ 'Réclamation':{fromAddr:'client@example.com',subject:'Commande pas reçue',body:"J'ai commandé il y a 10 jours et toujours rien. C'est inadmissible."},
+      'Question simple':{fromAddr:'client@example.com',subject:'Conseil accord',body:'Quel vin avec un plateau de fromages ? Merci.'},
+      'Avis positif':{fromAddr:'client@example.com',subject:'Merci !',body:'Livraison parfaite et vin excellent, bravo.'} },
+    call:p=>api('POST','/mail/classify',p),
+    view:b=>`<div>${tagBadge('catégorie',b.category)}${tagBadge('urgence',b.urgency,badgeFor.urgency)}${tagBadge('sentiment',b.sentiment,badgeFor.sentiment)}</div>
+      ${b.summary?`<p class="muted" style="font-size:13px;margin:8px 0 0">${esc(b.summary)}</p>`:''}
+      <div class="email-preview"><div class="eh">Brouillon de réponse (à valider)</div><div class="eb">${esc(b.draftResponse||'')}</div></div>`,
+  },
+  {
+    id:'outbound', title:'Campagne marketing', engine:'outbound/generate · IA', slow:true,
+    desc:"Génère le contenu d'une campagne à partir d'un brief, dans la voix de la boutique.",
+    flow:['Brief reçu','Génération IA','Brouillon prêt'],
+    scenarios:{ 'Promo week-end':{prompt:'Promo -15% sur les vins de Loire ce week-end',format:'ads'},
+      'Newsletter':{prompt:'Newsletter de juin : nouveautés et conseils accords',format:'newsletter'},
+      'Post Insta':{prompt:'Post Instagram pour le nouveau Gevrey-Chambertin',format:'social'} },
+    call:p=>api('POST','/outbound/generate',p),
+    view:b=>{ const c=b.campaign||{}; const ct=c.content||{}; const variants=ct.variants||ct.posts||(Array.isArray(ct)?ct:[ct]);
+      const cards=(variants||[]).slice(0,3).map(v=>`<div class="email-preview"><div class="eh">${esc(v.headline||v.subject||v.title||c.format||'variante')}</div>
+        <div class="eb">${esc(v.body||v.text||v.caption||JSON.stringify(v))}</div>${v.cta?`<div class="eh" style="border-top:1px solid var(--line);border-bottom:none">CTA : ${esc(v.cta)}</div>`:''}</div>`).join('');
+      return `<div>${tagBadge('format',c.format)}<span class="badge b-mut">généré en ${c.metrics?Math.round((c.metrics.generationMs||0)/1000):'?'}s</span></div>${cards}`; },
+  },
+  {
+    id:'review', title:"Demande d'avis", engine:'reviews/request · BullMQ',
+    desc:"Programme une demande d'avis pour une commande livrée. delayHours=0 = immédiat.",
+    flow:['Commande ciblée','Demande créée','Envoi programmé'],
+    scenarios:{ 'Immédiate':{orderId:13,customerId:11,delayHours:0}, 'Dans 48h':{orderId:13,customerId:11,delayHours:48} },
+    call:p=>api('POST','/reviews/request',p),
+    view:b=>`<div class="kv"><span class="k">Demande</span><span class="mono">${esc(b.token||b.id||'')}</span></div>
+      <div class="kv"><span class="k">Statut</span><span>${statusBadge(b.status||'PENDING')}</span></div>
+      ${b.scheduledAt?`<div class="kv"><span class="k">Programmée</span><span>${esc(new Date(b.scheduledAt).toLocaleString('fr-FR'))}</span></div>`:''}`,
+  },
+  {
+    id:'holdout', title:'Décision holdout', engine:'holdout/decision · public',
+    desc:"Pour un visiteur, dit s'il est témoin (control) ou traité. Déterministe par id. Change l'id pour voir basculer.",
+    flow:['Visiteur','Bucket calculé','Groupe assigné'],
+    scenarios:{ 'Visiteur A':{visitorId:'vid_test_aaa'}, 'Visiteur B':{visitorId:'vid_test_bbbbbb'}, 'Visiteur C':{visitorId:'vid_test_ccccccccc'} },
+    call:p=>api('GET',`/holdout/decision?store=4&visitorId=${encodeURIComponent(p.visitorId)}`),
+    view:b=>{ const ctrl=b.control; return `<div class="holdout-box ${ctrl?'control':'treat'}">
+      <div class="big">${ctrl?'TÉMOIN':'TRAITÉ'}</div>
+      <div class="muted" style="font-size:13px;margin-top:4px">${ctrl?'widget caché (groupe de contrôle)':'widget visible (voit Shimmer)'}</div>
+      <div class="muted" style="font-size:12px;margin-top:8px">bucket ${b.bucket} / 100 · holdout ${b.holdoutPct}%</div></div>`; },
+  },
+  {
+    id:'proof', title:'Preuve par module', engine:'holdout/proof · auth',
+    desc:"L'effet de chaque brique, mesuré séparément : relances (par panier), vendeur (chercheurs seulement), SAV et avis (compteurs directs). La facturation s'assoit sur la somme des effets prouvés.",
+    flow:['Données lues','Lift par module','Facturation calculée'],
+    scenarios:{ 'Depuis le début':{}, '30 derniers jours':{days:30}, '7 derniers jours':{days:7} },
+    call:p=>{ const q=p.days?`?from=${encodeURIComponent(new Date(Date.now()-p.days*86400000).toISOString())}`:'';
+      return api('GET',`/holdout/proof${q}`); },
+    view:b=>{ const m=b.modules||{}, r=m.relances||{}, v=m.vendeur||{}, s=m.sav||{}, av=m.avis||{}, bil=b.billing||{};
+      const state=l=>l&&l.significant?`<span class="badge b-ok">prouvé · P ${Math.round((l.pUpliftAboveThreshold||0)*100)}%</span>`
+        :`<span class="badge b-warn">en mesure · P ${Math.round(((l||{}).pUpliftAboveThreshold||0)*100)}%</span>`;
+      return `
+      <div class="kv"><span class="k">Relances ${state(r.lift)}</span><span>${r.treatedCarts??0} relancés (${r.treatedRecoveryRatePct??0}%) vs ${r.controlCarts??0} témoins (${r.controlRecoveryRatePct??0}%)</span></div>
+      <div class="kv"><span class="k">· récupérés après relance</span><span>${r.recoveredAfterReminder??0} paniers · ${r.recoveredAfterReminderEUR??0} €</span></div>
+      <div class="kv"><span class="k">Vendeur ${state(v.lift)}</span><span>${v.enrolledTreated??0} chercheurs traités vs ${v.enrolledControl??0} témoins · écart ${(v.lift||{}).absoluteLiftEUR??0} €/visiteur</span></div>
+      <div class="kv"><span class="k">SAV</span><span>${s.resolus??0}/${s.tickets??0} tickets résolus (${s.tauxResolutionPct??0}%)</span></div>
+      <div class="kv"><span class="k">Avis</span><span>${av.collectes??0} collectés · ${av.negatifsInterceptes??0} négatifs interceptés</span></div>
+      <div class="kv"><span class="k">CA prouvé</span><span><strong>${bil.provenIncrementalEUR??0} €</strong> ${bil.modulesProven&&bil.modulesProven.length?`(${bil.modulesProven.join(' + ')})`:'(aucun module significatif encore)'}</span></div>
+      <div class="kv"><span class="k">Facture</span><span>${bil.floorEUR??89} € + ${bil.variableFeeEUR??0} € variable${bil.capEUR===null?' · sans plafond':''} = <strong>${bil.monthlyTotalEUR??89} €</strong></span></div>`; },
+  },
+];
+
+function statusBadge(s){ s=String(s||'').toLowerCase();
+  if(['sent','resolved','closed','completed','ok'].includes(s)) return `<span class="badge b-ok">${esc(s)}</span>`;
+  if(['mock','queued','pending','open','draft','active'].includes(s)) return `<span class="badge b-warn">${esc(s)} ${s==='mock'?'(non envoyé)':''}</span>`;
+  if(['failed','error'].includes(s)) return `<span class="badge b-err">${esc(s)}</span>`;
+  return `<span class="badge b-mut">${esc(s)}</span>`; }
+function tagBadge(label,val,map){ if(val==null) return ''; const cls=(map&&map[val])||'b-info';
+  return `<span class="badge ${cls}">${esc(label)} : ${esc(val)}</span>`; }
+
+// ── build cards ───────────────────────────────────────────
+const root = document.getElementById('cards');
+for (const a of automations) {
+  const card = document.createElement('section'); card.className='card';
+  card.innerHTML = `
+    <div class="head">
+      <div class="engine">${esc(a.engine)}${a.slow?'<span class="slow">⏱ IA 30–60s</span>':''}</div>
+      <h3>${esc(a.title)}</h3>
+      <p class="desc">${esc(a.desc)}</p>
+    </div>
+    <div class="scenarios"></div>
+    <div class="actions"><button class="run">Lancer</button><span class="editlink">modifier les données</span></div>
+    <div class="payload"><textarea spellcheck="false"></textarea></div>
+    <div class="flow"></div>
+    <div class="result"></div>`;
+  const scWrap=card.querySelector('.scenarios'), ta=card.querySelector('textarea'),
+    runBtn=card.querySelector('.run'), editLink=card.querySelector('.editlink'),
+    payload=card.querySelector('.payload'), flowEl=card.querySelector('.flow'), resEl=card.querySelector('.result');
+  const keys=Object.keys(a.scenarios);
+  function sel(k,btn){ scWrap.querySelectorAll('button').forEach(b=>b.classList.remove('sel')); if(btn)btn.classList.add('sel');
+    ta.value=JSON.stringify(a.scenarios[k],null,2); }
+  keys.forEach((k,i)=>{ const b=document.createElement('button'); b.textContent=k; b.onclick=()=>sel(k,b);
+    scWrap.appendChild(b); if(i===0) sel(k,b); });
+  editLink.onclick=()=>{ payload.style.display = payload.style.display==='block'?'none':'block'; };
+
+  function drawFlow(state){ // state: array of 'idle'|'run'|'done'|'err'
+    flowEl.innerHTML = a.flow.map((label,i)=>{
+      const st=state[i]||'idle'; const ic = st==='done'?'✓':st==='err'?'✕':i+1;
+      const node=`<div class="node ${st}"><span class="ic">${ic}</span>${esc(label)}</div>`;
+      return node + (i<a.flow.length-1?'<span class="arrow">→</span>':'');
+    }).join('');
+  }
+  runBtn.onclick=async ()=>{
+    let p; try{ p=JSON.parse(ta.value); }catch(e){ resEl.classList.add('show'); resEl.innerHTML=`<div class="err-line">JSON invalide : ${esc(e.message)}</div>`; return; }
+    runBtn.disabled=true; const orig=runBtn.textContent; runBtn.textContent='…';
+    const state=a.flow.map(()=>'idle'); state[0]='run'; drawFlow(state);
+    // animate nodes "running" while we await
+    let step=0; const tick=setInterval(()=>{ if(step<a.flow.length-1){ state[step]='done'; state[++step]='run'; drawFlow(state); } }, a.slow?500:180);
+    let r; try{ r=await a.call(p); }catch(e){ r={ok:false,status:0,body:{error:e.message},ms:0}; }
+    clearInterval(tick);
+    if(r.ok){ a.flow.forEach((_,i)=>state[i]='done'); drawFlow(state);
+      resEl.classList.add('show');
+      let html=''; try{ html=a.view(r.body); }catch(e){ html=`<div class="err-line">rendu impossible : ${esc(e.message)}</div>`; }
+      resEl.innerHTML = html + `<details class="raw"><summary>JSON brut · ${r.status} · ${r.ms}ms</summary><pre>${esc(JSON.stringify(r.body,null,2))}</pre></details>`;
+    } else {
+      state[step]='err'; drawFlow(state); resEl.classList.add('show');
+      const msg=(r.body&&(r.body.error||(r.body.details&&JSON.stringify(r.body.details))))||r.status;
+      resEl.innerHTML=`<div class="err-line">Échec (${r.status}) : ${esc(msg)}</div>
+        <details class="raw"><summary>JSON brut</summary><pre>${esc(JSON.stringify(r.body,null,2))}</pre></details>`;
+    }
+    refreshStatus(); runBtn.disabled=false; runBtn.textContent=orig;
+  };
+  root.appendChild(card);
+}
+refreshStatus(); setInterval(refreshStatus, 20000);
+</script>
+</body>
+</html>

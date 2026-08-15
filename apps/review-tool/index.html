@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Shimmer — Review interactive</title>
+<style>
+  :root {
+    --ink: #0d0b14;
+    --ink-2: #14111d;
+    --paper: #f4f2ec;
+    --acid: #d4ff3a;
+    --acid-deep: #b8e024;
+    --muted: rgba(244,242,236,0.55);
+    --line: rgba(244,242,236,0.12);
+    --rose: #fb7185;
+    --amber: #fbbf24;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--ink);
+    color: var(--paper);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+  /* progress bar */
+  #progress {
+    position: fixed; top: 0; left: 0; height: 3px; width: 0%;
+    background: var(--acid); z-index: 100; transition: width 0.3s ease;
+    box-shadow: 0 0 12px rgba(212,255,58,0.6);
+  }
+
+  header.hero {
+    padding: 120px 0 80px; border-bottom: 1px solid var(--line);
+    background: radial-gradient(ellipse at 30% 0%, rgba(212,255,58,0.06), transparent 60%);
+  }
+  .eyebrow { font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--acid); }
+  h1 { font-size: clamp(40px, 7vw, 88px); line-height: 0.92; letter-spacing: -0.02em; margin-top: 20px; font-weight: 500; }
+  h1 .it { font-style: italic; color: var(--acid); }
+  .lede { margin-top: 28px; max-width: 56ch; font-size: 18px; color: var(--muted); }
+
+  section.block { padding: 72px 0; border-bottom: 1px solid var(--line); }
+  .sec-num { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); }
+  h2 { font-size: clamp(28px, 4vw, 44px); line-height: 1; letter-spacing: -0.01em; margin-top: 12px; font-weight: 500; }
+  h2 .it { font-style: italic; color: var(--acid); }
+  .desc { margin-top: 16px; max-width: 60ch; color: var(--muted); font-size: 15px; }
+
+  .card { background: var(--ink-2); border: 1px solid var(--line); border-radius: 16px; padding: 24px; margin-top: 24px; }
+  .label { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); }
+
+  /* chat demo */
+  .chat-presets { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .preset {
+    background: rgba(244,242,236,0.04); border: 1px solid var(--line); color: var(--paper);
+    border-radius: 999px; padding: 8px 14px; font-size: 13px; cursor: pointer; transition: 0.15s;
+  }
+  .preset:hover { border-color: var(--acid); color: var(--acid); }
+  .chat-input-row { display: flex; gap: 8px; margin-top: 16px; }
+  .chat-input-row input {
+    flex: 1; background: rgba(0,0,0,0.4); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; color: var(--paper); font-size: 14px; outline: none;
+  }
+  .chat-input-row input:focus { border-color: var(--acid); }
+  .btn {
+    background: var(--acid); color: var(--ink); border: none; border-radius: 999px;
+    padding: 12px 22px; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    cursor: pointer; transition: 0.15s; font-weight: 600;
+  }
+  .btn:hover { background: var(--acid-deep); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-ghost { background: transparent; border: 1px solid var(--line); color: var(--paper); }
+  .btn-ghost:hover { border-color: var(--acid); color: var(--acid); background: transparent; }
+
+  .chat-thread { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+  .bubble { padding: 12px 16px; border-radius: 14px; max-width: 80%; font-size: 14px; white-space: pre-wrap; }
+  .bubble.user { align-self: flex-end; background: var(--acid); color: var(--ink); }
+  .bubble.bot { align-self: flex-start; background: rgba(244,242,236,0.06); border: 1px solid var(--line); }
+  .products { margin-top: 12px; display: grid; gap: 8px; }
+  .prod {
+    display: flex; justify-content: space-between; gap: 12px; align-items: baseline;
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; background: rgba(0,0,0,0.25);
+  }
+  .prod .pname { font-size: 14px; }
+  .prod .pmeta { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+  .prod .pprice { font-size: 16px; color: var(--acid); white-space: nowrap; }
+  .thinking { font-size: 13px; color: var(--muted); font-style: italic; }
+
+  /* verdict buttons */
+  .verdict-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+  .verdict {
+    border: 1px solid var(--line); background: rgba(244,242,236,0.02); color: var(--paper);
+    border-radius: 10px; padding: 12px 18px; font-size: 14px; cursor: pointer; transition: 0.15s; flex: 1; min-width: 120px; text-align: center;
+  }
+  .verdict:hover { border-color: rgba(244,242,236,0.4); }
+  .verdict.sel-good { border-color: var(--acid); background: rgba(212,255,58,0.12); color: var(--acid); }
+  .verdict.sel-mid  { border-color: var(--amber); background: rgba(251,191,36,0.12); color: var(--amber); }
+  .verdict.sel-bad  { border-color: var(--rose); background: rgba(251,113,133,0.12); color: var(--rose); }
+
+  textarea {
+    width: 100%; margin-top: 14px; background: rgba(0,0,0,0.4); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; color: var(--paper); font-size: 14px; outline: none;
+    resize: vertical; min-height: 80px; font-family: inherit;
+  }
+  textarea:focus { border-color: var(--acid); }
+
+  .ext-link {
+    display: inline-flex; align-items: center; gap: 8px; margin-top: 16px;
+    border: 1px solid var(--line); border-radius: 999px; padding: 10px 18px; color: var(--paper);
+    text-decoration: none; font-size: 13px; transition: 0.15s;
+  }
+  .ext-link:hover { border-color: var(--acid); color: var(--acid); }
+  iframe { width: 100%; height: 520px; border: 1px solid var(--line); border-radius: 14px; margin-top: 16px; background: #000; }
+
+  .script-box { background: rgba(0,0,0,0.35); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-top: 16px; font-size: 13.5px; white-space: pre-wrap; line-height: 1.6; }
+  .script-box .k { color: var(--acid); }
+
+  .choice-group { margin-top: 22px; }
+  .choice-q { font-size: 15px; margin-bottom: 10px; }
+  .choice-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .choice {
+    border: 1px solid var(--line); background: rgba(244,242,236,0.02); color: var(--paper);
+    border-radius: 999px; padding: 9px 16px; font-size: 13px; cursor: pointer; transition: 0.15s;
+  }
+  .choice:hover { border-color: rgba(244,242,236,0.4); }
+  .choice.sel { border-color: var(--acid); background: rgba(212,255,58,0.12); color: var(--acid); }
+
+  .submit-bar { padding: 80px 0 140px; text-align: center; }
+  .submit-bar .btn { font-size: 14px; padding: 18px 40px; }
+  .saved-note { margin-top: 16px; font-size: 13px; color: var(--acid); min-height: 20px; }
+  .autosave { position: fixed; bottom: 16px; right: 16px; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); background: var(--ink-2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; opacity: 0; transition: opacity 0.3s; }
+  .autosave.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<div class="autosave" id="autosave">Sauvegardé</div>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Shimmer · Review interactive</div>
+    <h1>On regarde <span class="it">tout</span>,<br/>tu tranches.</h1>
+    <p class="lede">Je te montre chaque morceau de Shimmer. Tu testes, tu cliques ton verdict, tu écris ton avis. À la fin tu envoies, je lis tout et on sait exactement où on en est. Tes réponses sont sauvegardées au fil de l'eau, tu peux fermer et revenir.</p>
+  </div>
+</header>
+
+<!-- 1. VENDEUR IA -->
+<section class="block" data-section>
+  <div class="wrap">
+    <div class="sec-num">01 · Le cœur du produit</div>
+    <h2>Le <span class="it">vendeur IA</span></h2>
+    <p class="desc">C'est LE produit. Parle-lui comme un client de caviste. Il cherche dans le vrai catalogue de Caves Forty-Two (80 bouteilles) et recommande de vraies bouteilles en stock. Clique un exemple ou tape ta question. Verdict simple : assez bon pour qu'un caviste paie, ou pas.</p>
+
+    <div class="card">
+      <div class="label">Démo live · Caves Forty-Two</div>
+      <div class="chat-presets" id="presets"></div>
+      <div class="chat-input-row">
+        <input id="chatInput" type="text" placeholder="un blanc pour des huîtres, un cadeau à 40 balles..." />
+        <button class="btn" id="chatSend">Demander</button>
+      </div>
+      <div class="chat-thread" id="thread"></div>
+    </div>
+
+    <div class="verdict-row" data-verdict="vendeur">
+      <div class="verdict" data-v="good">Assez bon pour vendre</div>
+      <div class="verdict" data-v="mid">Presque, à peaufiner</div>
+      <div class="verdict" data-v="bad">Faut bosser avant</div>
+    </div>
+    <textarea data-comment="vendeur" placeholder="Qu'est-ce qui marche, qu'est-ce qui cloche dans les réponses ?"></textarea>
+  </div>
+</section>
+
+<!-- 2. PAGE AVIS -->
+<section class="block" data-section>
+  <div class="wrap">
+    <div class="sec-num">02 · Collecte d'avis</div>
+    <h2>La page <span class="it">d'avis client</span></h2>
+    <p class="desc">Ce que reçoit le client 48h après livraison. Note globale, note par produit, livraison, recommandation. Ouvre-la, remplis-la pour voir le parcours complet jusqu'au merci.</p>
+    <a class="ext-link" href="/shimmer/review/?token=rr_demo_tool" target="_blank" rel="noopener">Ouvrir la page d'avis ↗</a>
+    <iframe src="/shimmer/review/?token=rr_demo_tool" title="Page avis" loading="lazy"></iframe>
+    <div class="verdict-row" data-verdict="avis">
+      <div class="verdict" data-v="good">Clean, ça part</div>
+      <div class="verdict" data-v="mid">OK mais à ajuster</div>
+      <div class="verdict" data-v="bad">À refaire</div>
+    </div>
+    <textarea data-comment="avis" placeholder="UX, ton, ce qui manque ?"></textarea>
+  </div>
+</section>
+
+<!-- 3. DASHBOARD -->
+<section class="block" data-section>
+  <div class="wrap">
+    <div class="sec-num">03 · Côté marchand</div>
+    <h2>Le <span class="it">dashboard</span></h2>
+    <p class="desc">L'admin que voit le caviste : vue d'ensemble, catalogue, inbox mail, SAV, avis, commandes, paniers, campagnes, config, intégration. Connecte-toi avec la clé de démo Caves Forty-Two (demande-la à Tym).</p>
+    <a class="ext-link" href="/shimmer/admin/" target="_blank" rel="noopener">Ouvrir le dashboard ↗</a>
+    <div class="verdict-row" data-verdict="dashboard">
+      <div class="verdict" data-v="good">La bonne info, bien rangée</div>
+      <div class="verdict" data-v="mid">Trop / pas assez</div>
+      <div class="verdict" data-v="bad">À repenser</div>
+    </div>
+    <textarea data-comment="dashboard" placeholder="Qu'est-ce qu'un caviste regarderait en premier ? Qu'est-ce qui est en trop ?"></textarea>
+  </div>
+</section>
+
+<!-- 4. SITE -->
+<section class="block" data-section>
+  <div class="wrap">
+    <div class="sec-num">04 · La vitrine</div>
+    <h2>Le <span class="it">site</span></h2>
+    <p class="desc">La page d'accueil qu'un caviste verra en premier. Hero, scroll narratif, les modules, l'intégration. Juge l'impression générale : ça inspire confiance à un commerçant ?</p>
+    <a class="ext-link" href="/shimmer/" target="_blank" rel="noopener">Ouvrir le site ↗</a>
+    <iframe src="/shimmer/" title="Site Shimmer" loading="lazy"></iframe>
+    <div class="verdict-row" data-verdict="site">
+      <div class="verdict" data-v="good">Ça inspire confiance</div>
+      <div class="verdict" data-v="mid">Correct, à serrer</div>
+      <div class="verdict" data-v="bad">Ça fait pas pro</div>
+    </div>
+    <textarea data-comment="site" placeholder="Première impression, ce qui accroche, ce qui sonne faux ?"></textarea>
+  </div>
+</section>
+
+<!-- 5. DECISIONS CHIFFREES -->
+<section class="block" data-section>
+  <div class="wrap">
+    <div class="sec-num">05 · Décisions chiffrées</div>
+    <h2>Le <span class="it">pricing</span> et le plan</h2>
+    <p class="desc">Les nombres qu'on a posés. Tu valides ou tu bouges. Chaque choix change ce que je code et ce que tu vends.</p>
+
+    <div class="card">
+      <div class="choice-group">
+        <div class="choice-q">Forfait fixe : <b>89 €/mois</b> (couvre ton temps + infra avant que le variable se déclenche)</div>
+        <div class="choice-row" data-choice="floor">
+          <div class="choice" data-c="valide">89 € validé</div>
+          <div class="choice" data-c="bas">Trop bas</div>
+          <div class="choice" data-c="haut">Trop haut</div>
+        </div>
+      </div>
+      <div class="choice-group">
+        <div class="choice-q">Plafond de la facture : <b>267 €</b> (3× le floor, lisibilité à la signature)</div>
+        <div class="choice-row" data-choice="cap">
+          <div class="choice" data-c="valide">267 € validé</div>
+          <div class="choice" data-c="bouger">À bouger</div>
+        </div>
+      </div>
+      <div class="choice-group">
+        <div class="choice-q">Part variable : <b>5 % de l'incrémental prouvé</b>, facturé M-1</div>
+        <div class="choice-row" data-choice="variable">
+          <div class="choice" data-c="valide">5 % validé</div>
+          <div class="choice" data-c="bouger">À bouger</div>
+        </div>
+      </div>
+      <div class="choice-group">
+        <div class="choice-q">Seuil de déclenchement : variable active quand <b>P(uplift > X%) > 0.95</b>. Valeur de X par défaut ?</div>
+        <div class="choice-row" data-choice="seuil">
+          <div class="choice" data-c="3">3 % (déclenche plus tôt)</div>
+          <div class="choice" data-c="5">5 % (plus prudent)</div>
+        </div>
+      </div>
+      <div class="choice-group">
+        <div class="choice-q">Le holdout : on code la méca <b>maintenant</b> en parallèle du sourcing, ou on <b>attend le premier caviste signé</b> ?</div>
+        <div class="choice-row" data-choice="holdout">
+          <div class="choice" data-c="now">Coder maintenant</div>
+          <div class="choice" data-c="wait">Attendre le 1er client</div>
+        </div>
+      </div>
+      <div class="choice-group">
+        <div class="choice-q">Cors'Air Aventure en dogfood technique : tu l'installes quand ?</div>
+        <div class="choice-row" data-choice="corsair">
+          <div class="choice" data-c="now">Cette semaine</div>
+          <div class="choice" data-c="later">Plus tard</div>
+          <div class="choice" data-c="unsure">Pas sûr</div>
+        </div>
+      </div>
+    </div>
+    <textarea data-comment="pricing" placeholder="Doutes, ajustements, contraintes que je ne connais pas ?"></textarea>
+  </div>
+</section>
+
+<!-- 6. POSITIONNEMENT -->
+<section class="block" data-section>
+  <div class="wrap">
+    <div class="sec-num">06 · Stratégie</div>
+    <h2>Le <span class="it">positionnement</span></h2>
+    <div class="card">
+      <div class="choice-group">
+        <div class="choice-q">Niche de lancement : <b>cavistes en ligne FR</b>. On commit, ou on garde de l'optionalité horizontale ?</div>
+        <div class="choice-row" data-choice="niche">
+          <div class="choice" data-c="lock">Locked sur cavistes</div>
+          <div class="choice" data-c="open">Garder optionalité</div>
+        </div>
+      </div>
+      <div class="choice-group">
+        <div class="choice-q">Le pitch "tu paies si je prouve par holdout" : tenable face à un caviste sceptique ?</div>
+        <div class="choice-row" data-choice="pitch">
+          <div class="choice" data-c="yes">Oui, ça tient</div>
+          <div class="choice" data-c="flaw">Je sens une faille</div>
+        </div>
+      </div>
+      <div class="choice-group">
+        <div class="choice-q">Distribution : démarchage direct des cavistes, ou via les intégrateurs Shopify/Woo (genre Clearpath) ?</div>
+        <div class="choice-row" data-choice="distrib">
+          <div class="choice" data-c="direct">Direct</div>
+          <div class="choice" data-c="integ">Via intégrateurs</div>
+          <div class="choice" data-c="both">Les deux</div>
+        </div>
+      </div>
+    </div>
+    <textarea data-comment="strategie" placeholder="Ton instinct sur la go-to-market ?"></textarea>
+  </div>
+</section>
+
+<!-- 7. LIVRABLES -->
+<section class="block" data-section>
+  <div class="wrap">
+    <div class="sec-num">07 · Prêt à expédier</div>
+    <h2>Le <span class="it">mail</span> et le <span class="it">Loom</span></h2>
+    <p class="desc">Les deux pièces d'outreach calibrées caviste. Bon à envoyer, ou tu changes quoi.</p>
+
+    <div class="script-box"><span class="k">SUBJECT</span> : Question pour [boutique]  ·  Vos visiteurs trouvent-ils la bonne bouteille ?  ·  [Prénom], j'ai regardé [boutique]
+
+Bonjour [Prénom],
+
+J'ai parcouru [boutique] en cherchant des cavistes en ligne qui font vraiment du conseil. [Élément spécifique observé sur leur site]. Ça soulève une question concrète : combien de visiteurs partent sans avoir trouvé la bouteille qui leur allait, faute d'avoir pu poser leurs questions ?
+
+Shimmer est un vendeur en ligne que j'ai conçu pour les cavistes. Il connaît votre catalogue et répond comme vous le feriez en magasin. Le visiteur tape "un rouge pour un repas avec du gibier", il reçoit trois bouteilles de votre stock avec le pourquoi de chacune.
+
+Ce qui change avec les outils du marché : on mesure l'effet réel par holdout. 10 % des visiteurs sont tirés au sort comme groupe témoin et ne voient pas le vendeur. On compare leur panier moyen avec celui des 90 % exposés. La différence est l'incrémentalité réelle, pas une attribution last-click gonflée.
+
+Forfait fixe sous 100 €/mois, et une part variable qui ne se déclenche que si l'effet est statistiquement prouvé.
+
+Démo 2 minutes sur une boutique de vin : [Loom]
+
+15 minutes en visio cette semaine si c'est utile.
+
+Tym Mercier</div>
+
+    <div class="script-box"><span class="k">LOOM ~2 min sur Caves Forty-Two</span>
+
+[0:00] Home → "Un visiteur arrive sans savoir quoi prendre. Deux options : défiler 80 fiches, ou partir. Avec Shimmer, une troisième."
+[0:08] Chat live → tape "J'ai un repas de famille avec du boeuf, qu'est-ce que tu me conseilles ?" → reco Saint-Émilion réelle, en stock, prix exact.
+[0:32] Voice config 8s → "Le ton vient des réglages du caviste : tu/vous, signature, vocabulaire."
+[0:42] Dashboard → revenu, commandes, conversion.
+[0:55] Holdout 30s → "10 % en témoin, on compare, la différence est l'effet réel. Une fourchette qui se resserre semaine après semaine. Tant que c'est pas net, vous payez que le forfait."
+[1:30] Install + CTA → "Trois lignes à coller, trente minutes ensemble, je m'occupe de tout. Le jour où c'est prouvé, 5 % plafonné. Lien dans le mail."</div>
+
+    <div class="verdict-row" data-verdict="livrables">
+      <div class="verdict" data-v="good">Bon à expédier</div>
+      <div class="verdict" data-v="mid">À retoucher</div>
+      <div class="verdict" data-v="bad">À refaire</div>
+    </div>
+    <textarea data-comment="livrables" placeholder="Ce que tu changes dans le mail ou le Loom avant d'envoyer ?"></textarea>
+  </div>
+</section>
+
+<!-- 8. SUBMIT -->
+<section class="block" data-section style="border-bottom:none;">
+  <div class="wrap">
+    <div class="sec-num">08 · Le mot de la fin</div>
+    <h2>Ta <span class="it">priorité</span> à toi</h2>
+    <p class="desc">En un mot : c'est quoi la prochaine chose que je devrais coder ou préparer pour toi ? Et ton ressenti global sur où en est Shimmer.</p>
+    <textarea data-comment="priorite" placeholder="La prochaine action concrète + ton ressenti global"></textarea>
+  </div>
+</section>
+
+<div class="submit-bar">
+  <button class="btn" id="submitBtn">Envoyer ma review</button>
+  <div class="saved-note" id="savedNote"></div>
+</div>
+
+<script>
+const STORAGE_KEY = 'shimmer.review.v1';
+const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+state.verdicts = state.verdicts || {};
+state.choices = state.choices || {};
+state.comments = state.comments || {};
+
+const PRESETS = [
+  "un blanc pour des huîtres",
+  "un rouge pas cher pour un barbecue",
+  "un cadeau à 40 balles pour un amateur",
+  "quelque chose de original à offrir",
+  "un vin pour accompagner un fromage fort",
+];
+
+let chatSession = null;
+
+// --- progress bar ---
+function updateProgress() {
+  const h = document.documentElement;
+  const pct = (h.scrollTop) / (h.scrollHeight - h.clientHeight) * 100;
+  document.getElementById('progress').style.width = pct + '%';
+}
+window.addEventListener('scroll', updateProgress);
+
+// --- autosave indicator ---
+let saveTimer = null;
+function persist() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const el = document.getElementById('autosave');
+  el.classList.add('show');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => el.classList.remove('show'), 1200);
+}
+
+// --- presets ---
+const presetWrap = document.getElementById('presets');
+PRESETS.forEach(p => {
+  const b = document.createElement('button');
+  b.className = 'preset';
+  b.textContent = p;
+  b.onclick = () => { document.getElementById('chatInput').value = p; sendChat(); };
+  presetWrap.appendChild(b);
+});
+
+// --- chat ---
+const thread = document.getElementById('thread');
+function addBubble(text, who) {
+  const d = document.createElement('div');
+  d.className = 'bubble ' + who;
+  d.textContent = text;
+  thread.appendChild(d);
+  return d;
+}
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  addBubble(msg, 'user');
+  const thinking = document.createElement('div');
+  thinking.className = 'thinking';
+  thinking.textContent = 'Le vendeur réfléchit (le LLM tourne en local, ça peut prendre 30-60 s)...';
+  thread.appendChild(thinking);
+  document.getElementById('chatSend').disabled = true;
+  try {
+    const res = await fetch('/shimmer/api/review-tool/vendeur', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, sessionToken: chatSession }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    chatSession = data.sessionToken;
+    thinking.remove();
+    const bot = addBubble(data.message, 'bot');
+    if (data.products && data.products.length) {
+      const wrap = document.createElement('div');
+      wrap.className = 'products';
+      data.products.forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'prod';
+        row.innerHTML = '<div><div class="pname">' + esc(p.name) + '</div><div class="pmeta">' + esc(p.category || '') + (p.brand ? ' · ' + esc(p.brand) : '') + '</div></div><div class="pprice">' + esc(p.price) + ' €</div>';
+        wrap.appendChild(row);
+      });
+      bot.appendChild(wrap);
+    }
+  } catch (e) {
+    thinking.textContent = 'Erreur : ' + e.message;
+  } finally {
+    document.getElementById('chatSend').disabled = false;
+  }
+}
+function esc(s) { const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+document.getElementById('chatSend').onclick = sendChat;
+document.getElementById('chatInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+
+// --- verdicts (good/mid/bad) ---
+document.querySelectorAll('[data-verdict]').forEach(row => {
+  const key = row.dataset.verdict;
+  row.querySelectorAll('.verdict').forEach(btn => {
+    const v = btn.dataset.v;
+    if (state.verdicts[key] === v) applyVerdict(btn, v);
+    btn.onclick = () => {
+      row.querySelectorAll('.verdict').forEach(b => b.className = 'verdict');
+      applyVerdict(btn, v);
+      state.verdicts[key] = v;
+      persist();
+    };
+  });
+});
+function applyVerdict(btn, v) {
+  btn.classList.add(v === 'good' ? 'sel-good' : v === 'mid' ? 'sel-mid' : 'sel-bad');
+}
+
+// --- choices (pricing/strategy) ---
+document.querySelectorAll('[data-choice]').forEach(row => {
+  const key = row.dataset.choice;
+  row.querySelectorAll('.choice').forEach(btn => {
+    const c = btn.dataset.c;
+    if (state.choices[key] === c) btn.classList.add('sel');
+    btn.onclick = () => {
+      row.querySelectorAll('.choice').forEach(b => b.classList.remove('sel'));
+      btn.classList.add('sel');
+      state.choices[key] = c;
+      persist();
+    };
+  });
+});
+
+// --- comments ---
+document.querySelectorAll('[data-comment]').forEach(ta => {
+  const key = ta.dataset.comment;
+  if (state.comments[key]) ta.value = state.comments[key];
+  ta.addEventListener('input', () => { state.comments[key] = ta.value; persist(); });
+});
+
+// --- submit ---
+document.getElementById('submitBtn').onclick = async () => {
+  const note = document.getElementById('savedNote');
+  note.textContent = 'Envoi...';
+  try {
+    const res = await fetch('/shimmer/api/review-tool/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    note.textContent = 'Envoyé. Tym peut maintenant lire ta review complète. Merci !';
+  } catch (e) {
+    note.textContent = 'Erreur : ' + e.message + ' (tes réponses restent sauvegardées localement)';
+  }
+};
+
+updateProgress();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "shimmer-video",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render ShimmerStory out/shimmer.mp4 --concurrency=1",
+    "still": "remotion still"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.484",
+    "@remotion/transitions": "^4.0.484",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "remotion": "^4.0.484"
+  }
+}
