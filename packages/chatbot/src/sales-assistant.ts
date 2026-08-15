@@ -121,6 +121,38 @@ async function namedProducts(storeId: number, message: string): Promise<ScoredPr
   return pickCitedProducts(message, asScored);
 }
 
+/**
+ * Intention de catégorie dans une question générique. Mots-clés → catégories
+ * (insensible aux accents), en stock d'abord, mélangés pour la diversité.
+ * Retourne [] si aucune catégorie n'est visée (on laisse la recherche faire).
+ */
+async function categoryProducts(storeId: number, message: string): Promise<ScoredProduct[]> {
+  const m = normalize(message);
+  const prisma = getPrisma();
+  const cats = await prisma.product.findMany({ where: { storeId, isActive: true }, select: { category: true }, distinct: ['category'] });
+  const catNames = cats.map(c => c.category).filter((c): c is string => !!c);
+  // Une catégorie est visée si un de ses mots (≥4 lettres, ex. "rouge", "blanc",
+  // "champagne", "rosé") apparaît dans le message. "vin" seul = toutes les catégories vin.
+  const hit = catNames.filter(cat => {
+    const words = normalize(cat).split(/[\s/-]+/).filter(w => w.length >= 4 && w !== 'vin');
+    return words.some(w => new RegExp(`\\b${w}s?\\b`).test(m));
+  });
+  const wantsAnyWine = hit.length === 0 && /\bvins?\b/.test(m);
+  const target = hit.length > 0 ? hit : (wantsAnyWine ? catNames.filter(c => /vin/i.test(c)) : []);
+  if (target.length === 0) return [];
+  const products = await prisma.product.findMany({
+    where: { storeId, isActive: true, category: { in: target } },
+    orderBy: [{ stock: 'desc' }, { id: 'asc' }],
+    take: 40,
+  });
+  const inStock = products.filter(p => !isSoldOut(p));
+  const soldOut = products.filter(p => isSoldOut(p));
+  // En stock d'abord (spread par sous-catégorie pour varier), puis 2 épuisés max
+  // pour que le vendeur puisse dire "celui-là est épuisé" s'il est demandé.
+  const picked = [...inStock.slice(0, CANDIDATE_POOL - 2), ...soldOut.slice(0, 2)];
+  return picked.map(p => ({ product: p, score: 0.5, matchType: 'usage' as const, explanation: 'catégorie demandée', confidence: 'medium' as const })) as unknown as ScoredProduct[];
+}
+
 /** Stock réel du catalogue local. `stockStatus` fait foi, `stock` en secours. */
 export function isSoldOut(p: { stock?: number | null; stockStatus?: string | null }): boolean {
   if (p.stockStatus && /out_of_stock|sold_out|epuise|épuisé/i.test(p.stockStatus)) return true;
@@ -212,7 +244,7 @@ export async function handleSalesMessage(
   for (const rc of reviewChunks) {
     if (!rc.productId) continue;
     const arr = reviewsByProduct.get(rc.productId) ?? [];
-    if (arr.length < 2) arr.push(rc.text.slice(0, 200));
+    if (arr.length < 1) arr.push(rc.text.slice(0, 120));
     reviewsByProduct.set(rc.productId, arr);
   }
 
@@ -257,21 +289,32 @@ export async function handleSalesMessage(
   // dit nous-mêmes en tête. Le visiteur ne doit jamais croire qu'un produit
   // épuisé est disponible. Fait AVANT la persistance pour que l'historique, le
   // cache et la réponse portent tous la version corrigée.
-  if (soldOutCited.length > 0) {
-    const saysSoldOut = /épuisé|epuise|plus en stock|rupture|plus disponible|indisponible/i.test(assistantReply);
-    const claimsAvailable = /toujours disponible|est disponible|en stock|il nous reste|il en reste|nous avons|on a le|on en a/i.test(assistantReply);
-    if (!saysSoldOut || claimsAvailable) {
-      // Le LLM s'est trompé (ou n'a rien dit) : réponse déterministe, courte,
-      // avec la redirection vers le meilleur produit disponible.
-      const names = soldOutCited.map(o => o.product.name).join(', ');
-      const alt = candidates.find(c => !isSoldOut(c.product) && !soldOutCited.some(o => o.product.id === c.product.id));
-      const vouvoie = config.tone !== 'tu';
-      const prevenir = vouvoie ? 'je peux vous prévenir dès qu\'il revient' : 'je peux te prévenir dès qu\'il revient';
-      const redirect = alt
-        ? ` En attendant, ${vouvoie ? 'regardez' : 'regarde'} ${alt.product.name} (${alt.product.price} €), c'est ce qui s'en rapproche le plus.`
-        : '';
-      assistantReply = `${names} est épuisé pour le moment, ${prevenir}.${redirect}`;
-    }
+  // Le garde-fou ne réécrit la réponse QUE si le visiteur a lui-même nommé
+  // l'épuisé. Un épuisé simplement évoqué par le LLM est retiré des cartes,
+  // sans toucher au texte (sinon on amplifie une digression du modèle).
+  // Un épuisé NOMMÉ par le visiteur : la réponse est déterministe, point.
+  // Le LLM (même le 7b) redirige n'importe comment (un Saint-Émilion → un rosé)
+  // ou se contredit ("épuisé... toujours disponible"). Ici on ne joue pas :
+  // épuisé + on prévient + redirection MÊME CATÉGORIE en stock, calculée par
+  // le code. On garde la phrase d'ouverture du LLM si elle est saine et courte.
+  let forcedAlt: ScoredProduct | null = null;
+  if (askedByVisitor.length > 0) {
+    const names = askedByVisitor.map(o => o.product.name).join(', ');
+    const wantedCat = askedByVisitor[0]!.product.category;
+    const isOk = (c: ScoredProduct) => !isSoldOut(c.product) && !soldOutCited.some(o => o.product.id === c.product.id);
+    forcedAlt = candidates.find(c => isOk(c) && c.product.category === wantedCat)
+      ?? candidates.find(isOk)
+      ?? null;
+    const vouvoie = config.tone !== 'tu';
+    const prevenir = vouvoie ? 'je peux vous prévenir dès qu\'il revient' : 'je peux te prévenir dès qu\'il revient';
+    const redirect = forcedAlt
+      ? ` En attendant, ${vouvoie ? 'regardez' : 'regarde'} ${forcedAlt.product.name} (${forcedAlt.product.price} €), c'est ce qui s'en rapproche le plus${wantedCat ? ` en ${String(wantedCat).toLowerCase()}` : ''}.`
+      : '';
+    // Ouverture du LLM : on ne garde que sa 1re phrase si elle parle bien d'épuisé, sinon on écrit la nôtre.
+    const first = assistantReply.split(/(?<=[.!?])\s+/)[0] ?? '';
+    const saneOpening = /épuisé|epuise|rupture|plus disponible|indisponible/i.test(first) && !/disponible(?! pour le moment)|en stock|il en reste|nous avons/i.test(first) && first.length <= 160;
+    const opening = saneOpening ? first : `${names} est épuisé pour le moment.`;
+    assistantReply = `${opening} ${prevenir[0]!.toUpperCase()}${prevenir.slice(1)}.${redirect}`;
   }
 
   history.push({
@@ -286,7 +329,9 @@ export async function handleSalesMessage(
   const cited = citedRaw;
   const availableCited = cited.filter(c => !isSoldOut(c.product));
   const availableCandidates = candidates.filter(c => !isSoldOut(c.product));
-  const products = availableCited.length > 0 ? availableCited : availableCandidates.slice(0, FALLBACK_CARDS);
+  let products = availableCited.length > 0 ? availableCited : availableCandidates.slice(0, FALLBACK_CARDS);
+  // Épuisé demandé : la carte n°1 est la redirection calculée (même catégorie), pas ce que le LLM a cité.
+  if (forcedAlt) products = dedupeById([forcedAlt, ...products.filter(p => p.product.category === forcedAlt!.product.category)]).slice(0, FALLBACK_CARDS);
 
   const recommendedProductIds = products.map(p => p.product.id);
   const accumulatedIds = session
@@ -335,7 +380,7 @@ export async function handleSalesMessage(
     why: p.explanation,
   }));
 
-  const outOfStock = soldOutCited.map(p => ({
+  const outOfStock = askedByVisitor.map(p => ({
     id: p.product.id,
     name: p.product.name,
     platformProductId: p.product.platformProductId ?? null,
@@ -386,6 +431,12 @@ async function buildCandidatePool(
   // le score du moteur (index faible, requête exacte…). Sinon le vendeur ne
   // peut ni le recommander, ni dire qu'il est épuisé.
   const named = await namedProducts(storeId, message);
+
+  // Question générique par catégorie ("du rouge", "un blanc", "du champagne",
+  // "il reste quoi en vin ?") : le pool privilégie cette catégorie, EN STOCK.
+  // C'est ce qu'un vendeur fait : "du rouge ? voilà nos rouges dispo".
+  const byCat = await categoryProducts(storeId, message);
+  if (byCat.length > 0) return dedupeById([...named, ...byCat, ...results]).slice(0, CANDIDATE_POOL);
 
   const hasSignal = results.some(r => r.confidence !== 'very_low');
   if (hasSignal) return dedupeById([...named, ...results]).slice(0, CANDIDATE_POOL);
@@ -476,16 +527,17 @@ function buildSalesPrompt(
           })
           .join('\n');
 
-  const hasSoldOut = products.some(p => isSoldOut(p.product));
-  const stockRule = hasSoldOut
-    ? `\n9. Un produit marqué ÉPUISÉ ne se recommande JAMAIS comme choix. Si le visiteur le demande nommément, dis-le franchement en une phrase, propose de le prévenir dès qu'il revient (dis exactement : « je peux vous prévenir dès qu'il revient »), puis oriente vers le produit disponible le plus proche de la liste. Ne le cite pas parmi tes recommandations.`
-    : '';
 
   const objectionsBlock =
     config.common_objections && config.common_objections.length > 0
       ? `\n## Questions / objections fréquentes des clients de cette boutique (anticipe si pertinent, ne force pas)\n${config.common_objections.slice(0, 6).map(o => `- ${o}`).join('\n')}\n`
       : '';
 
+  // ORDRE VOULU : tout ce qui est STABLE par boutique d'abord (rôle, style,
+  // règles, objections), la partie VARIABLE (candidats) EN DERNIER. Ollama met
+  // en cache le préfixe du prompt : sur CPU, relire ~1000 tokens coûte 15-30 s
+  // à chaque question ; avec un préfixe stable on ne repaie que les candidats.
+  // La règle stock est toujours présente (stable) : elle ne coûte rien de plus.
   return `Tu es le vendeur en ligne de ${storeName}. Ton rôle : aider les visiteurs à trouver le bon produit dans le catalogue de la boutique, comme un vrai vendeur en magasin.
 
 ## Instructions de style
@@ -493,14 +545,11 @@ ${toneInstruction}
 ${intros}
 ${vocab}
 ${signature}
-
-## Catalogue disponible
-${productBlock}
 ${objectionsBlock}
 ## Règles de conversation
 1. Réponds en français.
 2. Si la demande est trop vague (un seul mot ou très générique, ex. « rouge », « du vin », « un cadeau »), NE recommande PAS encore : pose UNE seule question courte pour cerner le besoin (l'occasion, le budget, OU le goût — une seule à la fois). Dès que tu as un élément concret, recommande sans reposer la même question.
-3. Recommande UNIQUEMENT des produits de la liste ci-dessus. Ne JAMAIS inventer de produit qui n'y est pas.
+3. Recommande UNIQUEMENT des produits de la liste « Catalogue disponible » ci-dessous. Ne JAMAIS inventer de produit qui n'y est pas.
 4. Choisis le produit VRAIMENT le plus adapté à l'usage ou l'occasion décrite, pas le premier de la liste. Le bon choix prime sur l'ordre.${
     config.pairing_hints && config.pairing_hints.length > 0
       ? '\n   Repères de cette boutique : ' + config.pairing_hints.join(' ; ') + '.'
@@ -509,8 +558,12 @@ ${objectionsBlock}
 5. Explique en 1 phrase pourquoi le produit colle au besoin (occasion, profil, accord).
 6. Cite TOUJOURS le nom complet exact du produit tel qu'écrit dans la liste, et son prix. Pas l'ID.
 7. Réponse courte : 3-5 phrases max. C'est une conversation, pas une fiche produit.
-8. Si le client mentionne un problème de commande, de livraison ou de retour, dis-lui que tu vas chercher un conseiller (ne traite pas le SAV ici).${stockRule}
+8. Si le client mentionne un problème de commande, de livraison ou de retour, dis-lui que tu vas chercher un conseiller (ne traite pas le SAV ici).
+9. Un produit marqué ÉPUISÉ ne se recommande JAMAIS comme choix. Si le visiteur le demande nommément, dis-le franchement en une phrase, propose de le prévenir dès qu'il revient (dis exactement : « je peux vous prévenir dès qu'il revient »), puis oriente vers le produit disponible le plus proche DE LA MÊME CATÉGORIE dans la liste. Ne le cite pas parmi tes recommandations.
 
 ## Format
-Texte libre conversationnel. Pas de listes à puces sauf si tu compares 2-3 produits côte à côte. Pas de markdown.`;
+Texte libre conversationnel. Pas de listes à puces sauf si tu compares 2-3 produits côte à côte. Pas de markdown.
+
+## Catalogue disponible
+${productBlock}`;
 }

@@ -155,7 +155,7 @@ export class ClaudeClient {
       maxTokens = DEFAULT_MAX_TOKENS,
       temperature = 0.3,
       systemPrompt,
-      timeout = 60_000, // Ollama can be slower
+      timeout = 120_000, // Ollama sur CPU : le 7b met ~40s a froid (lecture du prompt). Couper trop tot = retry = double peine.
       maxRetries = MAX_RETRIES,
     } = options;
 
@@ -175,6 +175,7 @@ export class ClaudeClient {
             model,
             messages: ollamaMessages,
             stream: false,
+            keep_alive: "30m", // modele chaud 30 min apres le dernier appel (un seul modele en RAM a la fois)
             options: {
               temperature,
               num_predict: maxTokens,
