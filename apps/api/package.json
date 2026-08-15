@@ -14,6 +14,8 @@
     "@shimmer/chatbot": "workspace:*",
     "@shimmer/mail-engine": "workspace:*",
     "@shimmer/reviews": "workspace:*",
+    "@shimmer/email-connector": "workspace:*",
+    "@shimmer/sms-connector": "workspace:*",
     "express": "^4.21.0",
     "helmet": "^8.0.0",
     "compression": "^1.7.0",

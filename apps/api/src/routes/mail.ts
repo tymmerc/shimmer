@@ -6,6 +6,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { getPrisma, logger } from '@shimmer/core';
 import { classifyEmail, generateDraft, processEmail } from '@shimmer/mail-engine';
+import { enqueueMailToSav } from '../lib/automations/queue.js';
 
 const classifySchema = z.object({
   fromAddr: z.string().email().max(255),
@@ -31,6 +32,13 @@ mailRouter.post('/classify', async (req: Request, res: Response, next: NextFunct
       body.body,
       body.externalId,
     );
+    if (result.id) {
+      try {
+        await enqueueMailToSav(result.id);
+      } catch (err) {
+        logger.warn({ err, mailId: result.id }, 'mail.classify.sav-enqueue-failed');
+      }
+    }
     res.json(result);
   } catch (err) {
     if (err instanceof z.ZodError) {

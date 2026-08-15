@@ -52,6 +52,26 @@ chatAnalyticsRouter.get('/', async (req: Request, res: Response, next: NextFunct
       ? msgCounts.reduce((a, b) => a + b, 0) / msgCounts.length
       : 0;
 
+    // Sales-mode + attribution metrics
+    const [salesSessions, attributedSessions, attributedRevenue] = await Promise.all([
+      prisma.chatSession.count({
+        where: { storeId, createdAt: { gte: since }, mode: 'sales' },
+      }),
+      prisma.chatSession.count({
+        where: { storeId, createdAt: { gte: since }, mode: 'sales', attributedOrderId: { not: null } },
+      }),
+      prisma.$queryRaw<Array<{ revenue: number; orders: number }>>`
+        SELECT COALESCE(SUM(o.total_amount), 0)::float AS revenue, COUNT(DISTINCT o.id)::int AS orders
+        FROM chat_sessions cs
+        JOIN orders o ON o.id = cs.attributed_order_id
+        WHERE cs.store_id = ${storeId}
+          AND cs.created_at >= ${since}
+          AND cs.attributed_order_id IS NOT NULL
+      `,
+    ]);
+
+    const attrRow = attributedRevenue[0] ?? { revenue: 0, orders: 0 };
+
     res.json({
       period: { days, since: since.toISOString() },
       totalSessions,
@@ -59,6 +79,13 @@ chatAnalyticsRouter.get('/', async (req: Request, res: Response, next: NextFunct
       resolutionRate: totalSessions > 0 ? resolvedCount / totalSessions : 0,
       averageMessagesPerSession: Math.round(avgMsgCount * 10) / 10,
       byStatus: byStatus.map((s) => ({ status: s.status, count: s._count })),
+      sales: {
+        sessions: salesSessions,
+        attributed: attributedSessions,
+        conversionRate: salesSessions > 0 ? Math.round((attributedSessions / salesSessions) * 1000) / 10 : 0,
+        revenueEUR: Math.round(Number(attrRow.revenue) * 100) / 100,
+        orders: Number(attrRow.orders),
+      },
     });
   } catch (err) {
     next(err);

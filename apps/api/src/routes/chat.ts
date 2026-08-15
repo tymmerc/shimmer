@@ -6,11 +6,14 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { getPrisma } from '@shimmer/core';
+import { isControl, resolveHoldoutConfig } from '../lib/holdout/bucket.js';
+import { isLive } from './onboarding.js';
 import {
   handleChatMessage,
   streamChatMessage,
   escalateSession,
   resolveSession,
+  handleSalesMessage,
 } from '@shimmer/chatbot';
 
 export const chatRouter = Router();
@@ -19,8 +22,25 @@ const messageSchema = z.object({
   message: z.string().min(1).max(2000),
   sessionToken: z.string().optional(),
   customerEmail: z.string().email().optional(),
+  // Default = sales. The primary surface is a storefront search bar, where
+  // intent is always "find me a product". The client widget declares its
+  // context: search bar / product vendeur sends 'sales' (or nothing); a SAV
+  // surface sends 'sav'; a generic help bubble can send 'auto' to let the
+  // keyword heuristic decide. We do NOT guess on the search bar, because a
+  // sales query like "vin pour un retour de chasse" would be misrouted to SAV.
+  mode: z.enum(['sales', 'sav', 'auto']).optional().default('sales'),
+  visitorId: z.string().min(4).max(80).optional(),
   stream: z.boolean().optional().default(false),
 });
+
+// Only used when a client explicitly opts into 'auto' (e.g. a generic help
+// chat bubble). Never runs for the default search-bar path.
+const SAV_KEYWORDS = /\b(commande|livraison|colis|tracking|suivi|retour|rembours|défectu|cass[éeé]|d[ée]chir|abim[éeé]|tromp[éeé]|erreur|probl[èe]me|sav|service[ -]apr[èe]s|garantie|facture|annul)/i;
+
+function detectMode(message: string, requested: 'sales' | 'sav' | 'auto'): 'sales' | 'sav' {
+  if (requested !== 'auto') return requested;
+  return SAV_KEYWORDS.test(message) ? 'sav' : 'sales';
+}
 
 const escalateSchema = z.object({
   sessionToken: z.string(),
@@ -31,6 +51,27 @@ const escalateSchema = z.object({
 chatRouter.post('/message', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = messageSchema.parse(req.body);
+
+    // Phase guard: the vendeur only answers when the store is in 'live'. During
+    // ingestion / observation / validation, the widget is hidden and any direct
+    // call is refused (the SDK or another widget shouldn't be calling us yet).
+    if (!(await isLive(req.storeId!))) {
+      res.json({ phase: 'not-live', message: null, sessionToken: null, recommendedProducts: [], mode: 'not-live' });
+      return;
+    }
+
+    // Holdout guard: a control visitor must never be served the vendeur, or it
+    // contaminates the experiment. The SDK already hides the widget for control,
+    // this is the server-side safety net.
+    if (body.visitorId) {
+      const prisma = getPrisma();
+      const store = await prisma.store.findUnique({ where: { id: req.storeId! } });
+      const cfg = resolveHoldoutConfig(((store?.config ?? {}) as { holdout?: unknown }).holdout);
+      if (isControl(body.visitorId, req.storeId!, cfg)) {
+        res.json({ control: true, message: null, sessionToken: null, recommendedProducts: [], mode: 'control' });
+        return;
+      }
+    }
 
     if (body.stream) {
       // SSE streaming
@@ -62,13 +103,11 @@ chatRouter.post('/message', async (req: Request, res: Response, next: NextFuncti
       res.write('data: [DONE]\n\n');
       res.end();
     } else {
-      // Non-streaming
-      const result = await handleChatMessage(
-        req.storeId!,
-        body.message,
-        body.sessionToken,
-        body.customerEmail,
-      );
+      // Non-streaming — dispatch sales vs SAV
+      const mode = detectMode(body.message, body.mode);
+      const result = mode === 'sales'
+        ? await handleSalesMessage(req.storeId!, body.message, body.sessionToken, body.customerEmail)
+        : await handleChatMessage(req.storeId!, body.message, body.sessionToken, body.customerEmail);
       res.json(result);
     }
   } catch (err) {

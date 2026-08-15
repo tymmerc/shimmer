@@ -19,9 +19,29 @@ export interface ClaudeClientOptions {
   provider?: 'claude' | 'ollama';
 }
 
+/**
+ * Returns the Claude API key only if it looks real. The repo ships a
+ * `sk-ant-placeholder` value in dev, which must NOT be treated as configured
+ * (otherwise we'd "fall back" to a key that 401s on every call).
+ */
+export function resolveClaudeApiKey(explicit?: string): string | undefined {
+  const key = explicit || process.env.CLAUDE_API_KEY;
+  if (!key) return undefined;
+  if (key.includes('placeholder') || key.length < 20) return undefined;
+  return key;
+}
+
+/** True when a usable Claude API key is configured. Used for fallback + config checks. */
+export function hasClaudeFallback(): boolean {
+  return resolveClaudeApiKey() !== undefined;
+}
+
 export class ClaudeClient {
   private client: Anthropic | null = null;
   private provider: string;
+  private apiKey?: string;
+  /** Lazily-built Anthropic client used to rescue a failing Ollama call. */
+  private fallbackClient: Anthropic | null = null;
 
   constructor(apiKeyOrOptions?: string | ClaudeClientOptions) {
     const opts: ClaudeClientOptions = typeof apiKeyOrOptions === 'string'
@@ -29,12 +49,20 @@ export class ClaudeClient {
       : (apiKeyOrOptions || {});
 
     this.provider = opts.provider || LLM_PROVIDER;
+    this.apiKey = resolveClaudeApiKey(opts.apiKey);
 
     if (this.provider === 'claude') {
-      this.client = new Anthropic({
-        apiKey: opts.apiKey || process.env.CLAUDE_API_KEY,
-      });
+      this.client = new Anthropic({ apiKey: this.apiKey });
     }
+  }
+
+  /** Build (once) the Anthropic client used as an Ollama fallback. */
+  private getFallbackClient(): Anthropic | null {
+    if (!this.apiKey) return null;
+    if (!this.fallbackClient) {
+      this.fallbackClient = new Anthropic({ apiKey: this.apiKey });
+    }
+    return this.fallbackClient;
   }
 
   async complete(
@@ -42,7 +70,17 @@ export class ClaudeClient {
     options: ClaudeOptions = {},
   ): Promise<string> {
     if (this.provider === 'ollama') {
-      return this.ollamaComplete(messages, options);
+      try {
+        return await this.ollamaComplete(messages, options);
+      } catch (err) {
+        // Ollama is down (OOM, timeout, connection refused). If a real Claude
+        // key is configured, rescue the request transparently so the visitor
+        // gets an answer instead of an error.
+        const fallback = this.getFallbackClient();
+        if (!fallback) throw err;
+        logger.warn({ error: (err as Error).message }, 'llm.ollama.failed → claude fallback');
+        return this.claudeComplete(messages, options, fallback);
+      }
     }
     return this.claudeComplete(messages, options);
   }
@@ -52,8 +90,22 @@ export class ClaudeClient {
     options: ClaudeOptions = {},
   ): AsyncGenerator<ClaudeStreamChunk> {
     if (this.provider === 'ollama') {
-      yield* this.ollamaStream(messages, options);
-      return;
+      // For streaming we can't retroactively switch mid-stream, so probe with a
+      // buffered fallback only if the stream errors before yielding anything.
+      let yielded = false;
+      try {
+        for await (const chunk of this.ollamaStream(messages, options)) {
+          if (chunk.type === 'text') yielded = true;
+          yield chunk;
+        }
+        return;
+      } catch (err) {
+        const fallback = this.getFallbackClient();
+        if (yielded || !fallback) throw err;
+        logger.warn({ error: (err as Error).message }, 'llm.ollama.stream.failed → claude fallback');
+        yield* this.claudeStream(messages, options, fallback);
+        return;
+      }
     }
     yield* this.claudeStream(messages, options);
   }
@@ -274,6 +326,7 @@ export class ClaudeClient {
   private async claudeComplete(
     messages: ClaudeMessage[],
     options: ClaudeOptions = {},
+    clientOverride?: Anthropic,
   ): Promise<string> {
     const {
       model = DEFAULT_MODEL,
@@ -283,11 +336,14 @@ export class ClaudeClient {
       timeout = DEFAULT_TIMEOUT,
     } = options;
 
+    const client = clientOverride ?? this.client;
+    if (!client) throw new ShimmerError('Claude client not configured', 'LLM_ERROR', 500);
+
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        const response = await this.client!.messages.create({
+        const response = await client.messages.create({
           model,
           max_tokens: maxTokens,
           temperature,
@@ -339,6 +395,7 @@ export class ClaudeClient {
   private async *claudeStream(
     messages: ClaudeMessage[],
     options: ClaudeOptions = {},
+    clientOverride?: Anthropic,
   ): AsyncGenerator<ClaudeStreamChunk> {
     const {
       model = DEFAULT_MODEL,
@@ -348,8 +405,11 @@ export class ClaudeClient {
       timeout = DEFAULT_TIMEOUT,
     } = options;
 
+    const client = clientOverride ?? this.client;
+    if (!client) throw new ShimmerError('Claude client not configured', 'LLM_ERROR', 500);
+
     try {
-      const stream = this.client!.messages.stream({
+      const stream = client.messages.stream({
         model,
         max_tokens: maxTokens,
         temperature,

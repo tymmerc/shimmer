@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -e
+
+# Pre-commit hook Shimmer
+# Active via : git config core.hooksPath .githooks
+
+# 1. Bloquer les secrets evidents
+if git diff --cached --name-only | grep -v '^\.githooks/' | xargs -r grep -l -E '(sk-ant-[a-zA-Z0-9_-]{20,}|sk_live_[a-zA-Z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN .* PRIVATE KEY-----)' 2>/dev/null; then
+  echo "Pre-commit: secret pattern detected. Aborting."
+  exit 1
+fi
+
+# 2. Bloquer les fichiers .env
+if git diff --cached --name-only | grep -E '(^|/)\.env(\.|$)' | grep -v '\.env\.example$'; then
+  echo "Pre-commit: .env file in staged changes. Use .env.example instead."
+  exit 1
+fi
+
+# 3. Lint sur les fichiers TS modifies
+staged_ts=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$' || true)
+if [ -n "$staged_ts" ]; then
+  echo "Pre-commit: linting staged TS files"
+  # Non bloquant tant qu'il n'y a pas de config ESLint a la racine (etat au 15/08/2026).
+  # Les controles secrets/.env ci-dessus restent bloquants.
+  pnpm lint || echo "Lint failed or not configured (non-blocking)."
+fi
+
+# 4. Typecheck rapide si schema Prisma ou packages/core touche
+if git diff --cached --name-only | grep -qE '(schema\.prisma|packages/core/)'; then
+  echo "Pre-commit: typecheck core"
+  # seed.ts a des erreurs de types preexistantes (script de seed, pas du runtime) :
+  # on ne bloque pas dessus, on bloque sur tout le reste de core.
+  if pnpm -F @shimmer/core exec tsc --noEmit 2>&1 | grep -E 'error TS' | grep -v 'src/prisma/seed.ts' | grep -q .; then
+    pnpm -F @shimmer/core exec tsc --noEmit 2>&1 | grep -E 'error TS' | grep -v 'src/prisma/seed.ts'
+    exit 1
+  fi
+fi
+
+exit 0

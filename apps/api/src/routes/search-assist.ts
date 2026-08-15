@@ -1190,22 +1190,28 @@ async function fetchMatchingProducts(
   const isPremium = budgetLow === 'premium' || budgetLow.includes('haut de gamme') || budgetLow.includes('luxe') || budgetLow.includes('top') || budgetLow.includes('meilleur');
   const isCheap = budgetLow === 'cheap' || budgetLow.includes('pas cher') || budgetLow.includes('entrée de gamme') || budgetLow.includes('entree de gamme') || budgetLow.includes('petit budget') || budgetLow.includes('économique') || budgetLow.includes('economique');
 
-  // Genre filter — soft (only if field exists)
+  // Escapes a value for inclusion inside a single-quoted SQL string literal.
+  // Doubles quotes (standard_conforming_strings is on by default in Postgres,
+  // so backslash is not an escape char) and strips ILIKE wildcards so a client
+  // value can never widen a pattern.
+  const sqlEsc = (s: string) => s.replace(/'/g, "''");
+  const likeEsc = (s: string) => sqlEsc(s).replace(/[%_]/g, '\\$&');
+
+  // Genre filter — soft (only if field exists). Client-controlled value: escape.
   const genre = known['GENRE'];
   if (genre) {
-    conditions.push(`(NOT specs ? 'genre' OR specs->>'genre' ILIKE '%${genre}%')`);
+    conditions.push(`(NOT specs ? 'genre' OR specs->>'genre' ILIKE '%${likeEsc(genre)}%')`);
   }
 
-  // Brand filter (from hybrid TYPE 1+2 detection)
+  // Brand filter (from hybrid TYPE 1+2 detection). Client-controlled: escape.
   const brandFilter = known['_BRAND'];
   if (brandFilter) {
-    conditions.push(`LOWER(brand) = '${brandFilter.toLowerCase()}'`);
+    conditions.push(`LOWER(brand) = '${sqlEsc(brandFilter.toLowerCase())}'`);
   }
 
   // Universe-driven filters: for each closed criterion that has a known value,
   // turn it into a soft SQL filter (skip products that have the spec but don't match).
   // Keeps Loire/scandinave/style filters strict instead of being only a scoring boost.
-  const sqlEsc = (s: string) => s.replace(/'/g, "''");
   const SKIP_FILTER_IDS = new Set(['BUDGET', 'OCCASION', 'GARDE', 'MILLESIME']);
   const ALREADY_HANDLED = new Set(['SANS_FIL', 'ANIMAUX', 'GENRE', 'MATERIAUX', 'PERC_MATERIAU', 'PERC_ALIM', 'ASP_FIL']);
   for (const c of universe.criteria) {
@@ -1215,12 +1221,15 @@ async function fetchMatchingProducts(
     if (!val) continue;
     const specKey = c.id.toLowerCase();
     const escVal = sqlEsc(val);
+    // JSON-encode first so quotes/backslashes inside val cannot break the
+    // ::jsonb literal, then SQL-escape the encoded form.
+    const jsonArrayLit = sqlEsc(JSON.stringify([val]));
     // Match: (no spec at all) OR (spec equals val) OR (string spec contains val) OR (array spec contains val)
     conditions.push(
       `(NOT specs ? '${specKey}' OR ` +
       `specs->>'${specKey}' = '${escVal}' OR ` +
-      `specs->>'${specKey}' ILIKE '%${escVal}%' OR ` +
-      `(jsonb_typeof(specs->'${specKey}') = 'array' AND specs->'${specKey}' @> '["${escVal}"]'::jsonb))`
+      `specs->>'${specKey}' ILIKE '%${likeEsc(val)}%' OR ` +
+      `(jsonb_typeof(specs->'${specKey}') = 'array' AND specs->'${specKey}' @> '${jsonArrayLit}'::jsonb))`
     );
   }
 

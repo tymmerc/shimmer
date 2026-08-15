@@ -11,8 +11,14 @@ import { z } from 'zod';
 import { getPrisma } from '@shimmer/core';
 import { randomUUID } from 'node:crypto';
 import { authMiddleware } from '../middleware/auth.js';
+import { createScopedRateLimiter } from '../middleware/rate-limiter.js';
+import { derivePublishableKey } from '../lib/publishable-key.js';
 
 export const storesRouter = Router();
+
+// Store creation costs DB rows and grants an API key: 5 per hour per IP is
+// plenty for a legitimate signup flow and kills bulk-creation abuse.
+const signupLimiter = createScopedRateLimiter('store-create', 60 * 60_000, 5);
 
 const createStoreSchema = z.object({
   name: z.string().min(1).max(100),
@@ -77,16 +83,24 @@ const configUpdateSchema = z.object({
 }).strict();
 
 // POST /api/stores — create a new store (admin, no auth required)
-storesRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
+storesRouter.post('/', signupLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = createStoreSchema.parse(req.body);
     const prisma = getPrisma();
+
+    // New stores start in 'ingesting' unless the caller passes an explicit
+    // phase. The onboarding gates promote them up to 'live' only after the
+    // knowledge ingestion, observation window and validation are cleared.
+    const baseConfig = body.config || {};
+    const config = 'shimmer_phase' in baseConfig
+      ? baseConfig
+      : { ...baseConfig, shimmer_phase: 'ingesting' };
 
     const store = await prisma.store.create({
       data: {
         name: body.name,
         apiKey: `sk_${randomUUID().replace(/-/g, '')}`,
-        config: body.config || {},
+        config,
       },
     });
 
@@ -94,6 +108,7 @@ storesRouter.post('/', async (req: Request, res: Response, next: NextFunction) =
       id: store.id,
       name: store.name,
       apiKey: store.apiKey,
+      publishableKey: derivePublishableKey(store.id),
       config: store.config,
       createdAt: store.createdAt,
     });
@@ -118,7 +133,7 @@ storesRouter.get('/me/config', authMiddleware, async (req: Request, res: Respons
       res.status(404).json({ error: 'Store not found' });
       return;
     }
-    res.json(store);
+    res.json({ ...store, publishableKey: derivePublishableKey(store.id) });
   } catch (err) {
     next(err);
   }

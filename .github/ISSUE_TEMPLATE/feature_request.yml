@@ -1,0 +1,48 @@
+name: Feature request
+description: Proposer une nouvelle fonctionnalité
+labels: [enhancement, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Décrivez d'abord le problème utilisateur, pas la solution. La meilleure solution émerge souvent ailleurs que là où on l'imagine.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Le problème
+      description: Qui souffre, de quoi, et dans quel contexte ?
+      placeholder: En tant que [marchand/client], quand [situation], je voudrais [outcome] parce que [raison].
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solution proposée
+      description: Décrivez votre idée. Restez ouvert à d'autres approches.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives envisagées
+      description: Quelles autres pistes avez-vous explorées et pourquoi vous ne les retenez pas ?
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact estimé
+      description: Sur quelles parties du système ? Quel volume d'utilisateurs concernés ?
+
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Urgence
+      options:
+        - Nice to have
+        - Souhaitée à court terme
+        - Bloquante pour un usage actif
+    validations:
+      required: true

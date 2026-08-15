@@ -20,3 +20,13 @@ embedding-sidecar/models/
 embedding-sidecar/.venv/
 embedding-sidecar/model/
 data/indexes/
+
+# Build outputs / deploy artefacts (jamais versionnés)
+.next/
+out/
+apps/showcase-dev/
+apps/showcase-main.bak-*.tar.gz
+*.bak-*.tar.gz
+video/out/
+video/node_modules/
+.secrets.local

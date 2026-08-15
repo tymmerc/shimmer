@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Faille de sécurité
+    url: https://github.com/tymmercier/shimmer/security/advisories/new
+    about: Les vulnérabilités se signalent en privé, voir SECURITY.md
+  - name: Question d'usage
+    url: https://github.com/tymmercier/shimmer/discussions
+    about: Les questions vont dans Discussions, pas dans Issues

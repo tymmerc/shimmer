@@ -21,3 +21,23 @@ export function createRateLimiter() {
     message: { error: 'Too many requests', code: 'RATE_LIMIT' },
   });
 }
+
+/**
+ * Stricter limiter for abuse-prone public endpoints (signup, demo tools,
+ * unauthenticated logging). Each call site picks its own window/max; the
+ * prefix isolates the Redis counters from the global limiter and from each
+ * other.
+ */
+export function createScopedRateLimiter(prefix: string, windowMs: number, max: number) {
+  return rateLimit({
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: new RedisStore({
+      prefix: `rl:${prefix}:`,
+      sendCommand: (...args: string[]) => getRedis().call(...args) as any,
+    }),
+    message: { error: 'Too many requests', code: 'RATE_LIMIT' },
+  });
+}

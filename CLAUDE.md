@@ -1,5 +1,9 @@
 # Shimmer — AI E-commerce Platform
 
+> **REPRISE DE PROJET / NOUVELLE SESSION : lire d'abord `/opt/shimmer/HANDOFF.md`.**
+> Il contient l'état complet (juin 2026), ce qui a été fait, ce qui reste, les URLs,
+> les accès, les pièges de build/déploiement, et le contexte business (réunion investisseur).
+
 ## Stack
 - **Monorepo**: pnpm 9.x workspaces
 - **API**: Express 4.21 + TypeScript 5.7 (strict)

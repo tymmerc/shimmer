@@ -1,0 +1,94 @@
+name: Bug report
+description: Signaler un comportement inattendu
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de prendre le temps de signaler ce bug. Une issue détaillée nous fait gagner beaucoup de temps.
+
+        **Faille de sécurité ?** Ne l'ouvrez pas ici, voir [SECURITY.md](../SECURITY.md).
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Que s'est-il passé ? Que pensiez-vous qu'il se passerait ?
+      placeholder: Quand j'appelle X, je m'attends à Y mais j'obtiens Z.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Étapes pour reproduire
+      description: Le plus minimal possible. Idéalement un curl ou snippet copiable.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportement attendu
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportement observé
+      description: Inclure logs ou stack trace si pertinent. Caviarder les secrets.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit SHA
+      placeholder: v0.4.0 ou abc1234
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: Environnement
+      description: OS, version Node, version pnpm
+      placeholder: Ubuntu 22.04, Node 22.5.1, pnpm 9.7.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface concernée
+      multiple: true
+      options:
+        - API
+        - SDK navigateur
+        - Vendeur IA
+        - Cross-sell
+        - Mail triage
+        - Reviews
+        - Admin / Dashboard
+        - Embedding sidecar
+        - Workers BullMQ
+        - Autre / inconnu
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pré-checks
+      options:
+        - label: J'ai cherché une issue existante avant d'ouvrir celle-ci
+          required: true
+        - label: Je n'ai inclus aucun secret (clé API, token, password)
+          required: true

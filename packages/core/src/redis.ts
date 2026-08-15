@@ -1,4 +1,6 @@
-import Redis from 'ioredis';
+// Named import: the default export's type lacks a construct signature under
+// the DTS rollup, which broke `pnpm build`. The named `Redis` is the class.
+import { Redis } from 'ioredis';
 import { logger } from './logger.js';
 
 let redisInstance: Redis | null = null;

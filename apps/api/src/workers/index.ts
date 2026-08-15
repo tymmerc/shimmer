@@ -9,6 +9,7 @@ import { createIndexRebuilderWorker } from './index-rebuilder.js';
 import { createUsageExtractorWorker } from './usage-extractor.js';
 import { createCorpusEnricherWorker } from './corpus-enricher.js';
 import { createReindexWorker } from './reindex-worker.js';
+import { createAutomationsWorker, openAutomationsQueue, closeAutomationsQueue } from '../lib/automations/queue.js';
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6381';
 const url = new URL(REDIS_URL);
@@ -63,6 +64,13 @@ export async function startWorkers(): Promise<void> {
     },
   );
 
+  // Business-automation queue: per-entity delayed jobs (cart reminders at +1h
+  // and +24h, review request at +48h, SAV escalation at +24h, outbound publish
+  // at scheduledAt, mail → SAV immediate). No polling: jobs fire only when an
+  // actual event scheduled them.
+  openAutomationsQueue(connection);
+  workers.push(createAutomationsWorker(connection));
+
   logger.info({
     workers: workers.length,
     queues: ['feedback', 'usage-extraction', 'corpus-enrich', 'index-rebuild', 'learning-reindex'],
@@ -70,6 +78,7 @@ export async function startWorkers(): Promise<void> {
 }
 
 export async function stopWorkers(): Promise<void> {
+  await closeAutomationsQueue();
   for (const worker of workers) {
     await worker.close();
   }
