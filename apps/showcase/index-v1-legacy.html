@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shimmer — Le temps qu'on rend aux marchands</title>
+  <meta name="description" content="Un vendeur IA qui fait gagner des heures aux marchands en ligne. Branché en 5 minutes." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://api.fontshare.com" />
+  <link href="https://api.fontshare.com/v2/css?f[]=editorial-new@400,500,800,400i,500i,800i&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js" defer></script>
+</head>
+<body>
+
+  <nav class="nav" id="nav">
+    <a href="#hero" class="nav-logo">SHIMMER</a>
+    <a href="#live" class="nav-cta">Essayer en live</a>
+  </nav>
+
+  <!-- ════════════════════ HERO (preserved) ════════════════════ -->
+  <section class="hero" id="hero">
+    <canvas id="toxin"></canvas>
+    <div class="hero-inner">
+      <p class="hero-tag">Vendeur IA pour boutiques en ligne</p>
+      <h1 class="hero-title" data-text="SHIMMER">SHIMMER</h1>
+      <p class="hero-sub">Un vendeur qui comprend vos clients comme en magasin. Il pose les bonnes questions, recommande le bon produit, et parle comme votre marque.</p>
+      <div class="hero-btns">
+        <a href="#act-1" class="btn-fill">Voir comment ça marche</a>
+        <a href="#live" class="btn-line">Essayer en live</a>
+      </div>
+    </div>
+    <div class="hero-fade"></div>
+    <div class="scroll-hint" aria-hidden="true"><span></span></div>
+  </section>
+
+  <!-- ════════════════════ INTRO ════════════════════ -->
+  <section class="intro">
+    <div class="intro-inner">
+      <p class="kicker">Cinq démonstrations</p>
+      <h2 class="intro-lead">Chaque scroll, <em>une heure de gagnée.</em></h2>
+    </div>
+  </section>
+
+  <!-- ════════════════════ ACTE 1 — Brancher ════════════════════ -->
+  <section class="act act-graft" id="act-1">
+    <div class="act-pin">
+      <header class="act-header">
+        <p class="kicker"><span class="num">01</span></p>
+        <h2 class="act-title"><em>Brancher</em> votre boutique.</h2>
+      </header>
+
+      <div class="graft-stage">
+        <div class="graft-before">
+          <p class="graft-label">Sans Shimmer</p>
+          <p class="graft-figure" id="grBefore">21</p>
+          <p class="graft-unit">jours</p>
+          <ul class="graft-detail">
+            <li>Cahier des charges</li>
+            <li>Intégration développeur</li>
+            <li>Tests, allers-retours</li>
+            <li>Mise en ligne</li>
+          </ul>
+        </div>
+
+        <div class="graft-arrow" aria-hidden="true">
+          <svg viewBox="0 0 200 40">
+            <path class="graft-arrow-path" d="M 10 20 L 180 20" />
+            <path class="graft-arrow-head" d="M 170 10 L 190 20 L 170 30" />
+          </svg>
+        </div>
+
+        <div class="graft-after">
+          <p class="graft-label">Avec Shimmer</p>
+          <p class="graft-figure" id="grAfter">5</p>
+          <p class="graft-unit">minutes</p>
+          <ul class="graft-detail">
+            <li>Upload du catalogue</li>
+            <li>Vendeur entraîné</li>
+            <li>En ligne</li>
+          </ul>
+        </div>
+      </div>
+
+      <p class="act-caption">Vous tenez 4 200 fois moins de temps occupé.</p>
+    </div>
+  </section>
+
+  <!-- ════════════════════ ACTE 2 — Recherche exacte ════════════════════ -->
+  <section class="act act-exact" id="act-2">
+    <div class="act-pin">
+      <header class="act-header">
+        <p class="kicker"><span class="num">02</span></p>
+        <h2 class="act-title">Il sait <em>déjà</em> ce qu'il veut.</h2>
+      </header>
+
+      <div class="exact-stage">
+        <div class="exact-input">
+          <span class="exact-prefix">Client →</span>
+          <span class="exact-typed" id="exactTyped"></span><span class="exact-caret" id="exactCaret"></span>
+        </div>
+
+        <div class="exact-scanner" id="exactScanner">
+          <div class="scan-bar"></div>
+          <div class="scan-grid">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+
+        <div class="exact-result" id="exactResult">
+          <p class="result-name">Chablis 2022</p>
+          <p class="result-sub">Domaine William Fèvre · 24€</p>
+        </div>
+      </div>
+
+      <p class="act-caption">
+        <span class="ms"><b id="exactMs">9</b><i>ms</i></span>
+        Zéro question. Zéro mail. Le client a son produit.
+      </p>
+    </div>
+  </section>
+
+  <!-- ════════════════════ ACTE 3 — Qualification ════════════════════ -->
+  <section class="act act-qual" id="act-3">
+    <div class="act-pin">
+      <header class="act-header">
+        <p class="kicker"><span class="num">03</span></p>
+        <h2 class="act-title">Il décrit un <em>besoin</em>.</h2>
+      </header>
+
+      <div class="qual-stage">
+        <div class="qual-thread" id="qualThread"></div>
+
+        <div class="qual-board">
+          <ul class="qual-crit" id="qualCrit">
+            <li data-key="rayon"><b>Rayon</b><span></span></li>
+            <li data-key="plat"><b>Plat</b><span></span></li>
+            <li data-key="occasion"><b>Occasion</b><span></span></li>
+            <li data-key="budget"><b>Budget</b><span></span></li>
+          </ul>
+
+          <div class="qual-pick" id="qualPick">
+            <p class="pick-tag">Recommandation</p>
+            <p class="pick-name">Châteauneuf-du-Pape 2019</p>
+            <p class="pick-sub">38€</p>
+          </div>
+        </div>
+      </div>
+
+      <p class="act-caption">
+        <span class="ms"><b>12</b><i>min</i></span>
+        Le temps qu'aurait pris cette conversation, par mail. Sans vous.
+      </p>
+    </div>
+  </section>
+
+  <!-- ════════════════════ ACTE 4 — Similarité ════════════════════ -->
+  <section class="act act-similar" id="act-4">
+    <div class="act-pin">
+      <header class="act-header">
+        <p class="kicker"><span class="num">04</span></p>
+        <h2 class="act-title">« Comme <em>celui-là</em>, mais autre. »</h2>
+      </header>
+
+      <div class="sim-stage">
+        <div class="sim-ref" id="simRef">
+          <p class="sim-ref-tag">L'a aimé</p>
+          <p class="sim-ref-name">Châteauneuf-du-Pape</p>
+          <div class="sim-ref-tokens">
+            <span data-i="0">Rhône</span>
+            <span data-i="1">Grenache</span>
+            <span data-i="2">Puissant</span>
+          </div>
+        </div>
+
+        <svg class="sim-links" viewBox="0 0 800 200" aria-hidden="true">
+          <path class="sim-link" d="M 400 0 Q 300 100, 150 200" data-i="0" />
+          <path class="sim-link" d="M 400 0 L 400 200" data-i="1" />
+          <path class="sim-link" d="M 400 0 Q 500 100, 650 200" data-i="2" />
+        </svg>
+
+        <div class="sim-cards">
+          <article class="sim-card" data-i="0">
+            <p class="sim-name">Gigondas</p>
+            <p class="sim-sub">28€</p>
+          </article>
+          <article class="sim-card" data-i="1">
+            <p class="sim-name">Vacqueyras</p>
+            <p class="sim-sub">21€</p>
+          </article>
+          <article class="sim-card" data-i="2">
+            <p class="sim-name">Bandol</p>
+            <p class="sim-sub">36€</p>
+          </article>
+        </div>
+      </div>
+
+      <p class="act-caption">
+        <span class="ms"><b>0</b><i>question</i></span>
+        Aucun aller-retour. Il propose trois pistes qui collent.
+      </p>
+    </div>
+  </section>
+
+  <!-- ════════════════════ ACTE 5 — Brand voice ════════════════════ -->
+  <section class="act act-voice" id="act-5">
+    <div class="act-pin">
+      <header class="act-header">
+        <p class="kicker"><span class="num">05</span></p>
+        <h2 class="act-title">Avec votre <em>ton</em>. Pas un robot.</h2>
+      </header>
+
+      <div class="voice-question">
+        <span class="vq-side">Client →</span>
+        <span>Un cadeau pour mon patron.</span>
+      </div>
+
+      <div class="voice-rows">
+        <article class="voice-row" data-store="caves">
+          <header>
+            <h4>Caves Forty-Two</h4>
+            <span class="vr-tag">Caviste · tutoie</span>
+          </header>
+          <p class="voice-msg" data-msg="Tope ! Voilà ce qu'il faut : Meursault Coche-Dury, 92€. Santé !"></p>
+        </article>
+
+        <article class="voice-row" data-store="atelier">
+          <header>
+            <h4>L'Atelier Lumière</h4>
+            <span class="vr-tag">Décoration · vouvoie</span>
+          </header>
+          <p class="voice-msg" data-msg="Avec plaisir. La suspension Mass Light, 340€ — élégance discrète. À très vite chez L'Atelier."></p>
+        </article>
+
+        <article class="voice-row" data-store="bricolage">
+          <header>
+            <h4>L'Atelier du Bois</h4>
+            <span class="vr-tag">Bricolage · neutre</span>
+          </header>
+          <p class="voice-msg" data-msg="Pour offrir : la perceuse Bosch GSB 18V, 159€. Couvre tout les usages."></p>
+        </article>
+      </div>
+
+      <p class="act-caption">
+        <span class="ms"><b>0</b><i>chatbot à éduquer</i></span>
+        Chaque boutique parle sa langue. Réglage en une minute.
+      </p>
+    </div>
+  </section>
+
+  <!-- ════════════════════ LIVE ════════════════════ -->
+  <section class="live" id="live">
+    <header class="live-head">
+      <p class="kicker">À vous</p>
+      <h2 class="live-title">Parlez au <em>vendeur</em>, en vrai.</h2>
+      <p class="live-sub">Caves Forty-Two · 80 références.</p>
+    </header>
+
+    <div class="live-stage">
+      <div class="live-chat" id="liveChat"></div>
+      <div class="live-input">
+        <input id="liveInput" type="text" placeholder="Je cherche un rouge pour un magret…" autocomplete="off" />
+        <button id="liveSend" aria-label="Envoyer">→</button>
+      </div>
+      <div class="live-suggs" id="liveSugg">
+        <button>Je veux le Chablis William Fèvre</button>
+        <button>Un cadeau pour mon patron</button>
+        <button>Un blanc pour des huîtres</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════ FOOTER ════════════════════ -->
+  <footer class="footer">
+    <p class="ft-logo">SHIMMER</p>
+    <p class="ft-tag">Le temps qu'on rend aux marchands.</p>
+  </footer>
+
+  <script src="script.js" defer></script>
+</body>
+</html>

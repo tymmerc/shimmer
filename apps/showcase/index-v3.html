@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Shimmer — Un vendeur directement intégré</title>
+<link rel="icon" href="data:," />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,400;9..144,500;9..144,700&family=Kalam:wght@400;700&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --paper: #f5f1ea;
+    --paper-warm: #efeadd;
+    --line: rgba(76, 92, 168, 0.22);
+    --line-strong: rgba(76, 92, 168, 0.35);
+    --margin-red: #c54a3f;
+    --ink: #2e2547;
+    --ink-soft: rgba(46, 37, 71, 0.68);
+    --ink-ghost: rgba(46, 37, 71, 0.32);
+    --red: #c0392b;
+    --red-soft: rgba(192, 57, 43, 0.85);
+  }
+
+  *,*::before,*::after { box-sizing: border-box; }
+
+  html { scroll-behavior: auto; }
+
+  body {
+    margin: 0;
+    font-family: "Inter Tight", system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* --- Paper textures ----------------------------------------------------- */
+
+  .paper-lined {
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(to right, transparent 0, transparent 100px, var(--margin-red) 100px, var(--margin-red) 101px, transparent 101px),
+      repeating-linear-gradient(to bottom, transparent 0, transparent 31px, var(--line) 31px, var(--line) 32px);
+  }
+
+  .paper-plain {
+    background-color: var(--paper);
+  }
+
+  /* --- Header / nav ------------------------------------------------------- */
+
+  header.nav {
+    position: fixed; top: 0; left: 0; right: 0;
+    padding: 18px 32px;
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 100;
+    mix-blend-mode: multiply;
+    pointer-events: none;
+  }
+  header.nav .brand,
+  header.nav nav { pointer-events: auto; }
+
+  .brand {
+    font-family: "Fraunces", serif;
+    font-weight: 500;
+    font-size: 22px;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+  }
+  .brand em { font-style: italic; color: var(--red); font-weight: 400; }
+
+  header nav a {
+    font-family: "Inter Tight", sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    text-decoration: none;
+    margin-left: 28px;
+    border-bottom: 1px solid transparent;
+    transition: color .2s, border-color .2s;
+  }
+  header nav a:hover { color: var(--ink); border-bottom-color: var(--ink); }
+
+  /* --- Scene scaffolding -------------------------------------------------- */
+
+  .scene {
+    position: relative;
+    min-height: 100vh;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .scroll-track {
+    position: relative;
+    height: 300vh;
+  }
+  .scroll-track .sticky {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* --- HERO --------------------------------------------------------------- */
+
+  .hero {
+    display: grid;
+    grid-template-columns: 2.4fr minmax(380px, 520px) 0.4fr 140px;
+    align-items: center;
+    padding: 0 60px 0 100px;
+    gap: 0;
+  }
+
+  .hero-left {
+    grid-column: 2;
+    position: relative;
+    padding: 80px 16px 60px 16px;
+  }
+
+  .hero-stage {
+    width: 100%;
+    aspect-ratio: 1 / 1.05;
+    display: block;
+  }
+
+  .hero-title {
+    grid-column: 4;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-family: "Fraunces", serif;
+    font-weight: 400;
+    font-size: clamp(36px, 4.2vw, 60px);
+    line-height: 1.02;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+    text-align: left;
+    padding: 60px 0;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  .hero-title em {
+    font-style: italic;
+    color: var(--red);
+    font-weight: 500;
+  }
+
+  .hero-decorative-top {
+    position: absolute;
+    top: 40px;
+    right: 0;
+    width: 36vw;
+    max-width: 460px;
+    pointer-events: none;
+    opacity: 0.85;
+  }
+  .hero-decorative-bottom {
+    position: absolute;
+    bottom: 30px;
+    right: -40px;
+    width: 30vw;
+    max-width: 380px;
+    pointer-events: none;
+    opacity: 0.85;
+  }
+
+  .hero-footer {
+    position: absolute;
+    bottom: 32px;
+    left: 132px;
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    font-family: "Inter Tight", sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-ghost);
+  }
+  .hero-footer .scroll-cue {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .hero-footer .scroll-cue::after {
+    content: "";
+    width: 38px;
+    height: 1px;
+    background: var(--ink-ghost);
+  }
+
+  /* --- Hand-drawn ink styles --------------------------------------------- */
+
+  .ink {
+    stroke: var(--ink);
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+  }
+  .ink-thin  { stroke-width: 1.6; }
+  .ink-thick { stroke-width: 2.6; }
+
+  .ink-fill  { fill: var(--ink); stroke: none; }
+
+  .red-ink {
+    stroke: var(--red);
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+  }
+  .red-fill { fill: var(--red); stroke: none; }
+
+  .handwrite {
+    font-family: "Kalam", cursive;
+    font-weight: 400;
+    fill: var(--red);
+    font-size: 22px;
+  }
+  .handwrite-ink {
+    font-family: "Kalam", cursive;
+    fill: var(--ink);
+  }
+
+  filter-rough { display: none; }
+
+  /* --- Scrollable steps -------------------------------------------------- */
+
+  .step {
+    display: grid;
+    grid-template-columns: 100px minmax(140px, 240px) 1fr 1fr 100px;
+    grid-template-rows: 1fr;
+    align-items: center;
+    height: 100%;
+    padding: 0;
+  }
+
+  .step-number {
+    grid-column: 2;
+    font-family: "Fraunces", serif;
+    font-weight: 500;
+    color: var(--ink);
+    align-self: start;
+    padding-top: 130px;
+  }
+  .step-number .num {
+    display: block;
+    font-size: clamp(80px, 10vw, 140px);
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+  }
+  .step-number .label {
+    display: block;
+    margin-top: 14px;
+    font-family: "Inter Tight", sans-serif;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-soft);
+  }
+
+  .step-stage {
+    grid-column: 3 / 5;
+    height: 78vh;
+    max-height: 720px;
+    width: 100%;
+    align-self: center;
+  }
+
+  .step-caption {
+    position: absolute;
+    bottom: 48px;
+    left: 132px;
+    right: 132px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: "Fraunces", serif;
+    font-style: italic;
+    font-size: clamp(20px, 2.2vw, 32px);
+    color: var(--ink);
+    max-width: 900px;
+  }
+  .step-caption .quote { font-family: "Kalam", cursive; color: var(--red); font-style: normal; font-size: clamp(16px, 1.6vw, 22px); }
+
+  /* --- Progressive draw animations (via CSS vars updated by JS) ---------- */
+
+  .draw {
+    stroke-dasharray: var(--len, 800);
+    stroke-dashoffset: calc(var(--len, 800) * (1 - var(--p, 0)));
+  }
+
+  .reveal {
+    opacity: var(--p, 0);
+    transform: translateY(calc((1 - var(--p, 0)) * 12px));
+  }
+
+  /* --- Footer ------------------------------------------------------------ */
+
+  .epilogue {
+    min-height: 60vh;
+    display: grid;
+    place-items: center;
+    padding: 80px 32px;
+    text-align: center;
+  }
+  .epilogue h2 {
+    font-family: "Fraunces", serif;
+    font-weight: 400;
+    font-size: clamp(36px, 5vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0 0 24px;
+    color: var(--ink);
+    max-width: 18ch;
+  }
+  .epilogue h2 em { font-style: italic; color: var(--red); }
+  .epilogue p {
+    font-family: "Inter Tight", sans-serif;
+    font-size: 16px;
+    color: var(--ink-soft);
+    max-width: 56ch;
+    margin: 0 auto 36px;
+    line-height: 1.6;
+  }
+  .epilogue .links {
+    display: inline-flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .epilogue .links a {
+    font-family: "Inter Tight", sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink);
+    text-decoration: none;
+    padding: 14px 22px;
+    border: 1.5px solid var(--ink);
+    border-radius: 999px;
+    transition: background .2s, color .2s;
+  }
+  .epilogue .links a:hover { background: var(--ink); color: var(--paper); }
+  .epilogue .links a.primary { background: var(--ink); color: var(--paper); }
+  .epilogue .links a.primary:hover { background: var(--red); border-color: var(--red); }
+
+  .colophon {
+    padding: 32px;
+    border-top: 1px solid var(--line-strong);
+    font-family: "Inter Tight", sans-serif;
+    font-size: 12px;
+    color: var(--ink-ghost);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* --- Responsive --------------------------------------------------------- */
+
+  @media (max-width: 900px) {
+    .paper-lined {
+      background-image:
+        linear-gradient(to right, transparent 0, transparent 40px, var(--margin-red) 40px, var(--margin-red) 41px, transparent 41px),
+        repeating-linear-gradient(to bottom, transparent 0, transparent 31px, var(--line) 31px, var(--line) 32px);
+    }
+    .hero {
+      grid-template-columns: 1fr;
+      padding: 0;
+    }
+    .hero-left { grid-column: 1; padding: 100px 24px 60px 64px; }
+    .hero-title {
+      grid-column: 1;
+      writing-mode: horizontal-tb;
+      transform: none;
+      padding: 0 24px 60px 64px;
+      font-size: 36px;
+    }
+    .hero-footer { left: 64px; right: 24px; gap: 12px; }
+    .hero-decorative-top { width: 50vw; }
+    .hero-decorative-bottom { width: 50vw; bottom: 80px; }
+    .step { grid-template-columns: 1fr; }
+    .step-number { grid-column: 1; padding: 80px 24px 0 64px; }
+    .step-stage { grid-column: 1; padding: 0 24px; height: 60vh; }
+    .step-caption { left: 64px; right: 24px; flex-direction: column; gap: 12px; bottom: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="brand">Shimmer<em>.</em></div>
+  <nav>
+    <a href="/shimmer/cross-sell-demo.html">Démo</a>
+    <a href="/shimmer/cross-sell-dashboard.html">Dashboard</a>
+    <a href="/shimmer/docs.html">API</a>
+  </nav>
+</header>
+
+<!-- ============================================================= -->
+<!-- HERO : sketchbook on lined paper                                -->
+<!-- ============================================================= -->
+<section class="scene hero paper-lined" id="hero">
+
+  <svg class="hero-decorative-top" viewBox="0 0 400 110" aria-hidden="true">
+    <path class="ink ink-thin" d="M 8 78 C 60 38, 120 110, 180 60 S 320 28, 392 70"/>
+    <path class="ink ink-thin" d="M 30 42 C 92 8, 168 82, 228 24 S 336 18, 388 30" opacity=".65"/>
+  </svg>
+
+  <div class="hero-left">
+    <!-- Sketchbook stage : person + digital counter + annotations -->
+    <svg class="hero-stage" viewBox="0 0 560 580" aria-hidden="true">
+      <defs>
+        <filter id="rough" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.022" numOctaves="2" seed="3"/>
+          <feDisplacementMap in="SourceGraphic" scale="1.4"/>
+        </filter>
+      </defs>
+
+      <g filter="url(#rough)">
+
+        <!-- Character : stick figure leaning forward, talking -->
+        <!-- Head -->
+        <ellipse class="ink ink-thick" cx="200" cy="180" rx="34" ry="36" />
+        <!-- Hair tuft -->
+        <path class="ink" d="M 174 152 C 178 142 188 138 196 144"/>
+        <!-- Body line -->
+        <path class="ink ink-thick" d="M 198 216 C 196 260, 214 300, 196 360"/>
+        <!-- Right arm reaching toward counter -->
+        <path class="ink ink-thick" d="M 214 250 C 256 248, 296 268, 336 282"/>
+        <!-- Left arm -->
+        <path class="ink" d="M 188 250 C 168 280, 162 318, 174 348"/>
+        <!-- Legs -->
+        <path class="ink ink-thick" d="M 196 360 C 184 412, 178 460, 168 504"/>
+        <path class="ink ink-thick" d="M 196 360 C 210 408, 224 458, 230 506"/>
+
+        <!-- Tiny speech bubble : the lightbulb / spark from the client -->
+        <circle class="ink" cx="142" cy="124" r="9"/>
+        <path class="ink ink-thin" d="M 138 119 L 138 129 M 142 117 L 142 131 M 146 119 L 146 129"/>
+        <path class="ink ink-thin" d="M 130 138 L 158 138"/>
+
+        <!-- Digital counter : rectangular with 3 dots/knobs -->
+        <rect class="ink ink-thick" x="346" y="246" width="170" height="116" rx="8"/>
+        <rect class="ink ink-thin"  x="358" y="258" width="146" height="92" rx="4" opacity=".55"/>
+        <circle class="ink-fill" cx="386" cy="304" r="11"/>
+        <circle class="ink-fill" cx="430" cy="304" r="11"/>
+        <circle class="ink-fill" cx="474" cy="304" r="11"/>
+        <path class="ink ink-thin" d="M 374 332 L 486 332"/>
+        <!-- Counter base / shadow -->
+        <path class="ink ink-thin" d="M 326 374 L 536 374"/>
+
+        <!-- Cable feeding from counter -->
+        <path class="ink ink-thin" d="M 480 362 C 502 396, 470 430, 504 458 S 536 510, 510 540" opacity=".55"/>
+      </g>
+
+      <!-- Red handwritten annotations (NOT roughed, kept sharp) -->
+      <g>
+        <!-- Pointer arrow to counter -->
+        <path class="red-ink" d="M 470 200 C 460 216, 446 230, 432 238"/>
+        <polygon class="red-fill" points="430,236 442,232 438,244"/>
+        <text class="handwrite" x="476" y="188" transform="rotate(-6 476 188)">offre digitale</text>
+
+        <!-- Bottom annotation -->
+        <text class="handwrite" x="74" y="546" transform="rotate(-3 74 546)">conseille, donne en quelques mots</text>
+        <path class="red-ink" d="M 220 540 C 240 524, 268 514, 296 510"/>
+        <polygon class="red-fill" points="296,508 286,506 290,516"/>
+      </g>
+    </svg>
+  </div>
+
+  <h1 class="hero-title">Un vendeur<br/><em>directement</em><br/>intégré.</h1>
+
+  <svg class="hero-decorative-bottom" viewBox="0 0 400 90" aria-hidden="true">
+    <path class="ink ink-thin" d="M 10 30 C 70 6, 140 70, 210 28 S 340 60, 392 38"/>
+    <path class="ink ink-thin" d="M 22 64 C 90 30, 160 88, 234 50 S 360 80, 386 64" opacity=".55"/>
+  </svg>
+
+  <div class="hero-footer">
+    <span>Shimmer · 2026</span>
+    <span class="scroll-cue">Scrollez pour voir comment</span>
+  </div>
+</section>
+
+<!-- ============================================================= -->
+<!-- STEP 1 : Le client tape sa requête floue                       -->
+<!-- ============================================================= -->
+<section class="scroll-track" data-step="1">
+  <div class="sticky scene paper-plain">
+    <div class="step">
+      <div class="step-number">
+        <span class="num">1</span>
+        <span class="label">il dit, même flou</span>
+      </div>
+      <svg class="step-stage" viewBox="0 0 800 560" aria-hidden="true">
+        <defs>
+          <filter id="rough1"><feTurbulence type="fractalNoise" baseFrequency="0.022" numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="1.4"/></filter>
+        </defs>
+
+        <g filter="url(#rough1)">
+          <!-- Phone / device on the left -->
+          <rect class="ink ink-thick" x="160" y="120" width="240" height="380" rx="22"/>
+          <rect class="ink ink-thin"  x="178" y="148" width="204" height="324" rx="8" opacity=".4"/>
+          <circle class="ink-fill" cx="280" cy="490" r="6"/>
+
+          <!-- Typed query inside screen (drawn as underlines) -->
+          <g class="draw" style="--len: 1200" data-step1-text>
+            <path class="ink" d="M 200 200 L 360 200"/>
+            <path class="ink" d="M 200 226 L 340 226"/>
+            <path class="ink" d="M 200 252 L 300 252"/>
+          </g>
+
+          <!-- Big speech bubble on the right with the actual query -->
+          <path class="ink ink-thick draw" style="--len: 1800"
+            d="M 460 160 C 460 120, 500 100, 552 100 L 720 100 C 760 100, 780 122, 780 156 L 780 264 C 780 296, 760 318, 720 318 L 562 318 L 522 360 L 538 318 L 520 318 C 484 318, 460 296, 460 264 Z"/>
+
+          <!-- Cursor flicker indicator -->
+          <line class="red-ink draw" style="--len: 30" x1="488" y1="148" x2="488" y2="178"/>
+        </g>
+
+        <!-- Query text (handwriting style, no roughness) -->
+        <g style="opacity: var(--p, 0)">
+          <text class="handwrite-ink" x="500" y="178" font-size="28">un truc pour les poils</text>
+          <text class="handwrite-ink" x="500" y="218" font-size="28">de mon chat,</text>
+          <text class="handwrite-ink" x="500" y="258" font-size="28">qui aspire bien</text>
+        </g>
+
+        <!-- Red annotation arrow -->
+        <g>
+          <text class="handwrite" x="540" y="408" transform="rotate(-2 540 408)">on comprend l'intention,</text>
+          <text class="handwrite" x="540" y="438" transform="rotate(-2 540 438)">pas juste les mots</text>
+          <path class="red-ink" d="M 600 348 C 600 364, 608 380, 620 396"/>
+          <polygon class="red-fill" points="616,396 624,386 628,398"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="step-caption">
+      <span>Le client cherche en langage humain.</span>
+      <span class="quote">"un truc pour les poils de mon chat"</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================= -->
+<!-- STEP 2 : Le vendeur IA qualifie en une question utile           -->
+<!-- ============================================================= -->
+<section class="scroll-track" data-step="2">
+  <div class="sticky scene paper-plain">
+    <div class="step">
+      <div class="step-number">
+        <span class="num">2</span>
+        <span class="label">il pose, juste assez</span>
+      </div>
+      <svg class="step-stage" viewBox="0 0 800 560" aria-hidden="true">
+        <defs>
+          <filter id="rough2"><feTurbulence type="fractalNoise" baseFrequency="0.022" numOctaves="2" seed="11"/><feDisplacementMap in="SourceGraphic" scale="1.4"/></filter>
+        </defs>
+
+        <g filter="url(#rough2)">
+          <!-- Counter on the right with 3 dots, more imposing this time -->
+          <rect class="ink ink-thick" x="520" y="280" width="220" height="150" rx="10"/>
+          <rect class="ink ink-thin"  x="536" y="296" width="188" height="118" rx="6" opacity=".45"/>
+          <circle class="ink-fill" cx="572" cy="354" r="13"/>
+          <circle class="ink-fill" cx="630" cy="354" r="13"/>
+          <circle class="ink-fill" cx="688" cy="354" r="13"/>
+          <path class="ink ink-thin" d="M 558 390 L 702 390"/>
+          <path class="ink ink-thin" d="M 504 446 L 754 446"/>
+
+          <!-- Speech bubble going LEFT from the counter -->
+          <path class="ink ink-thick draw" style="--len: 1700"
+            d="M 510 200 C 510 168, 484 148, 444 148 L 116 148 C 76 148, 50 168, 50 200 L 50 268 C 50 300, 76 320, 116 320 L 440 320 L 484 360 L 470 320 C 498 318, 510 300, 510 268 Z"/>
+        </g>
+
+        <!-- Question text (sharp, no rough) -->
+        <g style="opacity: var(--p, 0)">
+          <text class="handwrite-ink" x="98" y="208" font-size="26">Plutôt poils courts ou longs ?</text>
+          <text class="handwrite-ink" x="98" y="246" font-size="26">Et chez vous, c'est moquette,</text>
+          <text class="handwrite-ink" x="98" y="284" font-size="26">parquet ou carrelage ?</text>
+        </g>
+
+        <!-- Choice chips drawn as little squares -->
+        <g class="draw" style="--len: 600">
+          <rect class="ink ink-thin" x="98" y="380" width="92" height="32" rx="6"/>
+          <rect class="ink ink-thin" x="206" y="380" width="92" height="32" rx="6"/>
+          <rect class="ink ink-thin" x="314" y="380" width="92" height="32" rx="6"/>
+        </g>
+        <g style="opacity: var(--p, 0)">
+          <text class="handwrite-ink" x="108" y="402" font-size="18">poils longs</text>
+          <text class="handwrite-ink" x="216" y="402" font-size="18">parquet</text>
+          <text class="handwrite-ink" x="324" y="402" font-size="18">silencieux</text>
+        </g>
+
+        <!-- Red annotation -->
+        <text class="handwrite" x="500" y="494" transform="rotate(-2 500 494)">une seule question, ciblée</text>
+        <path class="red-ink" d="M 480 488 C 460 472, 440 460, 412 452"/>
+        <polygon class="red-fill" points="412,452 422,448 416,460"/>
+      </svg>
+    </div>
+    <div class="step-caption">
+      <span>Il qualifie en une seule question utile.</span>
+      <span class="quote">"poils longs · parquet · silencieux"</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================= -->
+<!-- STEP 3 : Le bon produit, justifié                              -->
+<!-- ============================================================= -->
+<section class="scroll-track" data-step="3">
+  <div class="sticky scene paper-plain">
+    <div class="step">
+      <div class="step-number">
+        <span class="num">3</span>
+        <span class="label">il propose, justifié</span>
+      </div>
+      <svg class="step-stage" viewBox="0 0 800 560" aria-hidden="true">
+        <defs>
+          <filter id="rough3"><feTurbulence type="fractalNoise" baseFrequency="0.022" numOctaves="2" seed="17"/><feDisplacementMap in="SourceGraphic" scale="1.4"/></filter>
+        </defs>
+
+        <g filter="url(#rough3)">
+          <!-- Person on left, smaller -->
+          <ellipse class="ink ink-thick" cx="120" cy="180" rx="26" ry="28"/>
+          <path class="ink ink-thick" d="M 120 210 C 118 250, 132 286, 118 336"/>
+          <path class="ink" d="M 134 240 C 162 244, 188 258, 210 270"/>
+          <path class="ink" d="M 108 240 C 90 264, 88 296, 96 322"/>
+          <path class="ink ink-thick" d="M 118 336 C 106 380, 100 420, 90 456"/>
+          <path class="ink ink-thick" d="M 118 336 C 132 380, 144 420, 152 458"/>
+
+          <!-- Product card in the middle -->
+          <rect class="ink ink-thick draw" style="--len: 1500" x="250" y="120" width="320" height="380" rx="12"/>
+          <!-- Product illustration (vacuum silhouette, simplified) -->
+          <g class="draw" style="--len: 1200">
+            <path class="ink ink-thick" d="M 340 220 C 340 196, 360 178, 388 178 L 432 178 C 460 178, 480 196, 480 220 L 480 280 L 340 280 Z"/>
+            <rect class="ink" x="356" y="290" width="108" height="56" rx="6"/>
+            <path class="ink" d="M 410 346 L 410 380"/>
+            <ellipse class="ink ink-thick" cx="410" cy="394" rx="68" ry="14"/>
+          </g>
+          <!-- Product label -->
+          <g style="opacity: var(--p, 0)">
+            <text class="handwrite-ink" x="266" y="432" font-size="22">Aspi silencieux poils animaux</text>
+            <text class="handwrite-ink" x="266" y="464" font-size="20" fill="rgba(46,37,71,0.55)">249€ · stock OK · 4,7★</text>
+          </g>
+
+          <!-- Counter on far right echoing the brand -->
+          <rect class="ink" x="640" y="320" width="100" height="68" rx="6" opacity=".55"/>
+          <circle class="ink-fill" cx="660" cy="354" r="6"/>
+          <circle class="ink-fill" cx="690" cy="354" r="6"/>
+          <circle class="ink-fill" cx="720" cy="354" r="6"/>
+        </g>
+
+        <!-- Red annotations -->
+        <g>
+          <path class="red-ink" d="M 268 100 C 286 86, 320 80, 354 86"/>
+          <polygon class="red-fill" points="354,86 344,80 346,92"/>
+          <text class="handwrite" x="260" y="92" transform="rotate(-4 260 92)">le bon, pas le premier</text>
+        </g>
+        <g>
+          <text class="handwrite" x="528" y="510" transform="rotate(-2 528 510)">avec la raison écrite</text>
+          <path class="red-ink" d="M 522 504 C 504 488, 480 478, 456 470"/>
+          <polygon class="red-fill" points="456,470 466,466 460,478"/>
+        </g>
+
+        <!-- Reason chip below product -->
+        <g class="draw" style="--len: 600">
+          <path class="ink ink-thin" d="M 260 380 L 560 380"/>
+        </g>
+        <g style="opacity: var(--p, 0)">
+          <text class="handwrite-ink" x="266" y="398" font-size="14" fill="rgba(46,37,71,0.6)">
+            "silencieux + brosse anti-poils, conçu pour parquet"
+          </text>
+        </g>
+      </svg>
+    </div>
+    <div class="step-caption">
+      <span>Il propose le bon produit, avec la raison.</span>
+      <span class="quote">"silencieux + brosse anti-poils"</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================= -->
+<!-- EPILOGUE / CTA                                                 -->
+<!-- ============================================================= -->
+<section class="epilogue paper-plain">
+  <h2>Un vendeur qui <em>parle</em>,<br/>pas un moteur qui <em>devine</em>.</h2>
+  <p>Trois étapes, une intention comprise, un produit justifié. Shimmer s'intègre en 30 minutes sur la fiche produit existante, et mesure chaque euro qu'il rapporte.</p>
+  <div class="links">
+    <a class="primary" href="/shimmer/cross-sell-demo.html">Voir la démo</a>
+    <a href="/shimmer/cross-sell-dashboard.html">Le dashboard</a>
+    <a href="/shimmer/docs.html">API</a>
+  </div>
+</section>
+
+<footer class="colophon paper-plain">
+  <span>Shimmer · vendeur IA</span>
+  <span>v0.4.0 · 2026</span>
+</footer>
+
+<script>
+  // Scroll scrub : update --p on each scroll-track based on its progress through the viewport.
+  const tracks = document.querySelectorAll('.scroll-track');
+  function tick() {
+    const vh = window.innerHeight;
+    for (const t of tracks) {
+      const r = t.getBoundingClientRect();
+      // progress 0 when track top hits 0, 1 when track bottom leaves vh
+      const total = r.height - vh;
+      const scrolled = Math.min(Math.max(-r.top, 0), total);
+      const p = total > 0 ? scrolled / total : 0;
+      t.style.setProperty('--p', p.toFixed(3));
+    }
+    raf = null;
+  }
+  let raf = null;
+  function schedule() { if (raf == null) raf = requestAnimationFrame(tick); }
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule);
+  tick();
+</script>
+
+</body>
+</html>
