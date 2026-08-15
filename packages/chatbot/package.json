@@ -9,7 +9,8 @@
     "build": "tsup src/index.ts --format esm --dts"
   },
   "dependencies": {
-    "@shimmer/core": "workspace:*"
+    "@shimmer/core": "workspace:*",
+    "@shimmer/smart-search": "workspace:*"
   },
   "devDependencies": {
     "tsup": "^8.0.0",

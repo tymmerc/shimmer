@@ -8,11 +8,22 @@
 interface ShimmerConfig {
   apiUrl: string;
   apiKey: string;
+  /** Numeric store ID, needed for the holdout decision endpoint (public).
+   *  If omitted, the SDK fetches it once via /api/stores/me/config. */
+  storeId?: number;
   containerId?: string;
+  /** CSS selector of the merchant's existing search input to hook the vendeur onto.
+   *  Default: input[type="search"], input[data-shimmer-search]. */
   searchSelector?: string;
   chatSelector?: string;
+  /** Mount the floating chatbot bubble in addition to the search-bar vendeur.
+   *  Off by default: the vendeur lives in the search bar. */
+  enableChat?: boolean;
   locale?: 'fr' | 'en';
   theme?: Partial<ShimmerTheme>;
+  /** If true, the SDK does NOT auto-inject the visitor id into Shopify cart
+   *  attributes. Default false (auto-inject on detected Shopify storefronts). */
+  disableCartAttribution?: boolean;
 }
 
 interface ShimmerTheme {
@@ -33,6 +44,32 @@ interface SearchResult {
   brand: string;
   score: number;
   matchType: string;
+}
+
+/** Product as returned by the one-shot vendeur (chat/message). */
+interface VendeurProduct {
+  id: number;
+  name: string;
+  price: string;
+  category: string | null;
+  brand: string | null;
+  sku: string;
+  imageUrl: string | null;
+  why: string;
+}
+
+/** Produit épuisé que le visiteur a demandé : on lui propose d'être prévenu. */
+interface OutOfStockProduct {
+  id: number;
+  name: string;
+  platformProductId: string | null;
+}
+
+interface VendeurResponse {
+  message: string;
+  sessionToken: string;
+  recommendedProducts: VendeurProduct[];
+  outOfStock?: OutOfStockProduct[];
 }
 
 interface SearchResponse {
@@ -176,19 +213,42 @@ const LABELS = {
 
 // ─── HTTP Client ─────────────────────────────────────────────────────────────
 
+/**
+ * fetch with a hard timeout. The SDK runs on the merchant's storefront, so a
+ * hanging API must never tie up a request forever. On timeout the promise
+ * rejects with a clear error the caller can swallow.
+ */
+function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  return fetch(url, { ...init, signal: init.signal ?? ctrl.signal })
+    .finally(() => clearTimeout(timer));
+}
+
 class ShimmerClient {
-  constructor(private apiUrl: string, private apiKey: string) {}
+  constructor(private apiUrl: string, private apiKey: string, private storeId?: number) {}
+
+  /** Headers sent on every call. The store id lets the API validate a
+   *  publishable key (pk_) without exposing the secret key. */
+  private headers(): Record<string, string> {
+    const h: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${this.apiKey}`,
+    };
+    if (this.storeId) h['X-Shimmer-Store'] = String(this.storeId);
+    return h;
+  }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const url = `${this.apiUrl}${path}`;
-    const res = await fetch(url, {
+    // Le vendeur (chat), l'assist et la recherche passent par le LLM : en local
+    // (Ollama) une réponse peut prendre 30-60s. On leur laisse 70s ; sinon 8s.
+    const slow = path.includes('/assist') || path.includes('/search') || path.includes('/chat');
+    const res = await fetchWithTimeout(url, {
       method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
-      },
+      headers: this.headers(),
       body: body ? JSON.stringify(body) : undefined,
-    });
+    }, slow ? 70_000 : 8_000);
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
       throw new Error(err.error || `HTTP ${res.status}`);
@@ -202,6 +262,17 @@ class ShimmerClient {
 
   assist(message: string, sessionToken?: string, history?: ChatMessage[], knownCriteria?: Record<string, string>): Promise<AssistResponse> {
     return this.request('POST', '/api/search/assist', { message, sessionToken, history, knownCriteria });
+  }
+
+  /** One-shot vendeur: returns a recommendation sentence + products immediately
+   *  (same backend as the public demo). Used by the search-bar vendeur. */
+  vendeur(message: string, sessionToken?: string): Promise<VendeurResponse> {
+    return this.request('POST', '/api/chat/message', { message, sessionToken });
+  }
+
+  /** Retour de stock : "prévenez-moi quand ça revient". Idempotent côté serveur. */
+  stockAlert(input: { email: string; platformVariantId: string; productId?: number; variantLabel?: string; visitorId?: string | null }): Promise<{ ok: boolean; created: boolean }> {
+    return this.request('POST', '/api/stock-alerts', { ...input, store: this.storeId });
   }
 
   /** Stream assist response via SSE — calls onToken for each word, onMeta for metadata, onDone when complete */
@@ -222,10 +293,7 @@ class ShimmerClient {
 
     fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
-      },
+      headers: this.headers(),
       body: JSON.stringify({ message, sessionToken, history, knownCriteria }),
       signal: ctrl.signal,
     }).then(async (res) => {
@@ -338,7 +406,15 @@ function injectStyles(theme: ShimmerTheme) {
       width: 100%; padding: 16px 20px; border: none; outline: none;
       font-size: 16px; font-family: inherit; border-bottom: 1px solid #e5e7eb;
     }
-    .shimmer-search-results { max-height: 60vh; overflow-y: auto; padding: 8px; }
+    .shimmer-search-results { max-height: 56vh; overflow-y: auto; padding: 8px; }
+    /* Question du vendeur, discrète, juste sous la barre. */
+    .shimmer-vendor-q { display: none; padding: 8px 16px 10px; font-size: 14px; line-height: 1.45;
+      color: ${theme.primaryColor}; }
+    .shimmer-vendor-q.active { display: block; }
+    .shimmer-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 16px 14px; }
+    .shimmer-chip { border: 1px solid ${theme.primaryColor}; background: transparent; color: ${theme.primaryColor};
+      border-radius: 999px; padding: 8px 14px; font-size: 14px; cursor: pointer; transition: .15s; }
+    .shimmer-chip:hover { background: ${theme.primaryColor}; color: #fff; }
     .shimmer-search-item {
       display: flex; gap: 12px; padding: 12px; border-radius: 8px; cursor: pointer;
       transition: background 0.15s;
@@ -352,6 +428,15 @@ function injectStyles(theme: ShimmerTheme) {
     .shimmer-search-item-desc { font-size: 12px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .shimmer-search-item-price { font-weight: 700; color: ${theme.primaryColor}; white-space: nowrap; }
     .shimmer-search-empty { padding: 24px; text-align: center; color: #9ca3af; }
+    .shimmer-restock { margin: 6px 12px 10px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fafafa; }
+    .shimmer-restock-title { font-size: 13px; color: #111827; margin-bottom: 8px; }
+    .shimmer-restock-title strong { font-weight: 600; }
+    .shimmer-restock-form { display: flex; gap: 8px; }
+    .shimmer-restock-form input { flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 999px; font: inherit; font-size: 13px; outline: none; }
+    .shimmer-restock-form input:focus { border-color: #111827; }
+    .shimmer-restock-form button { padding: 9px 14px; border: none; border-radius: 999px; background: #111827; color: #fff; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+    .shimmer-restock-form button:disabled { opacity: .5; cursor: default; }
+    .shimmer-restock-done { font-size: 13px; color: #047857; }
 
     /* Chat bubble */
     .shimmer-chat-bubble {
@@ -571,14 +656,23 @@ function injectStyles(theme: ShimmerTheme) {
 class SearchWidget {
   private overlay!: HTMLElement;
   private input!: HTMLInputElement;
+  private questionEl!: HTMLElement;
   private resultsEl!: HTMLElement;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private sessionToken: string | null = null;
+  private history: ChatMessage[] = [];
+  private knownCriteria: Record<string, string> | null = null;
+  /** True once the conversation has a concrete need (skip the refine step). */
+  private refined = false;
+  /** The vague base query awaiting refinement (e.g. "rouge"). */
+  private pendingBase = '';
 
   constructor(
     private client: ShimmerClient,
     private labels: typeof LABELS['fr'],
     private searchSelector?: string,
+    /** Fired on each handled query; used to enroll the visitor into the holdout measure. */
+    private onQuery?: () => void,
   ) {
     this.createOverlay();
     this.hookExistingInputs();
@@ -590,19 +684,29 @@ class SearchWidget {
     this.overlay.innerHTML = `
       <div class="shimmer-search-panel">
         <input class="shimmer-search-input" type="text" placeholder="${this.labels.searchPlaceholder}" autocomplete="off" />
+        <div class="shimmer-vendor-q"></div>
         <div class="shimmer-search-results"></div>
       </div>
     `;
     document.body.appendChild(this.overlay);
 
     this.input = this.overlay.querySelector('.shimmer-search-input')!;
+    this.questionEl = this.overlay.querySelector('.shimmer-vendor-q')!;
     this.resultsEl = this.overlay.querySelector('.shimmer-search-results')!;
 
     this.overlay.addEventListener('click', (e) => {
       if (e.target === this.overlay) this.close();
     });
 
-    this.input.addEventListener('input', () => this.onInput());
+    // Le vendeur répond quand on valide (Entrée), pas à chaque frappe :
+    // l'assist passe par l'IA, on ne le déclenche pas sur chaque lettre.
+    this.input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const q = this.input.value.trim();
+        if (q.length >= 2) void this.handleQuery(q);
+      }
+    });
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.close();
@@ -625,46 +729,150 @@ class SearchWidget {
     this.overlay.classList.add('active');
     this.input.value = query || '';
     setTimeout(() => this.input.focus(), 50);
-    if (query) this.doSearch(query);
+    if (query && query.trim().length >= 2) void this.handleQuery(query.trim());
+  }
+
+  /**
+   * Si la requête est trop vague (un mot, ex « rouge »), on affine d'abord
+   * comme en magasin : une question + des choix rapides, SANS appeler l'IA (le
+   * modèle local n'obéit pas de façon fiable à « pose une question »). Dès
+   * qu'on a un élément concret, on passe au vendeur (chat/message).
+   */
+  private handleQuery(query: string) {
+    try { this.onQuery?.(); } catch { /* never break the search over tracking */ }
+    if (!this.refined && isVagueQuery(query)) {
+      this.pendingBase = query;
+      this.askToRefine(query);
+      return;
+    }
+    void this.askVendor(query);
+  }
+
+  /** Affiche une question de précision + des puces de réponse rapide. */
+  private askToRefine(query: string) {
+    this.setQuestion(`Avec plaisir. Pour bien vous orienter sur « ${query} », c'est pour quelle occasion ?`);
+    const chips = ['Apéritif', 'Un repas', 'Un cadeau', 'Découvrir', 'Petit budget'];
+    this.resultsEl.innerHTML =
+      `<div class="shimmer-chips">${chips.map(c => `<button class="shimmer-chip" type="button">${esc(c)}</button>`).join('')}</div>`;
+    this.resultsEl.querySelectorAll<HTMLButtonElement>('.shimmer-chip').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.refined = true;
+        void this.askVendor(`${this.pendingBase} pour ${btn.textContent}`);
+      });
+    });
   }
 
   close() {
     this.overlay.classList.remove('active');
     this.resultsEl.innerHTML = '';
+    // Repart d'une conversation vierge au prochain usage (sinon les critères
+    // d'une recherche se reporteraient sur la suivante).
+    this.setQuestion('');
+    this.history = [];
+    this.knownCriteria = null;
+    this.sessionToken = null;
+    this.refined = false;
+    this.pendingBase = '';
+    this.input.placeholder = this.labels.searchPlaceholder;
   }
 
-  private onInput() {
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    const q = this.input.value.trim();
-    if (q.length < 2) { this.resultsEl.innerHTML = ''; return; }
-    this.debounceTimer = setTimeout(() => this.doSearch(q), 300);
-  }
-
-  private async doSearch(query: string) {
+  /**
+   * Le vendeur conversationnel dans la barre. Une réponse en langage naturel
+   * en haut + les produits recommandés en dessous (hybride). Garde le contexte
+   * (sessionToken + critères connus) pour que les questions s'enchaînent.
+   */
+  /**
+   * Vendeur « comme en magasin » : on appelle l'assist, qui comprend la requête
+   * (« rouge » → vin rouge), pose UNE question pour affiner (occasion, budget,
+   * millésime…) affichée en discret sous la barre, et renvoie les produits qui
+   * se précisent à chaque échange. Le contexte (critères connus + historique)
+   * est conservé pour que la conversation se resserre tour après tour.
+   */
+  private async askVendor(query: string) {
+    this.setThinking();
     try {
-      const res = await this.client.search(query, this.sessionToken || undefined);
-      this.sessionToken = res.sessionToken;
-      this.renderResults(res.results);
+      // chat/message : le vendeur fiable. Il garde le contexte via le
+      // sessionToken (côté serveur), pose une question si la demande est vague,
+      // et recommande dès qu'il a un élément concret.
+      const res = await this.client.vendeur(query, this.sessionToken || undefined);
+      this.sessionToken = res.sessionToken || this.sessionToken;
+      this.setQuestion(res.message);
+      this.renderProducts(res.recommendedProducts || []);
+      this.renderRestockPrompt(res.outOfStock || []);
+      this.input.value = '';
+      this.input.placeholder = 'Précisez, ou demandez autre chose…';
     } catch {
-      this.resultsEl.innerHTML = `<div class="shimmer-search-empty">Erreur de recherche</div>`;
+      this.setQuestion('');
+      this.resultsEl.innerHTML = `<div class="shimmer-search-empty">Le vendeur n'est pas joignable, réessayez dans un instant.</div>`;
     }
   }
 
-  private renderResults(results: SearchResult[]) {
-    if (!results.length) {
-      this.resultsEl.innerHTML = `<div class="shimmer-search-empty">${this.labels.noResults}</div>`;
-      return;
-    }
-    this.resultsEl.innerHTML = results.slice(0, 10).map((r) => `
-      <div class="shimmer-search-item" data-id="${r.id}">
-        ${r.imageUrl ? `<img src="${r.imageUrl}" alt="${esc(r.name)}" />` : '<div style="width:56px;height:56px;background:#f3f4f6;border-radius:8px"></div>'}
+  private setThinking() {
+    this.questionEl.textContent = 'Le vendeur réfléchit…';
+    this.questionEl.classList.add('active');
+  }
+
+  /** Phrase du vendeur (question ou conseil), en discret juste sous la barre. */
+  private setQuestion(message: string) {
+    this.questionEl.textContent = message || '';
+    this.questionEl.classList.toggle('active', !!message);
+  }
+
+  /**
+   * Retour de stock : le visiteur a demandé un produit épuisé, le vendeur lui a
+   * dit. On lui tend un champ email, une phrase, un bouton. Rien de plus.
+   */
+  private renderRestockPrompt(items: OutOfStockProduct[]) {
+    this.resultsEl.querySelectorAll('.shimmer-restock').forEach(el => el.remove());
+    if (!items.length) return;
+    const it = items[0]!;
+    const box = document.createElement('div');
+    box.className = 'shimmer-restock';
+    box.innerHTML = `
+      <div class="shimmer-restock-title"><strong>${esc(it.name)}</strong> est épuisé. Je vous préviens dès qu'il revient ?</div>
+      <form class="shimmer-restock-form">
+        <input type="email" required placeholder="votre@email.fr" autocomplete="email" />
+        <button type="submit">Prévenez-moi</button>
+      </form>`;
+    const form = box.querySelector('form') as HTMLFormElement;
+    const input = box.querySelector('input') as HTMLInputElement;
+    const btn = box.querySelector('button') as HTMLButtonElement;
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = input.value.trim();
+      if (!email) return;
+      btn.disabled = true;
+      try {
+        await this.client.stockAlert({
+          email,
+          // Sans id de variante côté catalogue local, on ancre sur le produit plateforme (ou local).
+          platformVariantId: it.platformProductId ? `p:${it.platformProductId}` : `local:${it.id}`,
+          productId: it.id,
+          variantLabel: it.name,
+          visitorId: readCookie(VID_COOKIE),
+        });
+        box.innerHTML = `<div class="shimmer-restock-done">C'est noté. Vous serez prévenu dès le retour de ${esc(it.name)}.</div>`;
+      } catch {
+        btn.disabled = false;
+        input.setCustomValidity("Impossible d'enregistrer, réessayez.");
+        input.reportValidity();
+        setTimeout(() => input.setCustomValidity(''), 2000);
+      }
+    });
+    this.resultsEl.prepend(box);
+  }
+
+  private renderProducts(products: VendeurProduct[]) {
+    if (!products.length) { this.resultsEl.innerHTML = ''; return; }
+    this.resultsEl.innerHTML = products.slice(0, 8).map((p) => `
+      <div class="shimmer-search-item" data-id="${p.id}">
+        ${p.imageUrl ? `<img src="${p.imageUrl}" alt="${esc(p.name)}" />` : '<div style="width:56px;height:56px;background:#f3f4f6;border-radius:8px"></div>'}
         <div class="shimmer-search-item-info">
-          <div class="shimmer-search-item-name">${esc(r.name)}</div>
-          <div class="shimmer-search-item-desc">${esc(r.category || '')} ${r.brand ? '· ' + esc(r.brand) : ''}</div>
+          <div class="shimmer-search-item-name">${esc(p.name)}</div>
+          <div class="shimmer-search-item-desc">${esc(p.category || '')} ${p.brand ? '· ' + esc(p.brand) : ''}</div>
         </div>
-        <div class="shimmer-search-item-price">${r.price}${r.currency === 'EUR' ? '€' : ' ' + r.currency}</div>
-      </div>
-    `).join('');
+        <div class="shimmer-search-item-price">${esc(p.price)} €</div>
+      </div>`).join('');
   }
 
   destroy() {
@@ -895,6 +1103,18 @@ function esc(s: string): string {
   return el.innerHTML;
 }
 
+/** Une requête est "vague" si c'est un ou deux mots très génériques (couleur,
+ *  type, intention) qui méritent une question avant de recommander. */
+function isVagueQuery(q: string): boolean {
+  const words = q.trim().toLowerCase().split(/\s+/);
+  if (words.length > 2) return false;
+  const broad = [
+    'rouge', 'blanc', 'rosé', 'rose', 'vin', 'vins', 'champagne', 'crémant', 'cremant',
+    'bulle', 'bulles', 'cadeau', 'offrir', 'idée', 'idee', 'apéro', 'apero',
+  ];
+  return words.some(w => broad.includes(w));
+}
+
 // ─── Cross-sell Widget ───────────────────────────────────────────────────────
 
 const CROSS_SELL_ROLE_LABELS: Record<CrossSellRole, string> = {
@@ -910,6 +1130,149 @@ const CROSS_SELL_ROLE_LABELS: Record<CrossSellRole, string> = {
 // Generate/persist an anonymous session id so the same browser tab/user is
 // tracked consistently across events. Stored in localStorage with a 30-day
 // rolling window so analytics don't double-count the same session.
+// ──────────────────────────────────────────────────────────────────
+// Visitor ID + holdout — the cookie that travels with the visitor and lets
+// the backend compute the incremental lift later. First-party, 1 year TTL.
+// ──────────────────────────────────────────────────────────────────
+
+const VID_COOKIE = 'shimmer_vid';
+const VID_MAX_AGE_DAYS = 365;
+
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[.$?*|{}()[\]\\\/+^]/g, '\\$&') + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]!) : null;
+}
+
+function writeCookie(name: string, value: string, days: number): void {
+  if (typeof document === 'undefined') return;
+  const expires = new Date(Date.now() + days * 86_400_000).toUTCString();
+  // first-party, lax samesite (works through checkout redirects on same domain)
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+function getOrCreateVisitorId(): string {
+  const existing = readCookie(VID_COOKIE);
+  if (existing && existing.length >= 8) return existing;
+  const id = 'vid_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  writeCookie(VID_COOKIE, id, VID_MAX_AGE_DAYS);
+  return id;
+}
+
+async function fetchHoldoutDecision(
+  apiUrl: string,
+  storeId: number,
+  visitorId: string,
+): Promise<{ control: boolean; bucket: number; holdoutPct: number }> {
+  // Short timeout: this gates widget mount, so we can't wait long. On failure
+  // the caller defaults to treatment (widget shown).
+  const res = await fetchWithTimeout(
+    `${apiUrl}/api/holdout/decision?store=${storeId}&visitorId=${encodeURIComponent(visitorId)}`,
+    {},
+    5_000,
+  );
+  if (!res.ok) throw new Error('holdout-decision-failed');
+  return res.json() as Promise<{ control: boolean; bucket: number; holdoutPct: number }>;
+}
+
+const ENROLL_FLAG = 'shimmer_enrolled';
+
+/**
+ * Enroll the visitor into the vendeur experiment: fired the first time they
+ * use the search surface, for BOTH groups. The control visitor keeps the
+ * native search untouched, we only record that they searched, so the two
+ * enrolled populations stay comparable. Server side is first-trigger-wins;
+ * the sessionStorage flag just avoids re-sending during the same session.
+ */
+function trackSearchEnrollment(apiUrl: string, storeId: number, visitorId: string, exposed: boolean): void {
+  try {
+    if (window.sessionStorage.getItem(ENROLL_FLAG)) return;
+  } catch { /* private mode: we just send every time, server dedupes */ }
+  void fetch(`${apiUrl}/api/holdout/track`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ visitorId, store: storeId, exposed, trigger: 'search' }),
+    keepalive: true,
+  }).then(() => {
+    try { window.sessionStorage.setItem(ENROLL_FLAG, '1'); } catch { /* ignore */ }
+  }).catch(() => { /* fail-silent: never break the host page */ });
+}
+
+/**
+ * Control-group counterpart of the SearchWidget hook: listen to the
+ * merchant's native search inputs WITHOUT altering their behavior, purely to
+ * detect "this visitor searched" and enroll them.
+ */
+function watchNativeSearchForEnrollment(searchSelector: string | undefined, onSearch: () => void): void {
+  const selector = searchSelector || 'input[type="search"], input[data-shimmer-search]';
+  document.querySelectorAll<HTMLInputElement>(selector).forEach((input) => {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && input.value.trim().length >= 2) onSearch();
+    });
+    input.form?.addEventListener('submit', () => {
+      if (input.value.trim().length >= 2) onSearch();
+    });
+  });
+}
+
+function isShopifyStorefront(): boolean {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+  const w = window as unknown as { Shopify?: unknown };
+  if (w.Shopify) return true;
+  // Theme injects this meta on most Shopify sites
+  if (document.querySelector('meta[name="shopify-checkout-api-token"], meta[name="shopify-digital-wallet"]')) return true;
+  return /\.myshopify\.com$/.test(window.location.hostname);
+}
+
+/**
+ * Inject the visitor id into the Shopify cart as a note_attribute, so the
+ * order webhook on shimmer-api receives it and can attribute the order to the
+ * holdout bucket. Called on init and re-applied if the cart is updated.
+ */
+async function setupShopifyCartAttribution(visitorId: string, bucket: number): Promise<void> {
+  if (!isShopifyStorefront()) return;
+  const payload = {
+    attributes: {
+      shimmer_vid: visitorId,
+      shimmer_bucket: String(bucket),
+    },
+  };
+  // Eager: set the attribute immediately so even checkout-from-product-page works.
+  try {
+    await fetch('/cart/update.js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload),
+      credentials: 'same-origin',
+    });
+  } catch {
+    /* silent: themes that block this still work, attribution just degrades */
+  }
+
+  // Re-apply after any cart mutation by other scripts (theme add-to-cart, etc.).
+  // We monkey-patch fetch so any call to /cart/add.js or /cart/change.js is followed by our update.
+  if (!('__shimmerFetchPatched' in window)) {
+    (window as unknown as Record<string, unknown>).__shimmerFetchPatched = true;
+    const origFetch = window.fetch.bind(window);
+    window.fetch = async (...args: Parameters<typeof window.fetch>) => {
+      const res = await origFetch(...args);
+      try {
+        const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
+        if (/\/cart\/(add|change|clear)(?:\.js)?\b/.test(url)) {
+          // Re-inject in the background, don't await
+          void origFetch('/cart/update.js', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(payload),
+            credentials: 'same-origin',
+          });
+        }
+      } catch { /* ignore */ }
+      return res;
+    };
+  }
+}
+
 const SESSION_STORAGE_KEY = 'shimmer_xs_sid';
 const SESSION_MAX_AGE_MS = 30 * 86_400_000;
 
@@ -1210,21 +1573,106 @@ export class Shimmer {
     this.config = config;
     this.theme = { ...DEFAULT_THEME, ...config.theme };
     this.labels = LABELS[config.locale || 'fr'];
-    this.client = new ShimmerClient(config.apiUrl, config.apiKey);
+    this.client = new ShimmerClient(config.apiUrl, config.apiKey, config.storeId);
   }
 
   /**
    * Initialize Shimmer SDK. Creates search overlay + chat widget.
+   *
+   * Side effects, in order:
+   *   1. Reads/creates the first-party `shimmer_vid` cookie.
+   *   2. Asks the backend if this visitor is in the holdout control group.
+   *      If yes, NOTHING is rendered (control must not see Shimmer to keep
+   *      the experiment clean).
+   *   3. On a Shopify storefront, injects `shimmer_vid` into the cart
+   *      attributes so the order webhook can attribute revenue.
+   *   4. Mounts widgets.
    */
   static init(config: ShimmerConfig): Shimmer {
-    if (Shimmer.instance) Shimmer.instance.destroy();
+    // Hard rule: the SDK runs on the merchant's storefront. Nothing here may
+    // throw up to the host page's script. We isolate every step so a bad config
+    // or a DOM quirk degrades Shimmer silently instead of breaking the shop.
+    try {
+      if (Shimmer.instance) Shimmer.instance.destroy();
+      const shimmer = new Shimmer(config);
+      try { injectStyles(shimmer.theme); } catch (e) { console.warn('[shimmer] styles', e); }
+      Shimmer.instance = shimmer;
+      // bootstrap is async + already internally guarded; never await it here.
+      shimmer.bootstrapHoldoutAndMount().catch((e) => console.warn('[shimmer] bootstrap', e));
+      return shimmer;
+    } catch (e) {
+      console.warn('[shimmer] init failed, store unaffected', e);
+      // Return a non-functional instance so callers that hold the ref don't NPE.
+      return Shimmer.instance ?? (new Shimmer(config));
+    }
+  }
 
-    const shimmer = new Shimmer(config);
-    injectStyles(shimmer.theme);
-    shimmer.searchWidget = new SearchWidget(shimmer.client, shimmer.labels, config.searchSelector);
-    shimmer.chatWidget = new ChatWidget(shimmer.client, shimmer.labels);
-    Shimmer.instance = shimmer;
-    return shimmer;
+  /** Async bootstrap: holdout check + Shopify cart attribution + widget mount. */
+  private async bootstrapHoldoutAndMount(): Promise<void> {
+    const visitorId = getOrCreateVisitorId();
+    let control = false;
+    let bucket = 0;
+    // Hoisted: the enrollment closures below need the RESOLVED store id
+    // (config value or the one fetched from /stores/me/config).
+    let storeId = this.config.storeId;
+
+    try {
+      // We need the storeId for the public decision endpoint.
+      if (!storeId) {
+        try {
+          const meRes = await fetchWithTimeout(`${this.config.apiUrl}/api/stores/me/config`, {
+            headers: { Authorization: `Bearer ${this.config.apiKey}` },
+          }, 5_000);
+          if (meRes.ok) {
+            const me = (await meRes.json()) as { id?: number; storeId?: number };
+            storeId = me.id ?? me.storeId;
+          }
+        } catch { /* ignore */ }
+      }
+      if (storeId) {
+        const decision = await fetchHoldoutDecision(this.config.apiUrl, storeId, visitorId);
+        control = decision.control;
+        bucket = decision.bucket;
+      }
+    } catch {
+      // If we can't reach the decision endpoint, default to TREATMENT (visitor
+      // sees the widget). Failing closed (= control by default) would silently
+      // hide the product for every visitor on a network glitch, much worse.
+    }
+
+    // Cart attribution runs for BOTH groups: it's invisible metadata, and
+    // without it the control group's orders are never linked, which would
+    // leave the experiment with an empty control side (bias, not proof).
+    if (!this.config.disableCartAttribution) {
+      void setupShopifyCartAttribution(visitorId, bucket);
+    }
+
+    // Enrollment into the vendeur measure happens when the visitor actually
+    // searches, not on page load: comparing only searchers to searchers is
+    // what lets a small shop reach significance in weeks instead of months.
+    const resolvedStoreId = storeId;
+
+    if (control) {
+      // Bucket in holdout: no widgets, native search untouched. We still
+      // enroll them on search so the control side of the measure fills up.
+      if (resolvedStoreId) {
+        watchNativeSearchForEnrollment(this.config.searchSelector, () =>
+          trackSearchEnrollment(this.config.apiUrl, resolvedStoreId, visitorId, false));
+      }
+      return;
+    }
+
+    // Le vendeur vit dans la barre de recherche de la boutique : on se greffe
+    // sur le champ de recherche existant du marchand (searchSelector, défaut
+    // input[type=search]). Le chatbot flottant n'est PAS monté par défaut — il
+    // ne l'est que si le marchand l'active explicitement (enableChat).
+    const onQuery = resolvedStoreId
+      ? () => trackSearchEnrollment(this.config.apiUrl, resolvedStoreId, visitorId, true)
+      : undefined;
+    this.searchWidget = new SearchWidget(this.client, this.labels, this.config.searchSelector, onQuery);
+    if (this.config.enableChat) {
+      this.chatWidget = new ChatWidget(this.client, this.labels);
+    }
   }
 
   /** Convenience accessor for `Shimmer.chat()` — allows `Shimmer.assistant.chat(msg)`. */
@@ -1370,3 +1818,52 @@ export class Shimmer {
     Shimmer.instance = null;
   }
 }
+
+// ── Auto-démarrage depuis la balise <script> ────────────────────────────────
+// Permet l'installation en UNE ligne sur la boutique du marchand :
+//   <script src=".../shimmer.js" data-shimmer data-store="4" data-key="pk_…" defer></script>
+// On lit les attributs du script courant (capturés pendant son exécution
+// synchrone, donc document.currentScript est valide), puis on initialise. Le
+// data-api est optionnel : par défaut on dérive l'origine depuis le src.
+(function autoBoot() {
+  if (typeof document === 'undefined') return;
+  const el = document.currentScript as HTMLScriptElement | null;
+  if (!el || !el.hasAttribute('data-shimmer')) return;
+
+  const store = el.getAttribute('data-store');
+  const key = el.getAttribute('data-key');
+  if (!store || !key) {
+    console.warn('[shimmer] data-store et data-key sont requis pour l\'auto-démarrage.');
+    return;
+  }
+
+  let apiUrl = el.getAttribute('data-api') || '';
+  if (!apiUrl) {
+    try {
+      const u = new URL(el.src);
+      apiUrl = `${u.origin}/shimmer`;
+    } catch {
+      console.warn('[shimmer] impossible de déduire data-api depuis le src ; précisez data-api.');
+      return;
+    }
+  }
+
+  const boot = () => {
+    try {
+      Shimmer.init({
+        apiUrl,
+        apiKey: key,
+        storeId: Number(store),
+        // data-search="#ma-barre" pour cibler une barre de recherche précise.
+        searchSelector: el.getAttribute('data-search') || undefined,
+        // data-chat présent → ajoute le chatbot flottant en plus. Sinon, le
+        // vendeur vit uniquement dans la barre de recherche.
+        enableChat: el.hasAttribute('data-chat'),
+      });
+    } catch (e) {
+      console.warn('[shimmer] init échouée', e);
+    }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();

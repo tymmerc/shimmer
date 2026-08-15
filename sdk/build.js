@@ -22,14 +22,16 @@ const sdkShared = {
 };
 
 async function build() {
-  // Widget: IIFE build (for <script> tags) — exposes window.Shimmer
-  await esbuild.build({
+  // Widget: IIFE build (for <script> tags) — exposes window.Shimmer + auto-boot
+  const iifeOpts = {
     ...widgetShared,
-    outfile: 'dist/shimmer.js',
     format: 'iife',
     globalName: 'ShimmerSDK',
     footer: { js: 'if(typeof window!=="undefined"){window.Shimmer=ShimmerSDK.Shimmer;}' },
-  });
+  };
+  await esbuild.build({ ...iifeOpts, outfile: 'dist/shimmer.js' });
+  // Canonical name used by the one-line install snippet on merchant storefronts.
+  await esbuild.build({ ...iifeOpts, outfile: 'dist/shimmer.iife.js' });
 
   // Widget: ESM build (for import)
   await esbuild.build({

@@ -6,6 +6,11 @@ export {
   type ChatResponse,
 } from './sav-assistant.js';
 export {
+  handleSalesMessage,
+  isSoldOut,
+  type SalesChatResponse,
+} from './sales-assistant.js';
+export {
   buildChatContext,
   formatContextForPrompt,
   type ChatContext,
