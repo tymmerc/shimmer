@@ -32,6 +32,8 @@ model Store {
   analyticsEvents AnalyticsEvent[]
   reviewRequests  ReviewRequest[]
   reviews         Review[]
+  stockAlerts     StockAlert[]
+  outboundCampaigns OutboundCampaign[]
 
   @@map("stores")
 }
@@ -71,6 +73,7 @@ model Product {
   orderItems OrderItem[]
   alerts     Alert[]
   reviews    Review[]
+  stockAlerts StockAlert[]
 
   @@unique([sku, storeId])
   @@index([storeId])
@@ -142,11 +145,13 @@ model ProductVariant {
   priceModifier Decimal @default(0) @map("price_modifier") @db.Decimal(10, 2)
   stock        Int     @default(0)
   skuSuffix    String? @map("sku_suffix") @db.VarChar(20)
+  platformVariantId String? @map("platform_variant_id") @db.VarChar(200)
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([productId, variantType, variantValue])
   @@index([productId])
+  @@index([platformVariantId])
   @@map("product_variants")
 }
 
@@ -260,22 +265,127 @@ enum ChatStatus {
   CLOSED
 }
 
+// Per-store knowledge base. Every row is ALREADY PII-scrubbed before insert
+// (see lib/scrub-pii.ts). Sources: scrubbed customer reviews, aggregate SAV
+// objections extracted by LLM (no raw conversations), product knowledge.
+// This is the data spine that lets the vendeur sound like it has read the
+// store, while staying RGPD-compatible by removing personal data at ingestion.
+model KnowledgeChunk {
+  id         Int      @id @default(autoincrement())
+  storeId    Int      @map("store_id")
+  sourceType String   @map("source_type") @db.VarChar(20)
+  sourceId   Int?     @map("source_id")
+  productId  Int?     @map("product_id")
+  text       String   @db.Text
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([storeId, sourceType])
+  @@index([storeId, productId])
+  @@index([storeId, sourceType, sourceId])
+  @@map("knowledge_chunks")
+}
+
+// Passive observation phase: silent log of visitor queries before the vendeur
+// is allowed to respond. Text is PII-scrubbed at insertion. Used to build the
+// J+7 readiness report and the preview drafts for merchant validation.
+model ObservedQuery {
+  id        Int      @id @default(autoincrement())
+  storeId   Int      @map("store_id")
+  visitorId String?  @map("visitor_id") @db.VarChar(80)
+  rawText   String   @map("raw_text") @db.Text
+  intent    String?  @db.VarChar(80)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([storeId, createdAt])
+  @@map("observed_queries")
+}
+
+// Preview generated from observed queries during the validation phase. The
+// merchant approves / corrects / rejects each one before the vendeur goes live.
+// Corrections feed back into store.config to refine the vendeur's voice.
+model VendeurPreview {
+  id              Int       @id @default(autoincrement())
+  storeId         Int       @map("store_id")
+  sourceQuery     String    @map("source_query") @db.Text
+  draftResponse   String    @map("draft_response") @db.Text
+  recommendedIds  Json      @default("[]") @map("recommended_ids")
+  status          String    @default("pending") @db.VarChar(20)
+  merchantNote    String?   @map("merchant_note") @db.Text
+  correctedText   String?   @map("corrected_text") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  decidedAt       DateTime? @map("decided_at")
+
+  @@index([storeId, status])
+  @@map("vendeur_previews")
+}
+
+// Holdout experiment: one row per (store, visitor). Bucket is deterministic
+// from hash(visitorId + storeId); we persist it plus the visitor's order
+// outcome so we can compute the incremental lift of the treatment group vs
+// the held-out control. This is the data behind the "prove the euros we add".
+model HoldoutVisitor {
+  id          Int       @id @default(autoincrement())
+  storeId     Int       @map("store_id")
+  visitorId   String    @map("visitor_id") @db.VarChar(80)
+  bucket      Int       @db.SmallInt
+  isControl   Boolean   @default(false) @map("is_control")
+  exposed     Boolean   @default(false)
+  // Triggered enrollment: set the first time the visitor actually meets the
+  // vendeur surface (uses the search bar), control group included. The lift
+  // in /proof compares only enrolled visitors of both groups, so the mass of
+  // visitors the vendeur never touches doesn't drown the signal.
+  enrolledAt  DateTime? @map("enrolled_at")
+  trigger     String?   @db.VarChar(30)
+  orderCount  Int       @default(0) @map("order_count")
+  revenue     Decimal   @default(0) @db.Decimal(10, 2)
+  firstSeenAt DateTime  @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime  @default(now()) @map("last_seen_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([storeId, visitorId])
+  @@index([storeId, isControl])
+  @@index([storeId, enrolledAt])
+  @@map("holdout_visitors")
+}
+
+// Order-level log behind the holdout aggregates. HoldoutVisitor.revenue is
+// cumulative all-time; invoices need the lift over a billing period, so we
+// keep each attributed order with its timestamp and group.
+model HoldoutOrder {
+  id        Int      @id @default(autoincrement())
+  storeId   Int      @map("store_id")
+  visitorId String   @map("visitor_id") @db.VarChar(80)
+  isControl Boolean  @default(false) @map("is_control")
+  amount    Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([storeId, createdAt])
+  @@index([storeId, visitorId])
+  @@map("holdout_orders")
+}
+
 model ChatSession {
-  id               Int        @id @default(autoincrement())
-  storeId          Int        @map("store_id")
-  sessionToken     String     @map("session_token") @db.VarChar(100)
-  messages         Json       @default("[]")
-  status           ChatStatus @default(ACTIVE)
-  escalated        Boolean    @default(false)
-  escalationReason String?    @map("escalation_reason") @db.Text
-  resolvedAt       DateTime?  @map("resolved_at")
-  createdAt        DateTime   @default(now()) @map("created_at")
+  id                    Int        @id @default(autoincrement())
+  storeId               Int        @map("store_id")
+  sessionToken          String     @map("session_token") @db.VarChar(100)
+  messages              Json       @default("[]")
+  status                ChatStatus @default(ACTIVE)
+  escalated             Boolean    @default(false)
+  escalationReason      String?    @map("escalation_reason") @db.Text
+  resolvedAt            DateTime?  @map("resolved_at")
+  customerEmail         String?    @map("customer_email") @db.VarChar(255)
+  recommendedProductIds Json       @default("[]") @map("recommended_product_ids")
+  attributedOrderId     Int?       @map("attributed_order_id")
+  mode                  String     @default("sav") @db.VarChar(20)
+  createdAt             DateTime   @default(now()) @map("created_at")
 
   store Store @relation(fields: [storeId], references: [id])
 
   @@index([storeId])
   @@index([sessionToken])
   @@index([status])
+  @@index([storeId, customerEmail])
   @@map("chat_sessions")
 }
 
@@ -410,11 +520,62 @@ model Order {
   savRequests    SavRequest[]
   reviewRequests ReviewRequest[]
   reviews        Review[]
+  stockAlerts    StockAlert[]
 
   @@index([storeId])
   @@index([customerId])
   @@index([status])
   @@map("orders")
+}
+
+// ============================================================
+// STOCK ALERTS (retour de stock)
+// ============================================================
+// Un visiteur demande à être prévenu quand une variante épuisée revient.
+// Ancré sur l'id de variante de la plateforme (Shopify) pour matcher
+// l'événement inventaire même si la variante locale est incomplète.
+
+model StockAlert {
+  id                Int       @id @default(autoincrement())
+  storeId           Int       @map("store_id")
+  productId         Int?      @map("product_id")
+  platformVariantId String    @map("platform_variant_id") @db.VarChar(200)
+  variantLabel      String?   @map("variant_label") @db.VarChar(200)
+  email             String    @db.VarChar(255)
+  visitorId         String?   @map("visitor_id") @db.VarChar(80)
+  status            String    @default("waiting") @db.VarChar(20)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  notifiedAt        DateTime? @map("notified_at")
+  convertedAt       DateTime? @map("converted_at")
+  orderId           Int?      @map("order_id")
+  convertedAmount   Decimal?  @map("converted_amount") @db.Decimal(10, 2)
+
+  store   Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  order   Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, status])
+  @@index([storeId, platformVariantId])
+  @@map("stock_alerts")
+}
+
+/// Dernier stock connu par variante plateforme + mapping inventory_item → variant.
+/// Alimenté par les webhooks products/update et inventory_levels/update. Sert à
+/// détecter la transition 0 → >0 sans dépendre du catalogue local.
+model PlatformVariantStock {
+  storeId           Int      @map("store_id")
+  platformVariantId String   @map("platform_variant_id") @db.VarChar(200)
+  inventoryItemId   String?  @map("inventory_item_id") @db.VarChar(200)
+  platformProductId String?  @map("platform_product_id") @db.VarChar(200)
+  productId         Int?     @map("product_id")
+  label             String?  @db.VarChar(200)
+  productHandle     String?  @map("product_handle") @db.VarChar(255)
+  available         Int?
+  updatedAt         DateTime @default(now()) @map("updated_at")
+
+  @@id([storeId, platformVariantId])
+  @@index([storeId, inventoryItemId])
+  @@map("platform_variant_stock")
 }
 
 model OrderItem {
@@ -692,4 +853,107 @@ model ProductKnowledge {
 
   @@index([category])
   @@map("product_knowledge")
+}
+
+// ============================================================
+// OUTBOUND CAMPAIGNS (ads, newsletters, social posts)
+// ============================================================
+
+model OutboundCampaign {
+  id          Int      @id @default(autoincrement())
+  storeId     Int      @map("store_id")
+  prompt      String   @db.Text
+  format      String   @db.VarChar(40)  // 'ads' | 'newsletter' | 'social'
+  audience    String?  @db.VarChar(100) // 'all' | 'dormant' | 'loyal' | 'segment:xxx'
+  content     Json     // generated output (varies by format)
+  status      String   @default("draft") @db.VarChar(30) // draft | approved | scheduled | published | archived
+  scheduledAt DateTime? @map("scheduled_at")
+  publishedAt DateTime? @map("published_at")
+  metrics     Json     @default("{}")  // impressions, clicks, conversions, revenue
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, status])
+  @@index([storeId, createdAt])
+  @@map("outbound_campaigns")
+}
+
+// ============================================================
+// ABANDONED CARTS (recovery via 2-email sequence)
+// ============================================================
+
+model AbandonedCart {
+  id              Int       @id @default(autoincrement())
+  storeId         Int       @map("store_id")
+  customerId      Int?      @map("customer_id")
+  customerEmail   String?   @map("customer_email") @db.VarChar(255)
+  items           Json      @default("[]")
+  totalAmount     Decimal   @map("total_amount") @db.Decimal(10, 2)
+  abandonedAt     DateTime  @default(now()) @map("abandoned_at")
+  reminder1At     DateTime? @map("reminder1_at")
+  reminder2At     DateTime? @map("reminder2_at")
+  recoveredAt     DateTime? @map("recovered_at")
+  recoveredAmount Decimal?  @map("recovered_amount") @db.Decimal(10, 2)
+  status          String    @default("pending") @db.VarChar(30)
+  promoCode       String?   @map("promo_code") @db.VarChar(80)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([storeId, status])
+  @@index([storeId, abandonedAt])
+  @@map("abandoned_carts")
+}
+
+// ============================================================
+// SENT EMAILS (log de tous les envois, mockés ou réels)
+// ============================================================
+
+model SentEmail {
+  id                Int       @id @default(autoincrement())
+  storeId           Int       @map("store_id")
+  toAddr            String    @map("to_addr") @db.VarChar(255)
+  fromAddr          String    @map("from_addr") @db.VarChar(255)
+  subject           String    @db.VarChar(500)
+  bodyText          String?   @map("body_text") @db.Text
+  bodyHtml          String?   @map("body_html") @db.Text
+  tag               String?   @db.VarChar(80)
+  relatedEntity     String?   @map("related_entity") @db.VarChar(40)
+  relatedId         Int?      @map("related_id")
+  provider          String    @default("mock") @db.VarChar(30)
+  providerMessageId String?   @map("provider_message_id") @db.VarChar(200)
+  status            String    @default("queued") @db.VarChar(30)
+  sentAt            DateTime? @map("sent_at")
+  error             String?   @db.Text
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  @@index([storeId, createdAt(sort: Desc)])
+  @@index([storeId, tag])
+  @@map("sent_emails")
+}
+
+// ============================================================
+// SENT SMS (Twilio + mock)
+// ============================================================
+
+model SentSms {
+  id                Int       @id @default(autoincrement())
+  storeId           Int       @map("store_id")
+  toNumber          String    @map("to_number") @db.VarChar(40)
+  fromNumber        String?   @map("from_number") @db.VarChar(40)
+  body              String    @db.Text
+  tag               String?   @db.VarChar(80)
+  relatedEntity     String?   @map("related_entity") @db.VarChar(40)
+  relatedId         Int?      @map("related_id")
+  provider          String    @default("mock") @db.VarChar(30)
+  providerMessageId String?   @map("provider_message_id") @db.VarChar(200)
+  status            String    @default("queued") @db.VarChar(30)
+  sentAt            DateTime? @map("sent_at")
+  error             String?   @db.Text
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  @@index([storeId, createdAt(sort: Desc)])
+  @@index([storeId, tag])
+  @@map("sent_sms")
 }
