@@ -30,8 +30,8 @@
     "@types/express": "^5.0.0",
     "@types/compression": "^1.7.0",
     "@types/cors": "^2.8.0",
-    "tsx": "^4.0.0",
+    "tsx": "^4.23.12",
     "tsup": "^8.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.9.3"
   }
 }
