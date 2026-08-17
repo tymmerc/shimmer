@@ -16,7 +16,7 @@
     "@shimmer/reviews": "workspace:*",
     "@shimmer/email-connector": "workspace:*",
     "@shimmer/sms-connector": "workspace:*",
-    "express": "^4.21.0",
+    "express": "^4.22.2",
     "helmet": "^8.0.0",
     "compression": "^1.7.0",
     "cors": "^2.8.0",
