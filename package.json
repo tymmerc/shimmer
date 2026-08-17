@@ -13,9 +13,9 @@
     "workers": "tsx apps/api/src/workers/worker-runner.ts"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
+    "typescript": "^5.9.3",
     "vitest": "^2.0.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.20.1"
   },
   "engines": {
     "node": ">=22.0.0",
