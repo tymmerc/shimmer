@@ -30,10 +30,35 @@ html, body {
 }
 
 /* ------------------------------------------------------------------ */
-/* Fallback fluide du hero (quand WebGL est indisponible).             */
-/* Couche dérivante par-dessus le STATIC_BG de ToxicCanvas : mêmes     */
-/* teintes que le shader, mouvement lent transform-only.               */
+/* Fallback du hero (quand WebGL est indisponible) : la nappe statique */
+/* + la couche dérivante. Mêmes teintes que le shader.                 */
+/* La composition par défaut est pesée à droite (desktop). En portrait */
+/* étroit (téléphone), on recompose : halo derrière le titre, reflet   */
+/* acide discret, lueur profonde en bas — au lieu d'une bande rose     */
+/* écrasée sur le bord droit.                                          */
 /* ------------------------------------------------------------------ */
+.toxic-static {
+  background:
+    radial-gradient(42% 55% at 78% 26%, rgba(255, 102, 236, 0.8), rgba(255, 102, 236, 0) 70%),
+    radial-gradient(52% 68% at 90% 55%, rgba(232, 74, 255, 0.6), rgba(232, 74, 255, 0) 72%),
+    radial-gradient(34% 42% at 68% 46%, rgba(255, 158, 247, 0.55), rgba(255, 158, 247, 0) 68%),
+    radial-gradient(40% 52% at 62% 74%, rgba(139, 77, 255, 0.55), rgba(139, 77, 255, 0) 72%),
+    radial-gradient(20% 24% at 57% 55%, rgba(212, 255, 58, 0.14), rgba(212, 255, 58, 0) 70%),
+    radial-gradient(60% 75% at 84% 84%, rgba(79, 29, 199, 0.65), rgba(79, 29, 199, 0) 75%),
+    radial-gradient(45% 60% at 96% 12%, rgba(58, 20, 150, 0.55), rgba(58, 20, 150, 0) 72%),
+    #0d0b14;
+}
+@media (max-width: 767px) and (orientation: portrait) {
+  .toxic-static {
+    background:
+      radial-gradient(75% 30% at 85% 2%, rgba(255, 102, 236, 0.5), rgba(255, 102, 236, 0) 70%),
+      radial-gradient(90% 36% at 60% 16%, rgba(139, 77, 255, 0.42), rgba(139, 77, 255, 0) 72%),
+      radial-gradient(55% 22% at 20% 34%, rgba(232, 74, 255, 0.16), rgba(232, 74, 255, 0) 70%),
+      radial-gradient(50% 18% at 78% 52%, rgba(212, 255, 58, 0.07), rgba(212, 255, 58, 0) 70%),
+      radial-gradient(110% 40% at 50% 104%, rgba(79, 29, 199, 0.45), rgba(79, 29, 199, 0) 74%),
+      #0d0b14;
+  }
+}
 .toxic-fluid-drift {
   position: absolute;
   inset: -22%;
@@ -42,6 +67,16 @@ html, body {
     radial-gradient(30% 38% at 72% 38%, rgba(255, 120, 240, 0.5), rgba(255, 120, 240, 0) 70%),
     radial-gradient(26% 32% at 60% 62%, rgba(168, 120, 255, 0.4), rgba(168, 120, 255, 0) 70%),
     radial-gradient(20% 26% at 80% 70%, rgba(212, 255, 58, 0.1), rgba(212, 255, 58, 0) 70%);
+}
+/* En portrait téléphone, la dérive suit la recomposition de .toxic-static :
+   halo haut derrière le titre, reflet léger au centre. */
+@media (max-width: 767px) and (orientation: portrait) {
+  .toxic-fluid-drift {
+    background:
+      radial-gradient(46% 20% at 72% 10%, rgba(255, 120, 240, 0.32), rgba(255, 120, 240, 0) 70%),
+      radial-gradient(40% 18% at 40% 26%, rgba(168, 120, 255, 0.26), rgba(168, 120, 255, 0) 70%),
+      radial-gradient(30% 14% at 66% 48%, rgba(212, 255, 58, 0.06), rgba(212, 255, 58, 0) 70%);
+  }
 }
 /* Dérive seulement sur desktop à pointeur fin (fluidité tactile préservée). */
 @media (hover: hover) and (pointer: fine) {

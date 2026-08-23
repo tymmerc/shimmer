@@ -3,8 +3,8 @@ import { AUDIT_MAILTO } from '@/lib/audit';
 /** Footer léger : une ligne, les liens essentiels, la souveraineté. */
 export function SiteFooter() {
   return (
-    <footer className="relative z-10 w-full border-t border-paper/10 px-6 py-14 md:px-12">
-      <div className="mx-auto flex max-w-[1400px] flex-col gap-10 md:flex-row md:items-end md:justify-between">
+    <footer className="relative z-10 w-full border-t border-paper/10 px-6 py-10 md:px-12 md:py-14">
+      <div className="mx-auto flex max-w-[1400px] flex-col gap-8 md:flex-row md:items-end md:justify-between md:gap-10">
         <div>
           <a href="#top" className="font-display text-2xl font-medium tracking-tight text-paper">
             Shimmer<span className="text-acid">.</span>
@@ -22,7 +22,7 @@ export function SiteFooter() {
         </div>
       </div>
 
-      <div className="mx-auto mt-10 max-w-[1400px] border-t border-paper/10 pt-6 font-mono text-[10px] uppercase tracking-[0.2em] text-paper/35">
+      <div className="mx-auto mt-8 max-w-[1400px] border-t border-paper/10 pt-6 font-mono text-[10px] uppercase tracking-[0.2em] text-paper/35 md:mt-10">
         © 2026 Shimmer · Tym Mercier
       </div>
     </footer>

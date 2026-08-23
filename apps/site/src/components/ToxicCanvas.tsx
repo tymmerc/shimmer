@@ -57,19 +57,9 @@ function shouldSkipCanvas(): boolean {
 }
 
 // Fallback sans WebGL (accélération GPU désactivée, blocklist, vieux mobile).
-// C'est ce que voit un Chrome sans accélération : il doit être AUSSI vif que
-// le shader, pas deux taches diluées. Nappe fluide magenta/violet pesée à
-// droite + reflet acide, bakée en radial-gradients (rendu identique sur tous
-// les moteurs). Les couches animées sont dans .toxic-fluid* (globals.css).
-const STATIC_BG =
-  'radial-gradient(42% 55% at 78% 26%, rgba(255,102,236,0.80), rgba(255,102,236,0) 70%),' +
-  'radial-gradient(52% 68% at 90% 55%, rgba(232,74,255,0.60), rgba(232,74,255,0) 72%),' +
-  'radial-gradient(34% 42% at 68% 46%, rgba(255,158,247,0.55), rgba(255,158,247,0) 68%),' +
-  'radial-gradient(40% 52% at 62% 74%, rgba(139,77,255,0.55), rgba(139,77,255,0) 72%),' +
-  'radial-gradient(20% 24% at 57% 55%, rgba(212,255,58,0.14), rgba(212,255,58,0) 70%),' +
-  'radial-gradient(60% 75% at 84% 84%, rgba(79,29,199,0.65), rgba(79,29,199,0) 75%),' +
-  'radial-gradient(45% 60% at 96% 12%, rgba(58,20,150,0.55), rgba(58,20,150,0) 72%),' +
-  '#0d0b14';
+// La nappe vit dans .toxic-static (globals.css) : la composition desktop est
+// pesée à droite, et un @media portrait la recompose pour un écran de
+// téléphone — sinon elle dégénère en bande rose plaquée sur le bord droit.
 
 export function ToxicCanvas({ className }: ToxicCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -98,7 +88,12 @@ export function ToxicCanvas({ className }: ToxicCanvasProps) {
     // Sur GPU matériel, le vrai shader tourne normalement.
     const dbg = gl.getExtension('WEBGL_debug_renderer_info');
     const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
-    if (/swiftshader|software|basic render|llvmpipe|microsoft basic/i.test(renderer)) return;
+    if (/swiftshader|software|basic render|llvmpipe|microsoft basic/i.test(renderer)) {
+      // Créer le contexte (alpha:false) a déjà rendu le canvas opaque noir :
+      // on le démonte, sinon il masque la nappe CSS qu'on veut montrer.
+      setActive(false);
+      return;
+    }
 
     const mkShader = (type: number, src: string) => {
       const sh = gl.createShader(type);
@@ -218,9 +213,8 @@ export function ToxicCanvas({ className }: ToxicCanvasProps) {
 
   return (
     <div
-      className={className}
+      className={`${className ?? ''} ${glReady ? '' : 'toxic-static'}`.trim()}
       style={{
-        background: glReady ? 'transparent' : STATIC_BG,
         position: 'relative',
         overflow: 'hidden',
       }}

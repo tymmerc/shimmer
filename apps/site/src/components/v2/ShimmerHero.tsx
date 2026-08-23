@@ -18,18 +18,21 @@ export function ShimmerHero() {
         <ToxicCanvas className="h-full w-full" />
       </div>
 
-      {/* Fondus ink : lisibilité du texte à gauche, raccord haut/bas. */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-[3] w-[62%] bg-gradient-to-r from-ink via-ink/80 to-transparent" />
+      {/* Fondus ink : lisibilité du texte à gauche, raccord haut/bas.
+          En portrait mobile le fondu latéral n'a pas de sens (le texte occupe
+          toute la largeur) : on le remplace par un voile vertical léger. */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-[3] hidden w-[62%] bg-gradient-to-r from-ink via-ink/80 to-transparent md:block" />
+      <div className="pointer-events-none absolute inset-0 z-[3] bg-gradient-to-b from-ink/60 via-ink/20 to-transparent md:hidden" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[3] h-40 bg-gradient-to-t from-ink to-transparent" />
 
       <SiteNav />
 
-      <div className="relative z-10 mx-auto flex min-h-screen max-w-[1400px] flex-col justify-center px-6 pb-28 pt-28 md:px-12">
+      <div className="relative z-10 mx-auto flex min-h-screen max-w-[1400px] flex-col justify-center px-6 pb-24 pt-24 md:px-12 md:pb-28 md:pt-28">
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease }}
-          className="mb-8 inline-flex w-fit items-center gap-3 rounded-full border border-paper/15 bg-paper/5 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.22em] text-paper/70"
+          className="mb-6 inline-flex w-fit items-center gap-2.5 rounded-full border border-paper/15 bg-paper/5 px-3.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-paper/70 md:mb-8 md:gap-3 md:px-4 md:py-2 md:text-[11px] md:tracking-[0.22em]"
         >
           <motion.span
             animate={{ opacity: [0.6, 1, 0.6], scale: [1, 1.25, 1] }}
@@ -54,7 +57,7 @@ export function ShimmerHero() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease, delay: 0.25 }}
-          className="mt-8 max-w-[46ch] text-pretty text-lg leading-relaxed text-paper/80 md:text-2xl"
+          className="mt-6 max-w-[46ch] text-pretty text-[17px] leading-relaxed text-paper/80 md:mt-8 md:text-2xl"
         >
           Un vendeur en ligne et un SAV qui répondent à votre place, entourés de tout ce qui récupère vos clients.{' '}
           <span className="text-paper">Vous gagnez du temps. Et des ventes.</span>
@@ -64,18 +67,18 @@ export function ShimmerHero() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease, delay: 0.4 }}
-          className="mt-10 flex flex-wrap items-center gap-4 md:mt-12"
+          className="mt-9 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 md:mt-12"
         >
           <a
             href={AUDIT_MAILTO}
-            className="btn btn-acid group inline-flex items-center gap-2 rounded-full bg-acid px-8 py-4 font-sans text-sm uppercase tracking-[0.18em] text-ink"
+            className="btn btn-acid group inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full bg-acid px-7 py-4 font-sans text-[13px] uppercase tracking-[0.14em] text-ink sm:px-8 sm:text-sm sm:tracking-[0.18em]"
           >
             Obtenir mon audit gratuit
             <span className="transition-transform duration-300 group-hover:translate-x-1.5">→</span>
           </a>
           <a
             href="/shimmer/demo/"
-            className="btn btn-ghost inline-flex items-center gap-2 rounded-full border border-paper/25 px-8 py-4 font-sans text-sm uppercase tracking-[0.18em] text-paper"
+            className="btn btn-ghost inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full border border-paper/25 px-7 py-4 font-sans text-[13px] uppercase tracking-[0.14em] text-paper sm:px-8 sm:text-sm sm:tracking-[0.18em]"
           >
             Voir les démos
           </a>

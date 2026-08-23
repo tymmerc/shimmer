@@ -78,9 +78,9 @@ const SATS = [
 
 export function Satellites() {
   return (
-    <section className="relative z-10 w-full px-6 py-28 md:px-12 md:py-40">
+    <section className="relative z-10 w-full px-6 py-16 md:px-12 md:py-40">
       <div className="mx-auto max-w-[1400px]">
-        <div className="mb-12 flex items-baseline gap-6">
+        <div className="mb-8 flex items-baseline gap-6 md:mb-12">
           <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">Et tout autour</span>
           <span className="h-px flex-1 bg-paper/10" />
         </div>
@@ -89,7 +89,7 @@ export function Satellites() {
           Quatre automatisations qui <span className="italic text-acid">récupèrent chaque client</span>.
         </h2>
 
-        <div className="mt-16 grid grid-cols-1 gap-x-10 gap-y-12 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-10 grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2 md:mt-16 md:gap-y-12 lg:grid-cols-4">
           {SATS.map((s, i) => (
             <motion.div
               key={s.name}
@@ -97,14 +97,14 @@ export function Satellites() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.4 }}
               transition={{ duration: 0.55, ease, delay: i * 0.08 }}
-              className="border-t border-paper/15 pt-7"
+              className="border-t border-paper/15 pt-6 md:pt-7"
             >
-              <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl border border-acid/25 bg-acid/[0.06] text-acid">
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-acid/25 bg-acid/[0.06] text-acid md:mb-6 md:h-12 md:w-12">
                 {s.icon}
               </div>
               <h3 className="font-display text-2xl leading-tight text-paper md:text-[26px]">{s.name}</h3>
-              <p className="mt-4 text-pretty text-base leading-relaxed text-paper/60">{s.does}</p>
-              <p className="mt-3 text-pretty text-base leading-snug text-acid/90">{s.benefit}</p>
+              <p className="mt-3 text-pretty text-base leading-relaxed text-paper/60 md:mt-4">{s.does}</p>
+              <p className="mt-2.5 text-pretty text-base leading-snug text-acid/90 md:mt-3">{s.benefit}</p>
             </motion.div>
           ))}
         </div>

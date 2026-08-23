@@ -8,7 +8,7 @@ const ease = [0.22, 1, 0.36, 1] as const;
 /* ── Démo vendeur : la requête se tape, la réponse et les produits arrivent ── */
 function VendeurDemo() {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, amount: 0.5 });
+  const inView = useInView(ref, { once: true, amount: 0.3 });
   const QUERY = 'un vin pour un barbecue';
   const [typed, setTyped] = useState('');
   const [phase, setPhase] = useState(0); // 0 frappe · 1 réponse · 2 produits
@@ -70,7 +70,7 @@ function VendeurDemo() {
 /* ── Démo SAV : la conversation se joue message par message ── */
 function SavDemo() {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, amount: 0.5 });
+  const inView = useInView(ref, { once: true, amount: 0.3 });
   const [step, setStep] = useState(0); // 1 question · 2 en train d'écrire · 3 réponse
 
   useEffect(() => {
@@ -134,7 +134,7 @@ function Pillar({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.25 }}
       transition={{ duration: 0.6, ease, delay }}
-      className="group relative flex flex-col overflow-hidden rounded-3xl border border-paper/12 bg-paper/[0.03] p-8 transition-[transform,border-color] duration-500 hover:-translate-y-1 hover:border-acid/25 md:p-10"
+      className="group relative flex flex-col overflow-hidden rounded-3xl border border-paper/12 bg-paper/[0.03] p-6 transition-[transform,border-color] duration-500 hover:-translate-y-1 hover:border-acid/25 sm:p-8 md:p-10"
     >
       {/* halo d'angle statique (profondeur, coût nul) */}
       <div
@@ -148,17 +148,17 @@ function Pillar({
         <span className="font-display text-3xl text-paper/15">{n}</span>
       </div>
 
-      <h3 className="relative mt-6 font-display text-[clamp(26px,3vw,42px)] font-normal leading-[1.02] tracking-tight text-paper">
+      <h3 className="relative mt-5 font-display text-[clamp(26px,3vw,42px)] font-normal leading-[1.02] tracking-tight text-paper md:mt-6">
         {title}
       </h3>
-      <p className="relative mt-5 text-pretty text-lg leading-relaxed text-paper/70">{body}</p>
+      <p className="relative mt-4 text-pretty text-base leading-relaxed text-paper/70 md:mt-5 md:text-lg">{body}</p>
 
-      <div className="relative mt-8">
+      <div className="relative mt-6 md:mt-8">
         <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-paper/35">Démo</div>
         {demo}
       </div>
 
-      <div className="relative mt-8 flex">
+      <div className="relative mt-6 flex md:mt-8">
         <span className="inline-flex items-center gap-2 rounded-full bg-acid/12 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-acid">
           <span className="h-1.5 w-1.5 rounded-full bg-acid" />
           {benefit}
@@ -170,9 +170,9 @@ function Pillar({
 
 export function Pillars() {
   return (
-    <section id="automatisations" className="relative z-10 w-full scroll-mt-16 px-6 py-28 md:px-12 md:py-40">
+    <section id="automatisations" className="relative z-10 w-full scroll-mt-16 px-6 py-16 md:px-12 md:py-40">
       <div className="mx-auto max-w-[1400px]">
-        <div className="mb-12 flex items-baseline gap-6">
+        <div className="mb-8 flex items-baseline gap-6 md:mb-12">
           <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">Ce que Shimmer fait pour vous</span>
           <span className="h-px flex-1 bg-paper/10" />
         </div>
@@ -180,12 +180,12 @@ export function Pillars() {
         <h2 className="max-w-[20ch] font-display text-[clamp(34px,5.5vw,80px)] font-normal leading-[0.95] tracking-tightest text-paper">
           Vous faire gagner du temps. Et <span className="italic text-acid">gagner des clients</span>.
         </h2>
-        <p className="mt-8 max-w-[60ch] text-pretty text-lg leading-relaxed text-paper/70 md:text-xl">
+        <p className="mt-5 max-w-[60ch] text-pretty text-base leading-relaxed text-paper/70 md:mt-8 md:text-xl">
           Deux automatisations au cœur, un vendeur en ligne et un SAV qui répond à votre place, et tout
           autour ce qui les rend meilleures.
         </p>
 
-        <div className="mt-16 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="mt-10 grid grid-cols-1 gap-6 md:mt-16 lg:grid-cols-2">
           <Pillar
             n="01"
             tag="Au cœur · vend à votre place"

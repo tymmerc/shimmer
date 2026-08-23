@@ -23,20 +23,20 @@ const ACID_PCT = 14.5; // dépassement mesuré (l'écart)
  */
 export function ProofSimple() {
   return (
-    <section id="preuve" className="relative z-10 w-full scroll-mt-16 px-6 py-28 md:px-12 md:py-40">
+    <section id="preuve" className="relative z-10 w-full scroll-mt-16 px-6 py-16 md:px-12 md:py-40">
       <div className="mx-auto max-w-[1400px]">
-        <div className="mb-14 flex items-baseline gap-6">
+        <div className="mb-8 flex items-baseline gap-6 md:mb-14">
           <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">La preuve</span>
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
-        <div className="grid grid-cols-1 items-center gap-16 lg:grid-cols-2 lg:gap-24">
+        <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-24">
           {/* Texte (inchangé, honnête) */}
           <div>
             <h2 className="max-w-[18ch] font-display text-[clamp(34px,5vw,72px)] font-normal leading-[0.95] tracking-tightest text-paper">
               On prouve, à l&apos;euro, ce que ça vous <span className="italic text-acid">rapporte</span>.
             </h2>
-            <p className="mt-8 max-w-[46ch] text-pretty text-lg leading-relaxed text-paper/70 md:text-xl">
+            <p className="mt-5 max-w-[46ch] text-pretty text-base leading-relaxed text-paper/70 md:mt-8 md:text-xl">
               10 % de vos visiteurs ne voient jamais Shimmer. On compare ce qu&apos;ils dépensent à ceux
               qui l&apos;ont vu. La différence, c&apos;est notre effet réel, mesuré sur vos commandes.
               Pas une estimation.
@@ -58,7 +58,7 @@ export function ProofSimple() {
             whileInView="show"
             viewport={{ once: true, amount: 0.4 }}
             variants={{ hidden: {}, show: { transition: { staggerChildren: 0.012 } } }}
-            className="rounded-2xl border border-paper/12 bg-paper/[0.03] p-7 md:p-9"
+            className="rounded-2xl border border-paper/12 bg-paper/[0.03] p-5 sm:p-7 md:p-9"
           >
             <div className="mb-7 font-mono text-[10px] uppercase tracking-[0.2em] text-paper/40">
               Exemple · boutique de démonstration
