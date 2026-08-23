@@ -1,0 +1,83 @@
+# Déploiement automatique du site vers le VPS — DEV uniquement.
+#
+# À chaque push qui touche apps/site, le site Next.js est buildé ici (export
+# statique) puis rsync vers /opt/shimmer/apps/showcase-dev/ sur le VPS,
+# exactement comme le déploiement manuel décrit dans HANDOFF.md.
+# La PROD n'est JAMAIS déployée par ce workflow (GO explicite de Tym requis).
+#
+# Prérequis (une seule fois, voir la doc en bas de fichier) :
+#   Secrets GitHub : VPS_HOST, VPS_USER, VPS_SSH_KEY (+ VPS_PORT si != 22)
+
+name: Deploy site to VPS (dev)
+
+on:
+  push:
+    branches: ['main', 'claude/**']
+    paths:
+      - 'apps/site/**'
+      - '.github/workflows/deploy-site-dev.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-site-dev
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        run: npm install -g pnpm@10
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile --filter @shimmer/site...
+
+      - name: Build site (export statique)
+        working-directory: apps/site
+        run: pnpm build
+
+      - name: Deploy to VPS (showcase-dev)
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+        run: |
+          if [ -z "$VPS_SSH_KEY" ] || [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ]; then
+            echo "::error::Secrets VPS_HOST / VPS_USER / VPS_SSH_KEY manquants (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          rsync -az --delete \
+            -e "ssh -p $VPS_PORT -i ~/.ssh/deploy_key" \
+            apps/site/out/ "$VPS_USER@$VPS_HOST:/opt/shimmer/apps/showcase-dev/"
+          echo "Déployé sur https://dev.tymmerc.eu/shimmer/"
+
+# ---------------------------------------------------------------------------
+# Mise en place (3 minutes, une seule fois) :
+#
+# 1. Sur ton poste (ou le VPS), génère une clé dédiée au déploiement :
+#      ssh-keygen -t ed25519 -f deploy-shimmer -N '' -C 'github-deploy-shimmer'
+#
+# 2. Autorise la clé PUBLIQUE sur le VPS :
+#      cat deploy-shimmer.pub >> ~/.ssh/authorized_keys   (sur le VPS)
+#
+# 3. Dans GitHub → tymmerc/shimmer → Settings → Secrets and variables →
+#    Actions → New repository secret :
+#      VPS_HOST    = l'IP ou le domaine SSH du VPS
+#      VPS_USER    = l'utilisateur SSH (celui qui possède /opt/shimmer)
+#      VPS_SSH_KEY = le contenu COMPLET du fichier privé deploy-shimmer
+#      VPS_PORT    = seulement si SSH n'écoute pas sur 22
+#
+# Ensuite chaque push sur main ou claude/** qui touche apps/site déploie
+# automatiquement sur dev.tymmerc.eu. La prod reste 100 % manuelle.
+# ---------------------------------------------------------------------------
