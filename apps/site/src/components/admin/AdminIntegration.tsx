@@ -139,6 +139,9 @@ export function AdminIntegration() {
  value={`<script src="${data.base}/shimmer/sdk/shimmer.iife.js" data-shimmer data-store="${data.store.id}" data-key="${data.publishableKey}" defer></script>`}
  multiline
  />
+ <p className="mt-3 text-xs text-neutral-400">
+ RGPD : par défaut (<code className="rounded bg-neutral-50 px-1">data-consent=&quot;auto&quot;</code>), le widget détecte votre bannière de consentement (Axeptio, Cookiebot, tarteaucitron, TCF) et n&apos;utilise aucun cookie tant que le visiteur n&apos;a pas accepté ; sans bannière sur le site, il démarre normalement. Le vendeur fonctionne dans tous les cas ; seule la mesure dépend du consentement. Intégration manuelle : <code className="rounded bg-neutral-50 px-1">Shimmer.consent(true|false)</code>.
+ </p>
  </Panel>
 
  <details className="text-xs text-neutral-400">

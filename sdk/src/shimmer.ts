@@ -24,6 +24,19 @@ interface ShimmerConfig {
   /** If true, the SDK does NOT auto-inject the visitor id into Shopify cart
    *  attributes. Default false (auto-inject on detected Shopify storefronts). */
   disableCartAttribution?: boolean;
+  /** Consentement cookies (RGPD) :
+   *  - 'auto' (défaut) : détecte la CMP du site (TCF, Cookiebot, Axeptio,
+   *    tarteaucitron) et attend son signal. Si AUCUNE CMP n'est détectée sous
+   *    3 s, considère le consentement acquis (posture existante du site).
+   *  - 'strict' : mode session tant que Shimmer.consent(true) (ou l'event
+   *    'shimmer:consent') n'a pas été reçu. Aucun fallback.
+   *  - 'granted' : le marchand ne charge le script qu'après consentement
+   *    (script derrière sa CMP) → plein mode immédiat.
+   *  - 'denied' : mode session permanent (tests / démos).
+   *  En mode session : le vendeur fonctionne, mais aucun cookie n'est posé,
+   *  le visiteur n'entre PAS dans l'expérience holdout et sa commande n'est
+   *  pas attribuée. Toute perte joue contre Shimmer, jamais contre le marchand. */
+  consentMode?: 'auto' | 'strict' | 'granted' | 'denied';
 }
 
 interface ShimmerTheme {
@@ -875,6 +888,12 @@ class SearchWidget {
       </div>`).join('');
   }
 
+  /** Branche (ou remplace) le callback d'enrôlement après coup : utilisé quand
+   *  le consentement arrive alors que le widget est déjà monté en mode session. */
+  setOnQuery(cb?: () => void): void {
+    this.onQuery = cb;
+  }
+
   destroy() {
     this.overlay.remove();
   }
@@ -1157,6 +1176,90 @@ function getOrCreateVisitorId(): string {
   const id = 'vid_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   writeCookie(VID_COOKIE, id, VID_MAX_AGE_DAYS);
   return id;
+}
+
+// ─── Consentement (RGPD) ─────────────────────────────────────────────────────
+// Trois états : granted (cookie + mesure), denied (session pure), unknown
+// (session en attendant un signal). La conversation avec le vendeur n'a jamais
+// besoin du cookie ; seule la MESURE longue durée en dépend.
+
+type ConsentState = 'granted' | 'denied' | 'unknown';
+
+/** Id de session en mémoire : sert au fil de conversation, jamais persisté. */
+function sessionVisitorId(): string {
+  return 'svid_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+}
+
+function deleteCookie(name: string): void {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+}
+
+/**
+ * Branche les CMP connues et renvoie true si au moins une est présente.
+ * `onSignal` peut être appelé plusieurs fois (l'utilisateur change d'avis).
+ */
+function detectAndWatchCmp(onSignal: (granted: boolean) => void): boolean {
+  const w = window as unknown as Record<string, unknown>;
+  let found = false;
+
+  // IAB TCF v2 (bannières type Didomi, Sourcepoint, Quantcast…)
+  const tcf = w.__tcfapi as ((cmd: string, v: number, cb: (d: unknown, ok: boolean) => void) => void) | undefined;
+  if (typeof tcf === 'function') {
+    found = true;
+    try {
+      tcf('addEventListener', 2, (d, ok) => {
+        const data = d as { eventStatus?: string; gdprApplies?: boolean; purpose?: { consents?: Record<string, boolean> } } | null;
+        if (!ok || !data) return;
+        if (data.eventStatus === 'tcloaded' || data.eventStatus === 'useractioncomplete') {
+          onSignal(data.gdprApplies === false ? true : !!data.purpose?.consents?.['1']);
+        }
+      });
+    } catch { /* CMP cassée : on reste en session */ }
+  }
+
+  // Cookiebot
+  const cb = w.Cookiebot as { consented?: boolean; declined?: boolean; consent?: { statistics?: boolean; preferences?: boolean } } | undefined;
+  if (cb && typeof cb === 'object' && 'consent' in cb) {
+    found = true;
+    const read = () => onSignal(!!(cb.consent?.statistics || cb.consent?.preferences));
+    if (cb.consented || cb.declined) read();
+    window.addEventListener('CookiebotOnAccept', read);
+    window.addEventListener('CookiebotOnDecline', read);
+  }
+
+  // Axeptio
+  if (w.axeptioSettings || w._axcb) {
+    found = true;
+    const q = (w._axcb = (w._axcb as unknown[]) || []) as Array<(sdk: { on: (ev: string, cb: (c: Record<string, boolean>) => void) => void }) => void>;
+    q.push(sdk => {
+      try {
+        sdk.on('cookies:complete', choices => {
+          const c = choices || {};
+          onSignal(!!(c.shimmer ?? c.analytics ?? c.stats ?? Object.values(c).some(Boolean)));
+        });
+      } catch { /* ignore */ }
+    });
+  }
+
+  // tarteaucitron : état lisible dans son cookie ("shimmer=true" si le service
+  // est déclaré, sinon on regarde si au moins un service est accepté).
+  if (w.tarteaucitron) {
+    found = true;
+    const read = () => {
+      const m = document.cookie.match(/tarteaucitron=([^;]*)/);
+      if (!m) return;
+      const v = decodeURIComponent(m[1] ?? '');
+      if (/shimmer=true/.test(v)) onSignal(true);
+      else if (/shimmer=false/.test(v)) onSignal(false);
+      else if (/=true/.test(v)) onSignal(true);
+    };
+    read();
+    document.addEventListener('tac.close_alert', read);
+    document.addEventListener('tac.close_panel', read);
+  }
+
+  return found;
 }
 
 async function fetchHoldoutDecision(
@@ -1568,6 +1671,9 @@ export class Shimmer {
   private config: ShimmerConfig;
   private theme: ShimmerTheme;
   private labels: typeof LABELS['fr'];
+  private consent: ConsentState = 'unknown';
+  /** Vrai une fois le plein mode (cookie + holdout) démarré : idempotent. */
+  private measuredBootDone = false;
 
   private constructor(config: ShimmerConfig) {
     this.config = config;
@@ -1607,8 +1713,66 @@ export class Shimmer {
     }
   }
 
-  /** Async bootstrap: holdout check + Shopify cart attribution + widget mount. */
+  /** Point d'entrée : résout le consentement puis démarre le bon mode. */
   private async bootstrapHoldoutAndMount(): Promise<void> {
+    const mode = this.config.consentMode ?? 'auto';
+
+    // Signal explicite, toujours écouté (Shimmer.consent() + event DOM).
+    document.addEventListener('shimmer:consent', (e: Event) => {
+      const granted = !!(e as CustomEvent<{ granted?: boolean }>).detail?.granted;
+      this.applyConsent(granted);
+    });
+
+    if (mode === 'granted') { this.applyConsent(true); return; }
+    if (mode === 'denied') { await this.sessionBoot(); return; }
+
+    const cmpFound = detectAndWatchCmp(g => this.applyConsent(g));
+    // En attendant le signal : mode session (le vendeur marche, zéro cookie).
+    await this.sessionBoot();
+    if (mode === 'auto' && !cmpFound) {
+      // Pas de CMP sur le site : on adopte la posture existante du marchand
+      // (pas de bannière = il n'en impose pas). 3 s pour laisser une CMP
+      // lente se déclarer quand même.
+      window.setTimeout(() => {
+        if (this.consent === 'unknown' && !detectAndWatchCmp(g => this.applyConsent(g))) {
+          this.applyConsent(true);
+        }
+      }, 3_000);
+    }
+  }
+
+  /** Changement de consentement, appelable plusieurs fois, dans les deux sens. */
+  private applyConsent(granted: boolean): void {
+    const prev = this.consent;
+    this.consent = granted ? 'granted' : 'denied';
+    if (granted && !this.measuredBootDone) {
+      this.measuredBootDone = true;
+      void this.measuredBoot().catch(e => console.warn('[shimmer] measured boot', e));
+    } else if (granted) {
+      // Refus puis ré-accord dans la même page : le boot a déjà tourné, on
+      // repose juste le cookie (même id → même bucket, l'expérience reprend).
+      getOrCreateVisitorId();
+    }
+    if (!granted && prev !== 'denied') {
+      // Retrait : on efface le cookie. Les widgets déjà montés restent (le
+      // service continue), mais plus aucune mesure ne part.
+      deleteCookie(VID_COOKIE);
+    }
+  }
+
+  /**
+   * Mode session : le vendeur fonctionne, AUCUN cookie, pas d'expérience.
+   * Le visiteur voit toujours le widget (il n'est ni témoin ni exposé : il
+   * n'entre dans aucune moyenne, il est simplement servi).
+   */
+  private async sessionBoot(): Promise<void> {
+    if (this.searchWidget) return;
+    this.searchWidget = new SearchWidget(this.client, this.labels, this.config.searchSelector, undefined);
+    if (this.config.enableChat) this.chatWidget = new ChatWidget(this.client, this.labels);
+  }
+
+  /** Plein mode : cookie 365 j, décision holdout, attribution, enrôlement. */
+  private async measuredBoot(): Promise<void> {
     const visitorId = getOrCreateVisitorId();
     let control = false;
     let bucket = 0;
@@ -1653,8 +1817,12 @@ export class Shimmer {
     const resolvedStoreId = storeId;
 
     if (control) {
-      // Bucket in holdout: no widgets, native search untouched. We still
-      // enroll them on search so the control side of the measure fills up.
+      // Témoin : pas de widget. Si le mode session en avait monté un en
+      // attendant le signal CMP, on le retire (contamination limitée à ces
+      // quelques secondes, négligeable et symétrique).
+      this.searchWidget?.destroy();
+      this.searchWidget = null;
+      this.chatWidget = null;
       if (resolvedStoreId) {
         watchNativeSearchForEnrollment(this.config.searchSelector, () =>
           trackSearchEnrollment(this.config.apiUrl, resolvedStoreId, visitorId, false));
@@ -1669,10 +1837,24 @@ export class Shimmer {
     const onQuery = resolvedStoreId
       ? () => trackSearchEnrollment(this.config.apiUrl, resolvedStoreId, visitorId, true)
       : undefined;
-    this.searchWidget = new SearchWidget(this.client, this.labels, this.config.searchSelector, onQuery);
-    if (this.config.enableChat) {
+    if (this.searchWidget) {
+      // Monté en mode session avant le signal : on branche juste l'enrôlement.
+      this.searchWidget.setOnQuery(onQuery);
+    } else {
+      this.searchWidget = new SearchWidget(this.client, this.labels, this.config.searchSelector, onQuery);
+    }
+    if (this.config.enableChat && !this.chatWidget) {
       this.chatWidget = new ChatWidget(this.client, this.labels);
     }
+  }
+
+  /**
+   * API publique de consentement : à appeler depuis la CMP du marchand.
+   *   Shimmer.consent(true)  → plein mode (cookie + mesure)
+   *   Shimmer.consent(false) → mode session, cookie effacé
+   */
+  static consent(granted: boolean): void {
+    Shimmer.instance?.applyConsent(granted);
   }
 
   /** Convenience accessor for `Shimmer.chat()` — allows `Shimmer.assistant.chat(msg)`. */
@@ -1859,6 +2041,8 @@ export class Shimmer {
         // data-chat présent → ajoute le chatbot flottant en plus. Sinon, le
         // vendeur vit uniquement dans la barre de recherche.
         enableChat: el.hasAttribute('data-chat'),
+        // data-consent="auto|strict|granted|denied" — voir ShimmerConfig.consentMode.
+        consentMode: (el.getAttribute('data-consent') as ShimmerConfig['consentMode']) || undefined,
       });
     } catch (e) {
       console.warn('[shimmer] init échouée', e);
