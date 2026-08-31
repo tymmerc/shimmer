@@ -64,7 +64,7 @@ Plateforme IA e-commerce : un vendeur conversationnel dans la barre de recherche
 - **Client beta (pilote)** : install + 1er mois offerts, puis **89€/mois + 5% du CA additionnel prouvé, SANS plafond** — gelé à vie pour le pilote. Codé : `store.config.billing = {floorEUR, ratePct, capEUR}` (`capEUR: null` = sans plafond ; store 4 configuré ainsi).
 - **Grille standard (validée juillet)** : audit gratuit → setup 490€ (socle) / ~990€ (pack) → **149€/mois** (pack 5 modules) → **10% du CA additionnel prouvé**.
 - Positionnement vs lemrock.com : eux = vendre DANS ChatGPT ; Shimmer = cerveau de la boutique. Complémentaires.
-- Docs : `/opt/shimmer/pitch/` (prep-marc-antoine.md, install-client.md, video-script.md, plan-90-jours.md, projection-90-jours-client.md).
+- Docs : `/opt/shimmer/pitch/` (**vision.md : la vision + l'argumentaire confiance, à relire avant chaque appel**, prep-marc-antoine.md, install-client.md, video-script.md, plan-90-jours.md, projection-90-jours-client.md).
 
 ## 9. Où trouver le reste
 - Détails techniques stables : `/opt/shimmer/CLAUDE.md`.
