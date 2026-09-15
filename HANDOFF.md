@@ -50,7 +50,7 @@ Plateforme IA e-commerce : un vendeur conversationnel dans la barre de recherche
 - Tests API : 185/185 verts (12 fichiers).
 
 ## 7. Ce qui reste à faire (par priorité)
-1. **Répondre à Marc-Antoine** (ACTION TYM) : vidéo + projection 90j + offre beta. Vidéo V3 avec voix off en cours.
+1. **Suivi Marc-Antoine (call du 15/09 : très positif)** : MA impressionné par la facilité d'install, il présente Shimmer à son client la semaine du 21/09. Client en refonte DA + recrutement comm. Aussi évoqué (vague) : d'autres clients « leaders de leur marché ». ACTION : mail de merci/récap envoyé par Tym, relance unique jeudi 24/09 si silence. Pipeline dans pilot/outreach.md.
 2. **Recruter le 1er pilote** : client e-commerce de Marc-Antoine + **Brouillon** (brouillon.store, Shopify, prospect chaud via un ami, fiche + message prêt dans `pilot/prospect-brouillon.md`). Kit dans `/opt/shimmer/pilot/`.
 3. **Poser `RESEND_API_KEY`** (+ `EMAIL_FROM_DOMAIN`) dans `.env` pour activer les vrais emails (aujourd'hui mock). Optionnel : `CLAUDE_API_KEY`, `TWILIO_*`.
 4. **WooCommerce → holdout + retour de stock** : le webhook Woo ne lie pas les commandes au holdout et n'a pas de détection de réassort (Shopify seulement).

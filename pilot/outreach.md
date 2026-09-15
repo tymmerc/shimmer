@@ -43,7 +43,8 @@ Si non : "Pas de souci, je vous envoie un mail court avec le résumé."
 
 | Boutique | Vertical | URL | Canal | Date 1er contact | État |
 |----------|----------|-----|-------|------------------|------|
-| Client e-commerce de Marc-Antoine | ? | ? | Intro Marc-Antoine (The Impacters) | 30/06/2026 (réunion MA) | En attente : vidéo + projection 90j + offre beta à envoyer (voir pitch/) |
+| Client e-commerce de Marc-Antoine | ? | ? | Intro Marc-Antoine (Alzà) | Call MA 15/09 : très bon, MA impressionné par la facilité d'install | MA voit le client semaine du 21/09 et lui en parle. ATTENTION : client en pleine refonte de DA + recrutement d'une personne comm (timing à jouer : « pendant que vous refondez, on branche »). Relance MA jeudi 24/09 si silence |
+| Clients « leaders de leur marché » de Marc-Antoine | ? | ? | Mentionné vaguement par MA au call du 15/09 | 15/09/2026 | Signal faible mais réel : MA a évoqué d'autres clients leaders potentiellement intéressés. Ne pas pousser, laisser le pilote 1 faire ses preuves, puis demander les intros |
 | Brouillon | Vêtements sérigraphiés, marque indé, drops | https://brouillon.store (Shopify) | Intro ami de Tym, message direct | à envoyer | Chaud, fiche complète : pilot/prospect-brouillon.md |
 
 ---
