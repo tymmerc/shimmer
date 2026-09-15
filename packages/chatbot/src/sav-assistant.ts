@@ -128,6 +128,7 @@ export async function handleChatMessage(
     systemPrompt,
     temperature: 0.4,
     maxTokens: 1024,
+    storeId,
   });
 
   // Add assistant response

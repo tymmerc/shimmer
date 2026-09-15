@@ -9,7 +9,7 @@ interface IntegrationStatus {
  base: string;
  email: { provider: string; configured: boolean };
  sms: { provider: string; configured: boolean };
- llm: { provider: string; configured: boolean };
+ llm: { provider: string; configured: boolean; budget?: { capEUR: number; spentEUR: number; overBudget: boolean } };
  shopify: { configured: boolean; secretSet: boolean };
  woocommerce: { configured: boolean; siteUrl: string | null; secretSet: boolean };
 }
@@ -68,6 +68,12 @@ export function AdminIntegration() {
  <ServiceCard label="SMS sortants" provider={data.sms.provider} configured={data.sms.configured} />
  <ServiceCard label="Vendeur IA" provider={data.llm.provider} configured={data.llm.configured} />
  </div>
+ {data.llm.budget && (
+ <p className={`mt-3 text-xs ${data.llm.budget.overBudget ? 'text-red-600' : 'text-neutral-400'}`}>
+ Budget IA premium ce mois : {data.llm.budget.spentEUR.toLocaleString('fr-FR')} € / {data.llm.budget.capEUR.toLocaleString('fr-FR')} €
+ {data.llm.budget.overBudget ? ' · plafond atteint, bascule sur l\u2019IA locale incluse' : ''}
+ </p>
+ )}
  {(!data.email.configured || !data.sms.configured) && (
  <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-200">
  <strong>Mode démo :</strong> les canaux non configurés sont en mode simulation. Les envois sont

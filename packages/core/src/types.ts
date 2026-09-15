@@ -178,6 +178,10 @@ export interface ClaudeOptions {
   stream?: boolean;
   timeout?: number;
   maxRetries?: number;
+  /** Boutique pour le compteur de budget IA : tout appel PAYANT est compté,
+   *  et refusé (bascule locale) si le plafond mensuel est atteint. Les flux
+   *  visiteurs (vendeur, SAV) doivent toujours le passer. */
+  storeId?: number;
 }
 
 export interface ClaudeStreamChunk {

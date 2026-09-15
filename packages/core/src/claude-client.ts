@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ClaudeMessage, ClaudeOptions, ClaudeStreamChunk } from './types.js';
 import { logger } from './logger.js';
+import { estimateLlmCostEUR, isOverLlmBudget, recordLlmSpend } from './llm-budget.js';
 
 const LLM_PROVIDER = process.env.LLM_PROVIDER || 'ollama'; // 'claude' | 'ollama'
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
@@ -78,9 +79,17 @@ export class ClaudeClient {
         // gets an answer instead of an error.
         const fallback = this.getFallbackClient();
         if (!fallback) throw err;
+        // Budget : pas de sauvetage payant pour une boutique au plafond. Les
+        // appelants ont deja une degradation gracieuse (liste de produits).
+        if (options.storeId && (await isOverLlmBudget(options.storeId))) throw err;
         logger.warn({ error: (err as Error).message }, 'llm.ollama.failed → claude fallback');
         return this.claudeComplete(messages, options, fallback);
       }
+    }
+    // Provider payant : au plafond, on sert la boutique avec l'IA locale.
+    // Le vendeur ne s'eteint jamais, il redevient sobre jusqu'au mois suivant.
+    if (options.storeId && (await isOverLlmBudget(options.storeId))) {
+      return this.ollamaComplete(messages, options);
     }
     return this.claudeComplete(messages, options);
   }
@@ -369,6 +378,15 @@ export class ClaudeClient {
           outputTokens: response.usage.output_tokens,
           attempt,
         }, 'llm.complete');
+
+        // Comptage budget : chaque appel paye alimente le compteur mensuel de
+        // la boutique. Fire-and-forget, jamais bloquant pour la reponse.
+        if (options.storeId) {
+          void recordLlmSpend(
+            options.storeId,
+            estimateLlmCostEUR(model, response.usage.input_tokens, response.usage.output_tokens),
+          );
+        }
 
         return text;
       } catch (error) {

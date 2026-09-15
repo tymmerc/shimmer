@@ -15,3 +15,5 @@ export function getClaude(): ClaudeClient {
   }
   return claudeSingleton;
 }
+
+export * from './llm-budget.js';

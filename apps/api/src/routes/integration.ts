@@ -5,7 +5,7 @@
  */
 
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import { getPrisma } from '@shimmer/core';
+import { getPrisma, getLlmBudgetStatus } from '@shimmer/core';
 import { derivePublishableKey } from '../lib/publishable-key.js';
 
 export const integrationRouter = Router();
@@ -52,7 +52,13 @@ integrationRouter.get('/status', async (req: Request, res: Response, next: NextF
       base: publicBase(req),
       email: { provider: emailProvider ?? 'Démo (mock)', configured: emailConfigured },
       sms: { provider: smsConfigured ? 'Twilio' : 'Démo (mock)', configured: smsConfigured },
-      llm: { provider: llmProvider === 'claude' ? 'Claude' : 'Ollama (local)', configured: llmConfigured },
+      llm: {
+        provider: llmProvider === 'claude' ? 'Claude' : 'Ollama (local)',
+        configured: llmConfigured,
+        // Plafond de depense IA premium par boutique (10 EUR/mois par defaut).
+        // Au plafond : bascule automatique sur l'IA locale, le vendeur continue.
+        budget: await getLlmBudgetStatus(storeId),
+      },
       shopify: {
         configured: !!cfg.shopify?.shop,
         secretSet: !!cfg.shopify?.webhookSecret,

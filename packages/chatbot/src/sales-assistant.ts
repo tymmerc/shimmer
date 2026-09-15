@@ -269,6 +269,7 @@ export async function handleSalesMessage(
       systemPrompt,
       temperature: 0.5,
       maxTokens: 700,
+      storeId,
     });
   } catch (err) {
     llmDegraded = true;
