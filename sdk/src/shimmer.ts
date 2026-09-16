@@ -730,10 +730,23 @@ class SearchWidget {
   private hookExistingInputs() {
     const selector = this.searchSelector || 'input[type="search"], input[data-shimmer-search]';
     document.querySelectorAll<HTMLInputElement>(selector).forEach((input) => {
-      input.addEventListener('focus', (e) => {
-        e.preventDefault();
-        input.blur();
-        this.open(input.value);
+      // Décision produit (16/09) : le visiteur tape dans LA barre du thème,
+      // avec ses suggestions natives s'il y en a. Shimmer n'apparaît qu'à la
+      // VALIDATION (Entrée ou submit) : on remplace la page de résultats, pas
+      // l'acte de recherche. Même déclencheur que l'enrôlement des témoins
+      // (watchNativeSearchForEnrollment), les deux groupes restent comparables.
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && input.value.trim().length >= 2) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.open(input.value);
+        }
+      });
+      input.form?.addEventListener('submit', (e) => {
+        if (input.value.trim().length >= 2) {
+          e.preventDefault();
+          this.open(input.value);
+        }
       });
     });
   }
