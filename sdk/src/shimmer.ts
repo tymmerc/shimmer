@@ -402,29 +402,33 @@ function injectStyles(theme: ShimmerTheme) {
     .shimmer-widget * { box-sizing: border-box; margin: 0; padding: 0; }
     .shimmer-widget { font-family: ${theme.fontFamily}; font-size: 14px; line-height: 1.5; color: #1f2937; }
 
-    /* Search overlay */
-    .shimmer-search-overlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 99998;
-      display: flex; align-items: flex-start; justify-content: center; padding-top: 10vh;
-      opacity: 0; transition: opacity 0.2s; pointer-events: none;
+    /* Dock discret ancré sous la barre de recherche du thème : pas de plein
+       écran, pas de voile. Produits en haut, question du vendeur en bas. */
+    .shimmer-dock {
+      position: fixed; z-index: 99998; background: #fff;
+      border: 1px solid rgba(0,0,0,0.09); border-radius: ${theme.borderRadius};
+      box-shadow: 0 12px 32px rgba(0,0,0,0.14);
+      display: flex; flex-direction: column; overflow: hidden;
+      max-height: min(60vh, 540px);
+      opacity: 0; transform: translateY(-4px); transition: opacity .18s, transform .18s;
+      pointer-events: none;
     }
-    .shimmer-search-overlay.active { opacity: 1; pointer-events: auto; }
-    .shimmer-search-panel {
-      background: #fff; border-radius: ${theme.borderRadius}; width: 90%; max-width: 640px;
-      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); overflow: hidden;
-      transform: translateY(-20px); transition: transform 0.2s;
-    }
-    .shimmer-search-overlay.active .shimmer-search-panel { transform: translateY(0); }
-    .shimmer-search-input {
-      width: 100%; padding: 16px 20px; border: none; outline: none;
-      font-size: 16px; font-family: inherit; border-bottom: 1px solid #e5e7eb;
-    }
-    .shimmer-search-results { max-height: 56vh; overflow-y: auto; padding: 8px; }
-    /* Question du vendeur, discrète, juste sous la barre. */
-    .shimmer-vendor-q { display: none; padding: 8px 16px 10px; font-size: 14px; line-height: 1.45;
+    .shimmer-dock.active { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .shimmer-search-results { flex: 1 1 auto; overflow-y: auto; padding: 6px; }
+    .shimmer-search-results:empty { display: none; }
+    .shimmer-dock-bottom { flex: 0 0 auto; border-top: 1px solid #f1f2f4; }
+    .shimmer-search-results:empty + .shimmer-dock-bottom { border-top: none; }
+    /* La petite question du vendeur, en bas : elle propose, elle ne s'impose pas. */
+    .shimmer-vendor-q { display: none; padding: 10px 14px 4px; font-size: 14px; line-height: 1.45;
       color: ${theme.primaryColor}; }
     .shimmer-vendor-q.active { display: block; }
-    .shimmer-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 16px 14px; }
+    .shimmer-dock-footer { display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px 8px; }
+    .shimmer-dock-footer button {
+      border: none; background: none; padding: 4px 6px; cursor: pointer;
+      font-family: inherit; font-size: 12px; color: #9ca3af;
+    }
+    .shimmer-dock-footer button:hover { color: #374151; text-decoration: underline; }
+    .shimmer-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 14px 8px; }
     .shimmer-chip { border: 1px solid ${theme.primaryColor}; background: transparent; color: ${theme.primaryColor};
       border-radius: 999px; padding: 8px 14px; font-size: 14px; cursor: pointer; transition: .15s; }
     .shimmer-chip:hover { background: ${theme.primaryColor}; color: #fff; }
@@ -668,8 +672,14 @@ function injectStyles(theme: ShimmerTheme) {
 
 class SearchWidget {
   private overlay!: HTMLElement;
-  private input!: HTMLInputElement;
+  /** La barre de recherche NATIVE du thème qui a déclenché le dock : elle
+   *  reste la surface de frappe, le dock n'a pas de champ à lui. */
+  private anchor: HTMLInputElement | null = null;
+  private savedPlaceholder = '';
+  /** Laisse passer le prochain submit natif (lien « résultats classiques »). */
+  private bypassNext = false;
   private questionEl!: HTMLElement;
+  private chipsEl!: HTMLElement;
   private resultsEl!: HTMLElement;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private sessionToken: string | null = null;
@@ -692,39 +702,76 @@ class SearchWidget {
   }
 
   private createOverlay() {
+    // Dock DISCRET ancré sous la barre de recherche du thème (décision Tym,
+    // 16/09) : pas de plein écran, pas de voile sombre, pas de champ à nous.
+    // Produits en haut, la petite question du vendeur EN BAS, et un lien pour
+    // retourner aux résultats classiques. On propose, on ne s'impose pas.
     this.overlay = document.createElement('div');
-    this.overlay.className = 'shimmer-widget shimmer-search-overlay';
+    this.overlay.className = 'shimmer-widget shimmer-dock';
     this.overlay.innerHTML = `
-      <div class="shimmer-search-panel">
-        <input class="shimmer-search-input" type="text" placeholder="${this.labels.searchPlaceholder}" autocomplete="off" />
+      <div class="shimmer-search-results"></div>
+      <div class="shimmer-dock-bottom">
         <div class="shimmer-vendor-q"></div>
-        <div class="shimmer-search-results"></div>
+        <div class="shimmer-chips-zone"></div>
+        <div class="shimmer-dock-footer">
+          <button type="button" class="shimmer-dock-native"></button>
+          <button type="button" class="shimmer-dock-close">Fermer</button>
+        </div>
       </div>
     `;
     document.body.appendChild(this.overlay);
 
-    this.input = this.overlay.querySelector('.shimmer-search-input')!;
     this.questionEl = this.overlay.querySelector('.shimmer-vendor-q')!;
+    this.chipsEl = this.overlay.querySelector('.shimmer-chips-zone')!;
     this.resultsEl = this.overlay.querySelector('.shimmer-search-results')!;
 
-    this.overlay.addEventListener('click', (e) => {
-      if (e.target === this.overlay) this.close();
+    this.overlay.querySelector('.shimmer-dock-close')!.addEventListener('click', () => this.close());
+    this.overlay.querySelector('.shimmer-dock-native')!.addEventListener('click', () => {
+      // « Voir les résultats classiques » : on rejoue la recherche NATIVE du
+      // thème. form.submit() programmatique ne repasse pas par nos handlers.
+      const a = this.anchor;
+      this.close();
+      if (a?.form) { this.bypassNext = true; a.form.submit(); }
     });
 
-    // Le vendeur répond quand on valide (Entrée), pas à chaque frappe :
-    // l'assist passe par l'IA, on ne le déclenche pas sur chaque lettre.
-    this.input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        const q = this.input.value.trim();
-        if (q.length >= 2) void this.handleQuery(q);
-      }
+    // Clic hors du dock (et hors de la barre) → on se retire sans rien casser.
+    document.addEventListener('click', (e) => {
+      if (!this.overlay.classList.contains('active')) return;
+      const t = e.target as Node;
+      if (!this.overlay.contains(t) && t !== this.anchor) this.close();
     });
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.close();
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); this.open(); }
+      // Cmd/Ctrl+K : focus la barre de recherche du site (réflexe des habitués).
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        const first = document.querySelector<HTMLInputElement>(this.searchSelector || 'input[type="search"], input[data-shimmer-search]');
+        first?.focus();
+      }
     });
+
+    window.addEventListener('resize', () => this.position(), { passive: true });
+    window.addEventListener('scroll', () => this.position(), { passive: true });
+  }
+
+  /** Colle le dock sous la barre native, aligné, largeur raisonnable. */
+  private position() {
+    if (!this.anchor || !this.overlay.classList.contains('active')) return;
+    const r = this.anchor.getBoundingClientRect();
+    const vw = window.innerWidth;
+    if (vw < 560) {
+      this.overlay.style.left = '12px';
+      this.overlay.style.right = '12px';
+      this.overlay.style.width = 'auto';
+    } else {
+      const width = Math.min(Math.max(r.width, 420), 640, vw - 24);
+      const left = Math.min(Math.max(r.left, 12), vw - width - 12);
+      this.overlay.style.left = `${left}px`;
+      this.overlay.style.right = 'auto';
+      this.overlay.style.width = `${width}px`;
+    }
+    this.overlay.style.top = `${Math.round(r.bottom + 6)}px`;
   }
 
   private hookExistingInputs() {
@@ -736,25 +783,33 @@ class SearchWidget {
       // l'acte de recherche. Même déclencheur que l'enrôlement des témoins
       // (watchNativeSearchForEnrollment), les deux groupes restent comparables.
       input.addEventListener('keydown', (e) => {
+        if (this.bypassNext) return;
         if (e.key === 'Enter' && input.value.trim().length >= 2) {
           e.preventDefault();
           e.stopPropagation();
-          this.open(input.value);
+          this.open(input.value, input);
         }
       });
       input.form?.addEventListener('submit', (e) => {
+        if (this.bypassNext) { this.bypassNext = false; return; }
         if (input.value.trim().length >= 2) {
           e.preventDefault();
-          this.open(input.value);
+          this.open(input.value, input);
         }
       });
     });
   }
 
-  open(query?: string) {
+  open(query?: string, anchor?: HTMLInputElement) {
+    if (anchor && anchor !== this.anchor) {
+      this.anchor = anchor;
+      this.savedPlaceholder = anchor.placeholder;
+    }
     this.overlay.classList.add('active');
-    this.input.value = query || '';
-    setTimeout(() => this.input.focus(), 50);
+    this.position();
+    const nativeBtn = this.overlay.querySelector<HTMLButtonElement>('.shimmer-dock-native')!;
+    nativeBtn.textContent = 'Voir les résultats classiques →';
+    nativeBtn.style.display = this.anchor?.form ? '' : 'none';
     if (query && query.trim().length >= 2) void this.handleQuery(query.trim());
   }
 
@@ -778,11 +833,12 @@ class SearchWidget {
   private askToRefine(query: string) {
     this.setQuestion(`Avec plaisir. Pour bien vous orienter sur « ${query} », c'est pour quelle occasion ?`);
     const chips = ['Apéritif', 'Un repas', 'Un cadeau', 'Découvrir', 'Petit budget'];
-    this.resultsEl.innerHTML =
+    this.chipsEl.innerHTML =
       `<div class="shimmer-chips">${chips.map(c => `<button class="shimmer-chip" type="button">${esc(c)}</button>`).join('')}</div>`;
-    this.resultsEl.querySelectorAll<HTMLButtonElement>('.shimmer-chip').forEach((btn) => {
+    this.chipsEl.querySelectorAll<HTMLButtonElement>('.shimmer-chip').forEach((btn) => {
       btn.addEventListener('click', () => {
         this.refined = true;
+        this.chipsEl.innerHTML = '';
         void this.askVendor(`${this.pendingBase} pour ${btn.textContent}`);
       });
     });
@@ -791,6 +847,7 @@ class SearchWidget {
   close() {
     this.overlay.classList.remove('active');
     this.resultsEl.innerHTML = '';
+    this.chipsEl.innerHTML = '';
     // Repart d'une conversation vierge au prochain usage (sinon les critères
     // d'une recherche se reporteraient sur la suivante).
     this.setQuestion('');
@@ -799,7 +856,7 @@ class SearchWidget {
     this.sessionToken = null;
     this.refined = false;
     this.pendingBase = '';
-    this.input.placeholder = this.labels.searchPlaceholder;
+    if (this.anchor) this.anchor.placeholder = this.savedPlaceholder || this.labels.searchPlaceholder;
   }
 
   /**
@@ -825,8 +882,11 @@ class SearchWidget {
       this.setQuestion(res.message);
       this.renderProducts(res.recommendedProducts || []);
       this.renderRestockPrompt(res.outOfStock || []);
-      this.input.value = '';
-      this.input.placeholder = 'Précisez, ou demandez autre chose…';
+      if (this.anchor) {
+        this.anchor.value = '';
+        this.anchor.placeholder = 'Précisez, ou demandez autre chose…';
+        this.anchor.focus();
+      }
     } catch {
       this.setQuestion('');
       this.resultsEl.innerHTML = `<div class="shimmer-search-empty">Le vendeur n'est pas joignable, réessayez dans un instant.</div>`;
@@ -840,8 +900,14 @@ class SearchWidget {
 
   /** Phrase du vendeur (question ou conseil), en discret juste sous la barre. */
   private setQuestion(message: string) {
-    this.questionEl.textContent = message || '';
-    this.questionEl.classList.toggle('active', !!message);
+    if (!message) {
+      this.questionEl.textContent = '';
+      this.questionEl.classList.remove('active');
+      return;
+    }
+    // Gras markdown (**...**) rendu proprement ; on échappe le reste (XSS).
+    this.questionEl.innerHTML = esc(message).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    this.questionEl.classList.add('active');
   }
 
   /**
