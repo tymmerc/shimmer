@@ -393,12 +393,45 @@ class ShimmerClient {
 
 // ─── CSS Injection ───────────────────────────────────────────────────────────
 
-function injectStyles(theme: ShimmerTheme) {
-  if (document.getElementById('shimmer-sdk-styles')) return;
+/**
+ * Racine Shadow DOM du SDK. Tout ce qui est A NOUS (dock du vendeur, chatbot)
+ * vit dedans : le CSS du theme marchand ne peut plus le deformer, et le notre
+ * ne fuit pas chez lui. Les cartes cross-sell, elles, se montent DANS la page
+ * du marchand (conteneurs [data-shimmer-crosssell]) et gardent la feuille
+ * light DOM. Cree une seule fois, reutilisee.
+ */
+let shimmerRoot: ShadowRoot | null = null;
+function getShimmerRoot(): ShadowRoot {
+  if (shimmerRoot && shimmerRoot.host.isConnected) return shimmerRoot;
+  const host = document.createElement('div');
+  host.id = 'shimmer-root';
+  document.body.appendChild(host);
+  shimmerRoot = host.attachShadow({ mode: 'open' });
+  return shimmerRoot;
+}
 
-  const style = document.createElement('style');
-  style.id = 'shimmer-sdk-styles';
-  style.textContent = `
+function injectStyles(theme: ShimmerTheme) {
+  const css = buildStyles(theme);
+  // Light DOM : cross-sell (dans la page marchand). Prefixe .shimmer-, ne fuit pas.
+  if (!document.getElementById('shimmer-sdk-styles')) {
+    const style = document.createElement('style');
+    style.id = 'shimmer-sdk-styles';
+    style.textContent = css;
+    document.head.appendChild(style);
+  }
+  // Shadow DOM : dock + chat. :host remet tout a zero pour que rien n'herite
+  // du theme (font, color, line-height...), .shimmer-widget re-pose les notres.
+  const root = getShimmerRoot();
+  if (!root.querySelector('#shimmer-shadow-styles')) {
+    const style = document.createElement('style');
+    style.id = 'shimmer-shadow-styles';
+    style.textContent = `:host { all: initial; display: block; position: static; }\n` + css;
+    root.appendChild(style);
+  }
+}
+
+function buildStyles(theme: ShimmerTheme): string {
+  return `
     .shimmer-widget * { box-sizing: border-box; margin: 0; padding: 0; }
     .shimmer-widget { font-family: ${theme.fontFamily}; font-size: 14px; line-height: 1.5; color: #1f2937; }
 
@@ -665,7 +698,6 @@ function injectStyles(theme: ShimmerTheme) {
       30% { transform: translateY(-6px); }
     }
   `;
-  document.head.appendChild(style);
 }
 
 // ─── Widgets ─────────────────────────────────────────────────────────────────
@@ -719,7 +751,7 @@ class SearchWidget {
         </div>
       </div>
     `;
-    document.body.appendChild(this.overlay);
+    getShimmerRoot().appendChild(this.overlay);
 
     this.questionEl = this.overlay.querySelector('.shimmer-vendor-q')!;
     this.chipsEl = this.overlay.querySelector('.shimmer-chips-zone')!;
@@ -737,8 +769,10 @@ class SearchWidget {
     // Clic hors du dock (et hors de la barre) → on se retire sans rien casser.
     document.addEventListener('click', (e) => {
       if (!this.overlay.classList.contains('active')) return;
-      const t = e.target as Node;
-      if (!this.overlay.contains(t) && t !== this.anchor) this.close();
+      // Depuis le document, e.target est retargete sur l'hote du shadow :
+      // composedPath() voit le vrai element clique, dock compris.
+      const path = e.composedPath();
+      if (!path.includes(this.overlay) && !path.includes(this.anchor as EventTarget)) this.close();
     });
 
     document.addEventListener('keydown', (e) => {
@@ -1003,7 +1037,7 @@ class ChatWidget {
     this.bubble.className = 'shimmer-widget shimmer-chat-bubble';
     this.bubble.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>`;
     this.bubble.addEventListener('click', () => this.toggle());
-    document.body.appendChild(this.bubble);
+    getShimmerRoot().appendChild(this.bubble);
   }
 
   private createWindow() {
@@ -1021,7 +1055,7 @@ class ChatWidget {
         <button type="submit">${this.labels.send}</button>
       </form>
     `;
-    document.body.appendChild(this.window);
+    getShimmerRoot().appendChild(this.window);
 
     this.messagesEl = this.window.querySelector('.shimmer-chat-messages')!;
     this.formInput = this.window.querySelector('.shimmer-chat-form input')!;
