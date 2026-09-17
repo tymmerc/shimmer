@@ -95,6 +95,8 @@ interface SearchResponse {
 
 interface AssistResponse {
   message: string;
+  /** Renvoye par /api/search/assist pour enchainer les tours de conversation. */
+  sessionToken?: string;
   products?: SearchResult[];
   criteria?: Record<string, string>;
   knownCriteria?: Record<string, string>;
