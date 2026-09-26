@@ -38,22 +38,19 @@ interface ToxicCanvasProps {
   className?: string;
 }
 
-/** Le shader WebGL plein écran ne tourne QUE sur desktop à pointeur fin. Sur
- *  mobile / tactile (pointeur grossier), il pègue le CPU/GPU du téléphone et la
- *  page lague : on renonce au shader et la nappe toxique animée CSS (STATIC_BG
- *  + .toxic-fluid-drift) prend le relais, légère et fluide. Idem si le WebGL
- *  est absent. Le toxique reste vivant partout, le shader premium est un bonus
- *  desktop. */
+/** Le shader WebGL tourne PARTOUT, téléphone compris : c'est la toxine, c'est
+ *  l'identité du site (retour Tym : sans le shader, « c'est juste un fondu
+ *  violet »). Sur tactile on l'allège au lieu de le couper : résolution
+ *  interne plus basse, cadence à 20 fps, DPR plafonné à 1. La nappe CSS
+ *  (.toxic-static + .toxic-fluid-drift) ne sert plus que de secours quand le
+ *  WebGL est absent ou logiciel. */
 function shouldSkipCanvas(): boolean {
-  if (typeof window === 'undefined') return true;
-  // maxTouchPoints traverse le mode "site desktop" d'un téléphone (où
-  // pointer:coarse et la largeur mentent). Tout appareil tactile → pas de
-  // shader live, nappe CSS animée à la place.
-  const touch = (navigator.maxTouchPoints ?? 0) > 0 || 'ontouchstart' in window;
-  const coarse = window.matchMedia?.('(pointer: coarse)').matches;
-  const narrow = window.matchMedia?.('(max-width: 1024px)').matches;
-  if (touch || coarse || narrow) return true;
-  return false;
+  return typeof window === 'undefined';
+}
+
+function isTouchDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (navigator.maxTouchPoints ?? 0) > 0 || 'ontouchstart' in window;
 }
 
 // Fallback sans WebGL (accélération GPU désactivée, blocklist, vieux mobile).
@@ -128,16 +125,20 @@ export function ToxicCanvas({ className }: ToxicCanvasProps) {
     const uM = gl.getUniformLocation(pg, 'M');
 
     // Échelle de rendu interne basse (charge GPU) : le shader reste fluide et
-    // flou de toute façon. 0.34 allège fortement sur les machines à WebGL mou.
-    const SC = 0.34;
+    // flou de toute façon. 0.34 allège fortement sur les machines à WebGL mou,
+    // 0.26 sur téléphone (écran petit, GPU modeste, batterie).
+    const touch = isTouchDevice();
+    const SC = touch ? 0.26 : 0.34;
+    const DPR_CAP = touch ? 1 : 1.5;
     let W = 0, H = 0, mx = 0, my = 0, tmx = 0, tmy = 0;
-    // Throttle ~24 fps. Suffisant pour ce fond organique, moitié moins de charge.
-    const MIN_FRAME_MS = 42;
+    // Throttle ~24 fps desktop, ~20 fps téléphone. Suffisant pour ce fond
+    // organique, moitié moins de charge qu'à 60.
+    const MIN_FRAME_MS = touch ? 50 : 42;
     // On ne rend que quand le canvas est visible à l'écran.
     let visible = true;
 
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio, 1.5);
+      const dpr = Math.min(window.devicePixelRatio, DPR_CAP);
       W = Math.round(c.clientWidth * dpr * SC);
       H = Math.round(c.clientHeight * dpr * SC);
       c.width = W;
@@ -147,7 +148,7 @@ export function ToxicCanvas({ className }: ToxicCanvasProps) {
 
     const cssToBuf = (cx: number, cy: number): [number, number] => {
       const r = c.getBoundingClientRect();
-      const s = Math.min(window.devicePixelRatio, 1.5) * SC;
+      const s = Math.min(window.devicePixelRatio, DPR_CAP) * SC;
       return [(cx - r.left) * s, (r.height - (cy - r.top)) * s];
     };
 
