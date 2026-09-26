@@ -86,20 +86,20 @@ function TimelineLine() {
 /** Timeline verticale alternée, façon Clearpath : sobre, centrée, lisible. */
 export function V3HowItWorks() {
   return (
-    <section id="process" className="relative z-10 w-full scroll-mt-16 px-6 py-24 md:py-32">
+    <section id="process" className="relative z-10 w-full scroll-mt-16 px-6 py-16 md:py-32">
       <div className="mx-auto max-w-4xl">
-        <div className="mx-auto mb-14 max-w-2xl text-center md:mb-20">
-          <h2 className="text-balance font-sans text-3xl font-semibold tracking-tight text-paper md:text-5xl">
+        <div className="mx-auto mb-10 max-w-2xl text-center md:mb-20">
+          <h2 className="text-balance font-sans text-[26px] font-semibold tracking-tight text-paper md:text-5xl">
             Branché en 30 minutes.
           </h2>
-          <p className="mt-4 text-pretty text-base text-paper/60 md:text-lg">
+          <p className="mt-3 text-pretty text-[15px] text-paper/60 md:mt-4 md:text-lg">
             Aucun développement de votre côté. Réversible en une ligne de code.
           </p>
         </div>
 
         <div className="relative">
           <TimelineLine />
-          <div className="space-y-12 md:space-y-16">
+          <div className="space-y-10 md:space-y-16">
             {STEPS.map((s, i) => (
               <motion.div
                 key={s.n}
@@ -113,10 +113,10 @@ export function V3HowItWorks() {
                   <div className={`${i % 2 === 1 ? 'md:order-2' : ''} pl-16 md:pl-0`}>
                     <div className={i % 2 === 1 ? 'md:pl-12 md:text-left' : 'md:pr-12 md:text-right'}>
                       <span className="mb-1.5 block text-sm font-medium text-acid">{s.n}</span>
-                      <h3 className="mb-2 font-sans text-xl font-semibold tracking-tight text-paper md:text-2xl">
+                      <h3 className="mb-2 font-sans text-lg font-semibold tracking-tight text-paper md:text-2xl">
                         {s.title}
                       </h3>
-                      <p className="text-pretty text-[15px] leading-relaxed text-paper/60">{s.text}</p>
+                      <p className="text-pretty text-[14px] leading-relaxed text-paper/60 md:text-[15px]">{s.text}</p>
                     </div>
                   </div>
 

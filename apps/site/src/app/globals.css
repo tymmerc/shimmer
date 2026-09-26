@@ -48,14 +48,18 @@ html, body {
     radial-gradient(45% 60% at 96% 12%, rgba(58, 20, 150, 0.55), rgba(58, 20, 150, 0) 72%),
     #0d0b14;
 }
+/* Sur téléphone il n'y a pas de shader WebGL : cette nappe EST la toxine.
+   Elle doit donc être franchement visible (avant : alphas à 0.4, la page
+   était noire). Halo rose en haut, violet derrière le titre, reflet acide,
+   lueur profonde en bas. */
 @media (max-width: 767px) and (orientation: portrait) {
   .toxic-static {
     background:
-      radial-gradient(75% 30% at 85% 2%, rgba(255, 102, 236, 0.5), rgba(255, 102, 236, 0) 70%),
-      radial-gradient(90% 36% at 60% 16%, rgba(139, 77, 255, 0.42), rgba(139, 77, 255, 0) 72%),
-      radial-gradient(55% 22% at 20% 34%, rgba(232, 74, 255, 0.16), rgba(232, 74, 255, 0) 70%),
-      radial-gradient(50% 18% at 78% 52%, rgba(212, 255, 58, 0.07), rgba(212, 255, 58, 0) 70%),
-      radial-gradient(110% 40% at 50% 104%, rgba(79, 29, 199, 0.45), rgba(79, 29, 199, 0) 74%),
+      radial-gradient(80% 32% at 82% 4%, rgba(255, 102, 236, 0.82), rgba(255, 102, 236, 0) 72%),
+      radial-gradient(95% 40% at 55% 20%, rgba(139, 77, 255, 0.7), rgba(139, 77, 255, 0) 74%),
+      radial-gradient(70% 28% at 15% 38%, rgba(232, 74, 255, 0.34), rgba(232, 74, 255, 0) 72%),
+      radial-gradient(55% 20% at 78% 56%, rgba(212, 255, 58, 0.13), rgba(212, 255, 58, 0) 70%),
+      radial-gradient(120% 44% at 50% 104%, rgba(106, 43, 245, 0.7), rgba(106, 43, 245, 0) 76%),
       #0d0b14;
   }
 }
@@ -73,9 +77,9 @@ html, body {
 @media (max-width: 767px) and (orientation: portrait) {
   .toxic-fluid-drift {
     background:
-      radial-gradient(46% 20% at 72% 10%, rgba(255, 120, 240, 0.32), rgba(255, 120, 240, 0) 70%),
-      radial-gradient(40% 18% at 40% 26%, rgba(168, 120, 255, 0.26), rgba(168, 120, 255, 0) 70%),
-      radial-gradient(30% 14% at 66% 48%, rgba(212, 255, 58, 0.06), rgba(212, 255, 58, 0) 70%);
+      radial-gradient(50% 22% at 72% 10%, rgba(255, 120, 240, 0.5), rgba(255, 120, 240, 0) 70%),
+      radial-gradient(44% 20% at 40% 28%, rgba(168, 120, 255, 0.42), rgba(168, 120, 255, 0) 70%),
+      radial-gradient(32% 14% at 66% 48%, rgba(212, 255, 58, 0.1), rgba(212, 255, 58, 0) 70%);
   }
 }
 /* Dérive seulement sur desktop à pointeur fin (fluidité tactile préservée). */

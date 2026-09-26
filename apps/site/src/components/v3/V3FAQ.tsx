@@ -65,10 +65,10 @@ function Item({ q, a, open, onToggle }: { q: string; a: string; open: boolean; o
 export function V3FAQ() {
   const [open, setOpen] = useState<number | null>(0);
   return (
-    <section id="faq" className="relative z-10 w-full scroll-mt-16 px-6 py-24 md:py-32">
+    <section id="faq" className="relative z-10 w-full scroll-mt-16 px-6 py-16 md:py-32">
       <div className="mx-auto max-w-2xl">
         <div className="mb-10 text-center md:mb-14">
-          <h2 className="text-balance font-sans text-3xl font-semibold tracking-tight text-paper md:text-5xl">
+          <h2 className="text-balance font-sans text-[26px] font-semibold tracking-tight text-paper md:text-5xl">
             Les questions qu&apos;on nous pose.
           </h2>
         </div>

@@ -67,8 +67,8 @@ function Card({
         </span>
         {tag && <span className="text-[12px] font-medium text-acid">{tag}</span>}
       </div>
-      <h3 className="mt-4 font-sans text-lg font-semibold tracking-tight text-paper md:text-xl">{title}</h3>
-      <p className="mt-2 text-pretty text-[15px] leading-relaxed text-paper/60">{body}</p>
+      <h3 className="mt-4 font-sans text-[17px] font-semibold tracking-tight text-paper md:text-xl">{title}</h3>
+      <p className="mt-2 text-pretty text-[14px] leading-relaxed text-paper/60 md:text-[15px]">{body}</p>
       {children}
     </motion.div>
   );
@@ -80,13 +80,13 @@ function Card({
  */
 export function V3Modules() {
   return (
-    <section id="modules" className="relative z-10 w-full scroll-mt-16 px-6 py-24 md:py-32">
+    <section id="modules" className="relative z-10 w-full scroll-mt-16 px-6 py-16 md:py-32">
       <div className="mx-auto max-w-[1100px]">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-balance font-sans text-3xl font-semibold tracking-tight text-paper md:text-5xl">
+          <h2 className="text-balance font-sans text-[26px] font-semibold tracking-tight text-paper md:text-5xl">
             Cinq modules. Un seul outil.
           </h2>
-          <p className="mt-4 text-pretty text-base text-paper/60 md:text-lg">
+          <p className="mt-3 text-pretty text-[15px] text-paper/60 md:mt-4 md:text-lg">
             Le cœur : un vendeur et un SAV qui répondent à votre place.
             Autour : tout ce qui récupère vos clients.
           </p>

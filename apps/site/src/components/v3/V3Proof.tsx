@@ -17,13 +17,13 @@ const ACID_PCT = 14.5;
  */
 export function V3Proof() {
   return (
-    <section id="preuve" className="relative z-10 w-full scroll-mt-16 px-6 py-24 md:py-32">
+    <section id="preuve" className="relative z-10 w-full scroll-mt-16 px-6 py-16 md:py-32">
       <div className="mx-auto max-w-4xl">
-        <div className="mx-auto mb-12 max-w-2xl text-center md:mb-16">
-          <h2 className="text-balance font-sans text-3xl font-semibold tracking-tight text-paper md:text-5xl">
+        <div className="mx-auto mb-9 max-w-2xl text-center md:mb-16">
+          <h2 className="text-balance font-sans text-[26px] font-semibold tracking-tight text-paper md:text-5xl">
             On prouve, à l&apos;euro, ce que ça rapporte.
           </h2>
-          <p className="mt-4 text-pretty text-base text-paper/60 md:text-lg">
+          <p className="mt-3 text-pretty text-[15px] text-paper/60 md:mt-4 md:text-lg">
             10 % de vos visiteurs ne voient jamais Shimmer. On compare ce qu&apos;ils achètent
             aux autres : l&apos;écart, c&apos;est notre effet réel — mesuré sur vos commandes, pas estimé.
           </p>
@@ -105,7 +105,7 @@ export function V3Proof() {
             className="mt-7 border-t border-paper/10 pt-6"
           >
             <div className="flex items-baseline gap-3">
-              <span className="font-sans text-4xl font-semibold tracking-tight text-acid">+18 %</span>
+              <span className="font-sans text-3xl font-semibold tracking-tight text-acid md:text-4xl">+18 %</span>
               <span className="font-sans text-lg font-medium text-paper">de chiffre d&apos;affaires</span>
             </div>
             <p className="mt-2 text-pretty text-sm leading-relaxed text-paper/60">

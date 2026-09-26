@@ -34,13 +34,13 @@ const STEPS = [
 /** L'offre en 4 étapes — le visiteur sait ce que ça coûte avant de demander. */
 export function V3Pricing() {
   return (
-    <section id="offre" className="relative z-10 w-full scroll-mt-16 px-6 py-24 md:py-32">
+    <section id="offre" className="relative z-10 w-full scroll-mt-16 px-6 py-16 md:py-32">
       <div className="mx-auto max-w-[1100px]">
-        <div className="mx-auto mb-12 max-w-2xl text-center md:mb-16">
-          <h2 className="text-balance font-sans text-3xl font-semibold tracking-tight text-paper md:text-5xl">
+        <div className="mx-auto mb-9 max-w-2xl text-center md:mb-16">
+          <h2 className="text-balance font-sans text-[26px] font-semibold tracking-tight text-paper md:text-5xl">
             Une offre simple, payée au résultat.
           </h2>
-          <p className="mt-4 text-pretty text-base text-paper/60 md:text-lg">
+          <p className="mt-3 text-pretty text-[15px] text-paper/60 md:mt-4 md:text-lg">
             Tarif de lancement. Sans engagement, réversible en une ligne de code.
           </p>
         </div>
@@ -63,7 +63,7 @@ export function V3Pricing() {
                 <span className="text-sm font-medium text-acid">{s.n}</span>
                 <span className="text-[13px] text-paper/45">{s.name}</span>
               </div>
-              <div className="mt-5 font-sans text-3xl font-semibold tracking-tight text-paper">
+              <div className="mt-4 font-sans text-2xl font-semibold tracking-tight text-paper md:mt-5 md:text-3xl">
                 {s.price}
               </div>
               <p className="mt-3 text-pretty text-[14px] leading-relaxed text-paper/60">{s.detail}</p>
