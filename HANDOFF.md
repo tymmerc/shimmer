@@ -72,3 +72,5 @@ Plateforme IA e-commerce : un vendeur conversationnel dans la barre de recherche
 - Détails techniques stables : `/opt/shimmer/CLAUDE.md`.
 - Faits opérationnels (pièges nginx, tsx, pk, deploy paths) : `~/.claude/projects/-opt/memory/` et `~/.claude/projects/-root/memory/` (shimmer-preuve-v2.md, shimmer-offre-beta-pilote.md).
 - Kit pilote : `/opt/shimmer/pilot/`.
+
+- **26/09 · landing** : V3 (refonte "sobre" de l'autre session, 23/08) **supprimée** sur décision Tym, on reste sur la V2. Retours appliqués et **poussés en prod** : plus de pastille "cerveau IA" ni de bouton jaune "Audit gratuit" (lien texte), texte mobile réduit, **shader toxique actif sur téléphone** (allégé : res 0.26, DPR 1, 20 fps, lueur qui dérive seule), bruit adapté au portrait, hero mobile = un écran avec `HeroTeaser` (vendeur en action) en bas. Backup prod : `/opt/backups/shimmer/showcase-main-20260926-1110.tar.gz`.
