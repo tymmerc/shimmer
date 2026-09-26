@@ -50,7 +50,7 @@ export function DarkJourney() {
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
-        <h2 className="mb-8 max-w-[24ch] font-display text-balance text-[clamp(40px,6vw,88px)] font-normal leading-[0.95] tracking-editorial">
+        <h2 className="mb-8 max-w-[24ch] font-display text-balance text-[clamp(40px,6vw,88px)] font-normal leading-[1.02] tracking-editorial">
           On ne s'allume pas{' '}
           <span className="italic text-acid">le premier jour</span>.
         </h2>
@@ -77,7 +77,7 @@ export function DarkJourney() {
                     <span>{p.id} / 04</span>
                     <span className="text-acid">{p.num}</span>
                   </div>
-                  <h3 className="mt-3 font-display text-balance text-[clamp(36px,5vw,80px)] font-normal leading-[0.96] tracking-tightest">
+                  <h3 className="mt-3 font-display text-balance text-[clamp(36px,5vw,80px)] font-normal leading-[1.02] tracking-tightest">
                     {p.title}
                     <br />
                     <span className="italic text-acid">{p.accent}</span>

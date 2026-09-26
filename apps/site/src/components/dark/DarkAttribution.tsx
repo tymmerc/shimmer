@@ -18,7 +18,7 @@ export function DarkAttribution() {
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
-        <h2 className="max-w-[26ch] font-display text-balance text-[clamp(36px,5.5vw,84px)] font-normal leading-[0.95] tracking-tightest text-paper">
+        <h2 className="max-w-[26ch] font-display text-balance text-[clamp(36px,5.5vw,84px)] font-normal leading-[1.02] tracking-tightest text-paper">
           On est les seuls à prouver{' '}
           <span className="italic text-acid">ce qu'on rapporte</span>.
         </h2>

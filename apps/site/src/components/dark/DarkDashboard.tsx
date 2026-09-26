@@ -42,7 +42,7 @@ export function DarkDashboard() {
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
-        <h2 className="mb-8 max-w-[24ch] font-display text-balance text-[clamp(36px,5.5vw,80px)] font-normal leading-[0.95] tracking-tightest text-paper">
+        <h2 className="mb-8 max-w-[24ch] font-display text-balance text-[clamp(36px,5.5vw,80px)] font-normal leading-[1.02] tracking-tightest text-paper">
           Tout votre chiffre,{' '}
           <span className="italic text-acid">au même endroit</span>.
         </h2>

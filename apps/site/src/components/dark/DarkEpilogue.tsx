@@ -16,7 +16,7 @@ export function DarkEpilogue() {
         <span className="inline-block font-mono text-[11px] uppercase tracking-[0.24em] text-acid">
           On commence par un audit gratuit
         </span>
-        <h2 className="mx-auto mt-6 max-w-[24ch] font-display text-balance text-[clamp(40px,6.5vw,110px)] font-normal leading-[0.92] tracking-tightest text-paper">
+        <h2 className="mx-auto mt-6 max-w-[24ch] font-display text-balance text-[clamp(40px,6.5vw,110px)] font-normal leading-[1.02] tracking-tightest text-paper">
           Votre boutique laisse filer du chiffre.
           <br />
           On vous montre <span className="italic text-acid">combien, gratuitement</span>.

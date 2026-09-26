@@ -14,7 +14,7 @@ const variants = [
     preview: (
       <div className="relative h-full w-full overflow-hidden bg-paper">
         <div className="absolute -right-12 top-4 h-44 w-44 rounded-full bg-toxic-600 shadow-[0_20px_60px_-20px_rgba(106,43,245,0.6)]" />
-        <div className="absolute left-6 top-12 w-3/4 font-display text-[44px] leading-[0.92] tracking-tightest text-ink">
+        <div className="absolute left-6 top-12 w-3/4 font-display text-[44px] leading-[1.02] tracking-tightest text-ink">
           Un vendeur qui <span className="italic text-toxic-600">parle</span>.
         </div>
         <div className="absolute bottom-6 left-6 right-6 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.18em] text-ink-mute">
@@ -35,7 +35,7 @@ const variants = [
     preview: (
       <div className="relative h-full w-full overflow-hidden bg-ink">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_60%_40%,rgba(106,43,245,0.55),transparent_60%)]" />
-        <div className="absolute left-6 top-12 w-4/5 font-display text-[42px] leading-[0.92] tracking-tightest text-paper">
+        <div className="absolute left-6 top-12 w-4/5 font-display text-[42px] leading-[1.02] tracking-tightest text-paper">
           Le vendeur <span className="italic text-acid">qui parle</span>.
         </div>
         <div className="absolute bottom-6 left-6 inline-flex items-center gap-2 rounded-full border border-paper/15 bg-paper/5 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-paper/70">
@@ -96,7 +96,7 @@ export function ShowcaseGallery() {
         <div className="font-mono text-[11px] uppercase tracking-[0.24em] text-toxic-600">
           Shimmer · 4 directions
         </div>
-        <h1 className="mt-6 max-w-[24ch] font-display text-balance text-[clamp(48px,7vw,120px)] font-normal leading-[0.92] tracking-tightest">
+        <h1 className="mt-6 max-w-[24ch] font-display text-balance text-[clamp(48px,7vw,120px)] font-normal leading-[1.02] tracking-tightest">
           Quatre directions,{' '}
           <span className="italic text-toxic-600">une intention</span>.
         </h1>

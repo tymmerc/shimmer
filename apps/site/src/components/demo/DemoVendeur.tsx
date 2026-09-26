@@ -25,7 +25,7 @@ export function DemoHeader({
   return (
     <header className="mb-6">
       <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-acid">{eyebrow}</div>
-      <h2 className="mt-3 font-display text-[clamp(28px,3.4vw,44px)] font-normal leading-[0.95] tracking-tightest text-paper">
+      <h2 className="mt-3 font-display text-[clamp(28px,3.4vw,44px)] font-normal leading-[1.02] tracking-tightest text-paper">
         {title}{accent ? <> <span className="italic text-acid">{accent}</span></> : null}.
       </h2>
       {intro && <p className="mt-3 max-w-[60ch] text-sm leading-relaxed text-paper/65 md:text-base">{intro}</p>}

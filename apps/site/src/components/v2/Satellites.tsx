@@ -1,6 +1,7 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { useRef } from 'react';
+import { motion, useScroll, useTransform } from 'framer-motion';
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -76,20 +77,118 @@ const SATS = [
   },
 ];
 
-export function Satellites() {
+// Positions sur l'orbite (rayon en %, centre 50/50), départ en haut.
+const R = 40;
+const COORDS = SATS.map((_, i) => {
+  const a = (-90 + i * (360 / SATS.length)) * (Math.PI / 180);
+  return { x: 50 + R * Math.cos(a), y: 50 + R * Math.sin(a) };
+});
+
+/**
+ * L'orbite : les quatre automatisations tournent autour du cœur (vendeur +
+ * SAV). Deux mouvements superposés : une rotation lente continue (CSS,
+ * .wheel-ring / .wheel-counter, coupée par prefers-reduced-motion) et une
+ * rotation pilotée par le scroll (le visiteur fait tourner l'orbite en
+ * descendant). Les icônes contre-tournent pour rester droites. Une comète
+ * acide court sur l'anneau.
+ */
+function Orbit({ sectionRef }: { sectionRef: React.RefObject<HTMLElement> }) {
+  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start end', 'end start'] });
+  const rotate = useTransform(scrollYProgress, [0, 1], [-70, 70]);
+  const counter = useTransform(rotate, (v) => -v);
+
   return (
-    <section className="relative z-10 w-full px-6 py-16 md:px-12 md:py-40">
+    <motion.div
+      initial={{ opacity: 0, scale: 0.92 }}
+      whileInView={{ opacity: 1, scale: 1 }}
+      viewport={{ once: true, amount: 0.3 }}
+      transition={{ duration: 0.9, ease }}
+      className="relative mx-auto aspect-square w-full max-w-[300px] md:max-w-[420px]"
+      aria-hidden
+    >
+      {/* Halo de fond, immobile */}
+      <div
+        className="absolute inset-[12%] rounded-full opacity-70"
+        style={{ background: 'radial-gradient(circle, rgba(139,77,255,0.22), rgba(139,77,255,0) 68%)' }}
+      />
+
+      {/* Couche scroll : tourne avec le défilement */}
+      <motion.div style={{ rotate }} className="absolute inset-0">
+        {/* Couche CSS : tourne toute seule, lentement */}
+        <div className="wheel-ring absolute inset-0">
+          <svg viewBox="0 0 100 100" className="pointer-events-none absolute inset-0 h-full w-full">
+            {/* Anneau */}
+            <circle cx="50" cy="50" r={R} fill="none" stroke="rgba(251,249,244,0.12)" strokeWidth="0.35" />
+            {/* Rayons */}
+            {COORDS.map((c, i) => (
+              <line key={i} x1="50" y1="50" x2={c.x} y2={c.y} stroke="rgba(251,249,244,0.08)" strokeWidth="0.3" />
+            ))}
+            {/* Comète acide : un court arc sur l'anneau, il tourne avec lui */}
+            <circle
+              cx="50"
+              cy="50"
+              r={R}
+              fill="none"
+              stroke="rgba(212,255,58,0.9)"
+              strokeWidth="0.6"
+              strokeLinecap="round"
+              strokeDasharray={`${2 * Math.PI * R * 0.09} ${2 * Math.PI * R}`}
+              transform="rotate(-135 50 50)"
+              style={{ filter: 'drop-shadow(0 0 2px rgba(212,255,58,0.8))' }}
+            />
+          </svg>
+
+          {SATS.map((s, i) => (
+            <div
+              key={s.name}
+              className="absolute flex h-[17%] w-[17%] -translate-x-1/2 -translate-y-1/2 items-center justify-center"
+              style={{ left: `${COORDS[i].x}%`, top: `${COORDS[i].y}%` }}
+            >
+              {/* contre-rotation CSS puis contre-rotation scroll : l'icône reste droite */}
+              <span className="wheel-counter flex h-full w-full items-center justify-center">
+                <motion.span
+                  style={{ rotate: counter }}
+                  className="flex h-full w-full items-center justify-center rounded-2xl border border-acid/30 bg-ink/85 text-acid shadow-[0_0_24px_rgba(212,255,58,0.12)]"
+                >
+                  {s.icon}
+                </motion.span>
+              </span>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* Le cœur, fixe : vendeur + SAV */}
+      <div className="absolute left-1/2 top-1/2 flex h-[30%] w-[30%] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-acid/35 bg-ink/90 shadow-[0_0_40px_rgba(212,255,58,0.10)]">
+        <span className="font-display text-3xl text-paper md:text-4xl">
+          S<span className="text-acid">.</span>
+        </span>
+        <span className="mt-1 text-center font-mono text-[8px] uppercase leading-tight tracking-[0.16em] text-paper/50 md:text-[9px]">
+          vendeur<br />+ SAV
+        </span>
+      </div>
+    </motion.div>
+  );
+}
+
+export function Satellites() {
+  const ref = useRef<HTMLElement>(null);
+  return (
+    <section ref={ref} className="relative z-10 w-full px-6 py-16 md:px-12 md:py-40">
       <div className="mx-auto max-w-[1400px]">
         <div className="mb-8 flex items-baseline gap-6 md:mb-12">
           <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">Et tout autour</span>
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
-        <h2 className="max-w-[22ch] font-display text-[clamp(27px,4.5vw,64px)] font-normal leading-[1.02] tracking-tightest text-paper">
-          Quatre automatisations qui <span className="italic text-acid">récupèrent chaque client</span>.
-        </h2>
+        <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16">
+          <h2 className="max-w-[22ch] font-display text-[clamp(27px,4.5vw,64px)] font-normal leading-[1.02] tracking-tightest text-paper">
+            Quatre automatisations qui <span className="italic text-acid">récupèrent chaque client</span>.
+          </h2>
+          <Orbit sectionRef={ref} />
+        </div>
 
-        <div className="mt-10 grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2 md:mt-16 md:gap-y-12 lg:grid-cols-4">
+        <div className="mt-12 grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2 md:mt-20 md:gap-y-12 lg:grid-cols-4">
           {SATS.map((s, i) => (
             <motion.div
               key={s.name}

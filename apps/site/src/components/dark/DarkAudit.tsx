@@ -57,7 +57,7 @@ export function DarkAudit() {
               <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">
                 La première étape · offerte
               </span>
-              <h2 className="mt-5 max-w-[16ch] font-display text-balance text-[clamp(36px,4.8vw,72px)] font-normal leading-[0.95] tracking-tightest text-paper">
+              <h2 className="mt-5 max-w-[16ch] font-display text-balance text-[clamp(36px,4.8vw,72px)] font-normal leading-[1.02] tracking-tightest text-paper">
                 Un audit gratuit qui montre{' '}
                 <span className="italic text-acid">ce qui fuit</span>.
               </h2>

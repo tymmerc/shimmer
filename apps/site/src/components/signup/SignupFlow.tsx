@@ -192,7 +192,7 @@ export function SignupFlow() {
               <div className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">
                 Votre boutique est créée
               </div>
-              <h2 className="mt-4 font-display text-[clamp(36px,5vw,64px)] font-normal leading-[0.95] tracking-tightest text-paper">
+              <h2 className="mt-4 font-display text-[clamp(36px,5vw,64px)] font-normal leading-[1.02] tracking-tightest text-paper">
                 Bienvenue chez{' '}
                 <span className="italic text-acid">Shimmer</span>,
                 <br />
@@ -307,7 +307,7 @@ function StepHeader({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div>
       <div className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">{eyebrow}</div>
-      <h1 className="mt-3 font-display text-[clamp(28px,4vw,48px)] font-normal leading-[0.95] tracking-tightest text-paper">
+      <h1 className="mt-3 font-display text-[clamp(28px,4vw,48px)] font-normal leading-[1.02] tracking-tightest text-paper">
         {title}
       </h1>
     </div>

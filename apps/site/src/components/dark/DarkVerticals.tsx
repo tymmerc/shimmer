@@ -51,7 +51,7 @@ export function DarkVerticals() {
           <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
           Boutiques de démonstration · données illustratives
         </div>
-        <h2 className="mb-8 max-w-[22ch] font-display text-balance text-[clamp(40px,6vw,88px)] font-normal leading-[0.95] tracking-editorial text-paper">
+        <h2 className="mb-8 max-w-[22ch] font-display text-balance text-[clamp(40px,6vw,88px)] font-normal leading-[1.02] tracking-editorial text-paper">
           Deux démos,{' '}
           <span className="italic text-acid">le vendeur en action</span>.
         </h2>

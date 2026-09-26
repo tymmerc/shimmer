@@ -16,7 +16,7 @@ export function DarkProblem() {
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
-        <h2 className="max-w-[28ch] font-display text-balance text-[clamp(36px,5.5vw,80px)] font-normal leading-[0.95] tracking-tightest text-paper">
+        <h2 className="max-w-[28ch] font-display text-balance text-[clamp(36px,5.5vw,80px)] font-normal leading-[1.02] tracking-tightest text-paper">
           Vos ventes vous filent entre les doigts pendant que{' '}
           <span className="italic text-acid">vous gérez le reste</span>.
         </h2>

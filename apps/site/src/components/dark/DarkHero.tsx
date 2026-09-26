@@ -58,7 +58,7 @@ export function DarkHero() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
-          className="max-w-[20ch] font-display text-balance text-[clamp(38px,8.8vw,156px)] font-normal leading-[0.92] tracking-tightest text-paper"
+          className="max-w-[20ch] font-display text-balance text-[clamp(38px,8.8vw,156px)] font-normal leading-[1.02] tracking-tightest text-paper"
         >
           Votre boutique{' '}
           <span className="italic text-acid">vend, répond et relance</span>{' '}

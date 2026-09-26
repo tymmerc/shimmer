@@ -28,7 +28,7 @@ export function DarkIntegration() {
 
         <div className="grid grid-cols-12 gap-x-6 gap-y-16">
           <div className="col-span-12 lg:col-span-5">
-            <h2 className="font-display text-balance text-[clamp(40px,6vw,88px)] font-normal leading-[0.95] tracking-editorial text-paper">
+            <h2 className="font-display text-balance text-[clamp(40px,6vw,88px)] font-normal leading-[1.02] tracking-editorial text-paper">
               Un snippet,{' '}
               <span className="italic text-acid">trente minutes</span>,
               on est branchés.

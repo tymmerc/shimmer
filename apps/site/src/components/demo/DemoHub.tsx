@@ -54,7 +54,7 @@ export function DemoHub() {
           <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-acid">
             Six démos · zéro montage
           </div>
-          <h1 className="mt-3 font-display text-[clamp(32px,4vw,56px)] font-normal leading-[0.95] tracking-tightest text-paper">
+          <h1 className="mt-3 font-display text-[clamp(32px,4vw,56px)] font-normal leading-[1.02] tracking-tightest text-paper">
             Promenez-vous d'un côté à l'autre du{' '}
             <span className="italic text-acid">comptoir</span>.
           </h1>

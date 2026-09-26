@@ -40,7 +40,7 @@ export function DarkConnected() {
         <div className="grid grid-cols-1 gap-x-16 gap-y-12 lg:grid-cols-2">
           {/* Colonne pinnée : le message reste, les preuves défilent en face */}
           <div className="lg:sticky lg:top-28 lg:self-start">
-            <h2 className="max-w-[16ch] font-display text-balance text-[clamp(36px,4.6vw,76px)] font-normal leading-[0.98] tracking-tightest text-paper">
+            <h2 className="max-w-[16ch] font-display text-balance text-[clamp(36px,4.6vw,76px)] font-normal leading-[1.02] tracking-tightest text-paper">
               Chaque module rend{' '}
               <span className="italic text-acid">les autres meilleurs</span>.
             </h2>
