@@ -148,10 +148,10 @@ function Pillar({
         <span className="font-display text-3xl text-paper/15">{n}</span>
       </div>
 
-      <h3 className="relative mt-5 font-display text-[clamp(26px,3vw,42px)] font-normal leading-[1.02] tracking-tight text-paper md:mt-6">
+      <h3 className="relative mt-5 font-display text-[clamp(23px,3vw,42px)] font-normal leading-[1.02] tracking-tight text-paper md:mt-6">
         {title}
       </h3>
-      <p className="relative mt-4 text-pretty text-base leading-relaxed text-paper/70 md:mt-5 md:text-lg">{body}</p>
+      <p className="relative mt-4 text-pretty text-[15px] leading-relaxed text-paper/70 md:mt-5 md:text-lg">{body}</p>
 
       <div className="relative mt-6 md:mt-8">
         <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-paper/35">Démo</div>
@@ -177,10 +177,10 @@ export function Pillars() {
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
-        <h2 className="max-w-[20ch] font-display text-[clamp(34px,5.5vw,80px)] font-normal leading-[0.95] tracking-tightest text-paper">
+        <h2 className="max-w-[20ch] font-display text-[clamp(30px,5.5vw,80px)] font-normal leading-[0.95] tracking-tightest text-paper">
           Vous faire gagner du temps. Et <span className="italic text-acid">gagner des clients</span>.
         </h2>
-        <p className="mt-5 max-w-[60ch] text-pretty text-base leading-relaxed text-paper/70 md:mt-8 md:text-xl">
+        <p className="mt-5 max-w-[60ch] text-pretty text-[15px] leading-relaxed text-paper/70 md:mt-8 md:text-xl">
           Deux automatisations au cœur, un vendeur en ligne et un SAV qui répond à votre place, et tout
           autour ce qui les rend meilleures.
         </p>

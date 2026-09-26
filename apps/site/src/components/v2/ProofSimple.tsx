@@ -33,10 +33,10 @@ export function ProofSimple() {
         <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-24">
           {/* Texte (inchangé, honnête) */}
           <div>
-            <h2 className="max-w-[18ch] font-display text-[clamp(34px,5vw,72px)] font-normal leading-[0.95] tracking-tightest text-paper">
+            <h2 className="max-w-[18ch] font-display text-[clamp(30px,5vw,72px)] font-normal leading-[0.95] tracking-tightest text-paper">
               On prouve, à l&apos;euro, ce que ça vous <span className="italic text-acid">rapporte</span>.
             </h2>
-            <p className="mt-5 max-w-[46ch] text-pretty text-base leading-relaxed text-paper/70 md:mt-8 md:text-xl">
+            <p className="mt-5 max-w-[46ch] text-pretty text-[15px] leading-relaxed text-paper/70 md:mt-8 md:text-xl">
               10 % de vos visiteurs ne voient jamais Shimmer. On compare ce qu&apos;ils dépensent à ceux
               qui l&apos;ont vu. La différence, c&apos;est notre effet réel, mesuré sur vos commandes.
               Pas une estimation.
@@ -145,7 +145,7 @@ export function ProofSimple() {
               className="mt-8 border-t border-paper/10 pt-6"
             >
               <div className="flex items-baseline gap-3">
-                <span className="font-display text-4xl text-acid md:text-5xl">+18 %</span>
+                <span className="font-display text-3xl text-acid md:text-5xl">+18 %</span>
                 <span className="font-display text-xl text-paper md:text-2xl">de chiffre d&apos;affaires</span>
               </div>
               <p className="mt-3 text-pretty text-sm leading-snug text-paper/60">

@@ -24,10 +24,10 @@ export function AuditCTA() {
           <div className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">
             La première étape · offerte
           </div>
-          <h2 className="mt-5 max-w-[20ch] font-display text-[clamp(34px,5.5vw,84px)] font-normal leading-[0.95] tracking-tightest text-paper md:mt-6">
+          <h2 className="mt-5 max-w-[20ch] font-display text-[clamp(30px,5.5vw,84px)] font-normal leading-[0.95] tracking-tightest text-paper md:mt-6">
             Un audit gratuit qui montre <span className="italic text-acid">ce qui fuit</span>.
           </h2>
-          <p className="mt-5 max-w-[54ch] text-pretty text-base leading-relaxed text-paper/75 md:mt-8 md:text-xl">
+          <p className="mt-5 max-w-[54ch] text-pretty text-[15px] leading-relaxed text-paper/75 md:mt-8 md:text-xl">
             On analyse votre boutique et on vous montre, chiffré, où part le chiffre d&apos;affaires.
             Sans engagement, 30 minutes de restitution.
           </p>
@@ -36,7 +36,7 @@ export function AuditCTA() {
             {LEAKS.map(([n, txt]) => (
               <div key={n} className="flex gap-4 border-t border-paper/15 pt-4 sm:pt-5">
                 <span className="font-mono text-sm text-acid">{n}</span>
-                <span className="text-pretty text-base leading-snug text-paper md:text-xl">{txt}</span>
+                <span className="text-pretty text-[15px] leading-snug text-paper md:text-xl">{txt}</span>
               </div>
             ))}
           </div>

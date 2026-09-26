@@ -22,31 +22,20 @@ export function ShimmerHero() {
           En portrait mobile le fondu latéral n'a pas de sens (le texte occupe
           toute la largeur) : on le remplace par un voile vertical léger. */}
       <div className="pointer-events-none absolute inset-y-0 left-0 z-[3] hidden w-[62%] bg-gradient-to-r from-ink via-ink/80 to-transparent md:block" />
-      <div className="pointer-events-none absolute inset-0 z-[3] bg-gradient-to-b from-ink/60 via-ink/20 to-transparent md:hidden" />
+      <div className="pointer-events-none absolute inset-0 z-[3] bg-gradient-to-b from-ink/35 via-ink/10 to-transparent md:hidden" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[3] h-40 bg-gradient-to-t from-ink to-transparent" />
 
       <SiteNav />
 
       <div className="relative z-10 mx-auto flex min-h-screen max-w-[1400px] flex-col justify-center px-6 pb-24 pt-24 md:px-12 md:pb-28 md:pt-28">
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease }}
-          className="mb-6 inline-flex w-fit items-center gap-2.5 rounded-full border border-paper/15 bg-paper/5 px-3.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-paper/70 md:mb-8 md:gap-3 md:px-4 md:py-2 md:text-[11px] md:tracking-[0.22em]"
-        >
-          <motion.span
-            animate={{ opacity: [0.6, 1, 0.6], scale: [1, 1.25, 1] }}
-            transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-            className="h-1.5 w-1.5 rounded-full bg-acid shadow-[0_0_14px_rgba(212,255,58,0.9)]"
-          />
-          Le cerveau IA de votre boutique
-        </motion.div>
-
+        {/* Pas de pastille « badge » au-dessus du titre (le point vert qui
+            pulse dans une capsule, c'est le tic des sites générés). On entre
+            directement par l'accroche. */}
         <motion.h1
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease, delay: 0.1 }}
-          className="max-w-[18ch] font-display text-balance text-[clamp(42px,9vw,150px)] font-normal leading-[0.92] tracking-tightest text-paper"
+          className="max-w-[18ch] font-display text-balance text-[clamp(34px,9vw,150px)] font-normal leading-[0.94] tracking-tightest text-paper"
         >
           Votre boutique{' '}
           <span className="italic text-acid">vend, répond et relance</span>{' '}
@@ -57,7 +46,7 @@ export function ShimmerHero() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease, delay: 0.25 }}
-          className="mt-6 max-w-[46ch] text-pretty text-[17px] leading-relaxed text-paper/80 md:mt-8 md:text-2xl"
+          className="mt-5 max-w-[46ch] text-pretty text-[15px] leading-relaxed text-paper/80 md:mt-8 md:text-2xl"
         >
           Un vendeur en ligne et un SAV qui répondent à votre place, entourés de tout ce qui récupère vos clients.{' '}
           <span className="text-paper">Vous gagnez du temps. Et des ventes.</span>
@@ -67,7 +56,7 @@ export function ShimmerHero() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease, delay: 0.4 }}
-          className="mt-9 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 md:mt-12"
+          className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 md:mt-12"
         >
           <a
             href={AUDIT_MAILTO}

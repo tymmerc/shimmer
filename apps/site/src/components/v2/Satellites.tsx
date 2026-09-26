@@ -85,7 +85,7 @@ export function Satellites() {
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
-        <h2 className="max-w-[22ch] font-display text-[clamp(30px,4.5vw,64px)] font-normal leading-[0.98] tracking-tightest text-paper">
+        <h2 className="max-w-[22ch] font-display text-[clamp(27px,4.5vw,64px)] font-normal leading-[0.98] tracking-tightest text-paper">
           Quatre automatisations qui <span className="italic text-acid">récupèrent chaque client</span>.
         </h2>
 
@@ -102,9 +102,9 @@ export function Satellites() {
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-acid/25 bg-acid/[0.06] text-acid md:mb-6 md:h-12 md:w-12">
                 {s.icon}
               </div>
-              <h3 className="font-display text-2xl leading-tight text-paper md:text-[26px]">{s.name}</h3>
-              <p className="mt-3 text-pretty text-base leading-relaxed text-paper/60 md:mt-4">{s.does}</p>
-              <p className="mt-2.5 text-pretty text-base leading-snug text-acid/90 md:mt-3">{s.benefit}</p>
+              <h3 className="font-display text-[22px] leading-tight text-paper md:text-[26px]">{s.name}</h3>
+              <p className="mt-3 text-pretty text-[15px] leading-relaxed text-paper/60 md:mt-4">{s.does}</p>
+              <p className="mt-2.5 text-pretty text-[15px] leading-snug text-acid/90 md:mt-3">{s.benefit}</p>
             </motion.div>
           ))}
         </div>

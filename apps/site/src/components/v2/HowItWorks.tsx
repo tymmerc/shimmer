@@ -32,7 +32,7 @@ export function HowItWorks() {
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
-        <h2 className="mb-10 max-w-[22ch] font-display text-[clamp(34px,5vw,72px)] font-normal leading-[0.95] tracking-tightest text-paper md:mb-16">
+        <h2 className="mb-10 max-w-[22ch] font-display text-[clamp(30px,5vw,72px)] font-normal leading-[0.95] tracking-tightest text-paper md:mb-16">
           Branché en 30 minutes. <span className="italic text-acid">Prouvé</span> sur vos propres chiffres.
         </h2>
 
@@ -47,8 +47,8 @@ export function HowItWorks() {
               className="border-t border-paper/15 pt-6"
             >
               <div className="font-mono text-sm text-acid">{s.n}</div>
-              <h3 className="mt-3 font-display text-2xl leading-tight text-paper md:mt-4 md:text-[28px]">{s.title}</h3>
-              <p className="mt-3 text-pretty text-base leading-relaxed text-paper/65 md:mt-4 md:text-lg">{s.text}</p>
+              <h3 className="mt-3 font-display text-[22px] leading-tight text-paper md:mt-4 md:text-[28px]">{s.title}</h3>
+              <p className="mt-3 text-pretty text-[15px] leading-relaxed text-paper/65 md:mt-4 md:text-lg">{s.text}</p>
             </motion.div>
           ))}
         </div>
