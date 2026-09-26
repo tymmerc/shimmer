@@ -11,8 +11,11 @@ float n(vec2 p){vec2 i=floor(p),f=fract(p);f*=f*(3.-2.*f);
 float fb(vec2 p){return n(p)*.5+n(p*2.1)*.28+n(p*4.4)*.14;}
 void main(){
   vec2 uv=gl_FragCoord.xy/R; float ar=R.x/R.y;
-  vec2 p=(uv-.5)*vec2(ar,1.); float t=T*.10;
-  vec2 m=(M/R-.5)*vec2(ar,1.); float md=length(p-m); float mi=smoothstep(.55,.0,md);
+  // Portrait (téléphone) : on étire l'axe vertical au lieu de compresser
+  // l'horizontal, sinon le bruit est calibré paysage et l'écran paraît vide.
+  vec2 S=ar>=1.?vec2(ar,1.):vec2(1.,1./ar);
+  vec2 p=(uv-.5)*S; float t=T*.10;
+  vec2 m=(M/R-.5)*S; float md=length(p-m); float mi=smoothstep(.55,.0,md);
   float n1=fb(p*2.6+vec2(t*.6,t*.25));
   float n2=fb(p*3.0-vec2(t*.4,-t*.35)+m*.25);
   float nw=fb(p*2.0+vec2(n1*.6,n2*.4)+m*mi*.6);
@@ -154,7 +157,11 @@ export function ToxicCanvas({ className }: ToxicCanvasProps) {
 
     const onMove = (e: MouseEvent) => { [tmx, tmy] = cssToBuf(e.clientX, e.clientY); };
     const onLeave = () => { tmx = W * 0.5; tmy = H * 0.5; };
-    const onTouch = (e: TouchEvent) => { [tmx, tmy] = cssToBuf(e.touches[0].clientX, e.touches[0].clientY); };
+    let lastTouch = -1e9;
+    const onTouch = (e: TouchEvent) => {
+      lastTouch = performance.now();
+      [tmx, tmy] = cssToBuf(e.touches[0].clientX, e.touches[0].clientY);
+    };
 
     c.addEventListener('mousemove', onMove);
     c.addEventListener('mouseleave', onLeave);
@@ -180,6 +187,13 @@ export function ToxicCanvas({ className }: ToxicCanvasProps) {
       if (!visible || document.hidden) return;
       if (now - last < MIN_FRAME_MS) return;
       last = now;
+      // Tactile : pas de souris, la lueur dérive toute seule à travers
+      // l'écran (sinon elle reste plantée au centre et le fond paraît figé).
+      if (touch && now - lastTouch > 2500) {
+        const tt = (now - t0) * 0.001;
+        tmx = W * (0.5 + 0.34 * Math.sin(tt * 0.23));
+        tmy = H * (0.5 + 0.30 * Math.sin(tt * 0.15 + 1.2));
+      }
       mx += (tmx - mx) * 0.09;
       my += (tmy - my) * 0.09;
       gl.uniform2f(uR, W, H);

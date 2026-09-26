@@ -14,6 +14,12 @@ export function SiteNav() {
         <a href="#top" className="font-display text-xl font-medium tracking-tight text-paper">
           Shimmer<span className="text-acid">.</span>
         </a>
+        <a
+          href={AUDIT_MAILTO}
+          className="border-b border-paper/30 pb-px font-mono text-[10px] uppercase tracking-[0.18em] text-paper/80 md:hidden"
+        >
+          Demander un audit
+        </a>
         <nav className="hidden items-center gap-8 md:flex">
           <a href="#automatisations" className="font-mono text-[11px] uppercase tracking-[0.2em] text-paper/55 transition hover:text-paper">
             Ce que ça fait
