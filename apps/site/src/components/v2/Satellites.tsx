@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef } from 'react';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 const ease = [0.22, 1, 0.36, 1] as const;
+const pop = [0.34, 1.56, 0.64, 1] as const;
 
 const iconProps = {
   width: 22,
@@ -77,133 +77,76 @@ const SATS = [
   },
 ];
 
-// Positions sur l'orbite (rayon en %, centre 50/50), départ en haut.
-const R = 40;
-const COORDS = SATS.map((_, i) => {
-  const a = (-90 + i * (360 / SATS.length)) * (Math.PI / 180);
-  return { x: 50 + R * Math.cos(a), y: 50 + R * Math.sin(a) };
-});
-
-/**
- * L'orbite : les quatre automatisations tournent autour du cœur (vendeur +
- * SAV). Deux mouvements superposés : une rotation lente continue (CSS,
- * .wheel-ring / .wheel-counter, coupée par prefers-reduced-motion) et une
- * rotation pilotée par le scroll (le visiteur fait tourner l'orbite en
- * descendant). Les icônes contre-tournent pour rester droites. Une comète
- * acide court sur l'anneau.
- */
-function Orbit({ sectionRef }: { sectionRef: React.RefObject<HTMLElement> }) {
-  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start end', 'end start'] });
-  const rotate = useTransform(scrollYProgress, [0, 1], [-70, 70]);
-  const counter = useTransform(rotate, (v) => -v);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.92 }}
-      whileInView={{ opacity: 1, scale: 1 }}
-      viewport={{ once: true, amount: 0.3 }}
-      transition={{ duration: 0.9, ease }}
-      className="relative mx-auto aspect-square w-full max-w-[300px] md:max-w-[420px]"
-      aria-hidden
-    >
-      {/* Halo de fond, immobile */}
-      <div
-        className="absolute inset-[12%] rounded-full opacity-70"
-        style={{ background: 'radial-gradient(circle, rgba(139,77,255,0.22), rgba(139,77,255,0) 68%)' }}
-      />
-
-      {/* Couche scroll : tourne avec le défilement */}
-      <motion.div style={{ rotate }} className="absolute inset-0">
-        {/* Couche CSS : tourne toute seule, lentement */}
-        <div className="wheel-ring absolute inset-0">
-          <svg viewBox="0 0 100 100" className="pointer-events-none absolute inset-0 h-full w-full">
-            {/* Anneau */}
-            <circle cx="50" cy="50" r={R} fill="none" stroke="rgba(251,249,244,0.12)" strokeWidth="0.35" />
-            {/* Rayons */}
-            {COORDS.map((c, i) => (
-              <line key={i} x1="50" y1="50" x2={c.x} y2={c.y} stroke="rgba(251,249,244,0.08)" strokeWidth="0.3" />
-            ))}
-            {/* Comète acide : un court arc sur l'anneau, il tourne avec lui */}
-            <circle
-              cx="50"
-              cy="50"
-              r={R}
-              fill="none"
-              stroke="rgba(212,255,58,0.9)"
-              strokeWidth="0.6"
-              strokeLinecap="round"
-              strokeDasharray={`${2 * Math.PI * R * 0.09} ${2 * Math.PI * R}`}
-              transform="rotate(-135 50 50)"
-              style={{ filter: 'drop-shadow(0 0 2px rgba(212,255,58,0.8))' }}
-            />
-          </svg>
-
-          {SATS.map((s, i) => (
-            <div
-              key={s.name}
-              className="absolute flex h-[17%] w-[17%] -translate-x-1/2 -translate-y-1/2 items-center justify-center"
-              style={{ left: `${COORDS[i].x}%`, top: `${COORDS[i].y}%` }}
-            >
-              {/* contre-rotation CSS puis contre-rotation scroll : l'icône reste droite */}
-              <span className="wheel-counter flex h-full w-full items-center justify-center">
-                <motion.span
-                  style={{ rotate: counter }}
-                  className="flex h-full w-full items-center justify-center rounded-2xl border border-acid/30 bg-ink/85 text-acid shadow-[0_0_24px_rgba(212,255,58,0.12)]"
-                >
-                  {s.icon}
-                </motion.span>
-              </span>
-            </div>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Le cœur, fixe : vendeur + SAV */}
-      <div className="absolute left-1/2 top-1/2 flex h-[30%] w-[30%] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-acid/35 bg-ink/90 shadow-[0_0_40px_rgba(212,255,58,0.10)]">
-        <span className="font-display text-3xl text-paper md:text-4xl">
-          S<span className="text-acid">.</span>
-        </span>
-        <span className="mt-1 text-center font-mono text-[8px] uppercase leading-tight tracking-[0.16em] text-paper/50 md:text-[9px]">
-          vendeur<br />+ SAV
-        </span>
-      </div>
-    </motion.div>
-  );
-}
+/* Apparition en cascade, par bloc : le trait du haut se trace, l'icône
+   surgit, le titre puis le texte montent. Chaque bloc part avec un léger
+   décalage sur le précédent. Une seule fois, au premier passage. */
+const block = {
+  hidden: {},
+  show: (i: number) => ({ transition: { staggerChildren: 0.09, delayChildren: i * 0.12 } }),
+};
+const line = {
+  hidden: { scaleX: 0 },
+  show: { scaleX: 1, transition: { duration: 0.8, ease } },
+};
+const tile = {
+  hidden: { opacity: 0, scale: 0.55, y: 8 },
+  show: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.55, ease: pop } },
+};
+const text = {
+  hidden: { opacity: 0, y: 14 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.55, ease } },
+};
 
 export function Satellites() {
-  const ref = useRef<HTMLElement>(null);
   return (
-    <section ref={ref} className="relative z-10 w-full px-6 py-16 md:px-12 md:py-40">
+    <section className="relative z-10 w-full px-6 py-16 md:px-12 md:py-40">
       <div className="mx-auto max-w-[1400px]">
         <div className="mb-8 flex items-baseline gap-6 md:mb-12">
           <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">Et tout autour</span>
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
-        <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16">
-          <h2 className="max-w-[22ch] font-display text-[clamp(27px,4.5vw,64px)] font-normal leading-[1.02] tracking-tightest text-paper">
-            Quatre automatisations qui <span className="italic text-acid">récupèrent chaque client</span>.
-          </h2>
-          <Orbit sectionRef={ref} />
-        </div>
+        <motion.h2
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.6 }}
+          transition={{ duration: 0.8, ease }}
+          className="max-w-[22ch] font-display text-[clamp(27px,4.5vw,64px)] font-normal leading-[1.02] tracking-tightest text-paper"
+        >
+          Quatre automatisations qui <span className="italic text-acid">récupèrent chaque client</span>.
+        </motion.h2>
 
-        <div className="mt-12 grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2 md:mt-20 md:gap-y-12 lg:grid-cols-4">
+        <div className="mt-10 grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2 md:mt-16 md:gap-y-12 lg:grid-cols-4">
           {SATS.map((s, i) => (
             <motion.div
               key={s.name}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.4 }}
-              transition={{ duration: 0.55, ease, delay: i * 0.08 }}
-              className="border-t border-paper/15 pt-6 md:pt-7"
+              custom={i}
+              variants={block}
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true, amount: 0.35 }}
+              className="relative pt-6 md:pt-7"
             >
-              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-acid/25 bg-acid/[0.06] text-acid md:mb-6 md:h-12 md:w-12">
+              <motion.span
+                aria-hidden
+                variants={line}
+                className="absolute left-0 top-0 h-px w-full origin-left bg-paper/15"
+              />
+              <motion.div
+                variants={tile}
+                className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-acid/25 bg-acid/[0.06] text-acid md:mb-6 md:h-12 md:w-12"
+              >
                 {s.icon}
-              </div>
-              <h3 className="font-display text-[22px] leading-tight text-paper md:text-[26px]">{s.name}</h3>
-              <p className="mt-3 text-pretty text-[15px] leading-relaxed text-paper/60 md:mt-4">{s.does}</p>
-              <p className="mt-2.5 text-pretty text-[15px] leading-snug text-acid/90 md:mt-3">{s.benefit}</p>
+              </motion.div>
+              <motion.h3 variants={text} className="font-display text-[22px] leading-tight text-paper md:text-[26px]">
+                {s.name}
+              </motion.h3>
+              <motion.p variants={text} className="mt-3 text-pretty text-[15px] leading-relaxed text-paper/60 md:mt-4">
+                {s.does}
+              </motion.p>
+              <motion.p variants={text} className="mt-2.5 text-pretty text-[15px] leading-snug text-acid/90 md:mt-3">
+                {s.benefit}
+              </motion.p>
             </motion.div>
           ))}
         </div>
