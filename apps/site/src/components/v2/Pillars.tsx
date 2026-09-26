@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { motion, useInView } from 'framer-motion';
+import { SectionMore } from './SectionMore';
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -177,13 +178,13 @@ export function Pillars() {
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
-        <h2 className="max-w-[20ch] font-display text-[clamp(30px,5.5vw,80px)] font-normal leading-[0.95] tracking-tightest text-paper">
+        <h2 className="max-w-[20ch] font-display text-[clamp(30px,5.5vw,80px)] font-normal leading-[1.02] tracking-tightest text-paper">
           Vous faire gagner du temps. Et <span className="italic text-acid">gagner des clients</span>.
         </h2>
-        <p className="mt-5 max-w-[60ch] text-pretty text-[15px] leading-relaxed text-paper/70 md:mt-8 md:text-xl">
+        <SectionMore>
           Deux automatisations au cœur, un vendeur en ligne et un SAV qui répond à votre place, et tout
           autour ce qui les rend meilleures.
-        </p>
+        </SectionMore>
 
         <div className="mt-10 grid grid-cols-1 gap-6 md:mt-16 lg:grid-cols-2">
           <Pillar

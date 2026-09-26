@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { SectionMore } from './SectionMore';
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -33,23 +34,15 @@ export function ProofSimple() {
         <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-24">
           {/* Texte (inchangé, honnête) */}
           <div>
-            <h2 className="max-w-[18ch] font-display text-[clamp(30px,5vw,72px)] font-normal leading-[0.95] tracking-tightest text-paper">
+            <h2 className="max-w-[18ch] font-display text-[clamp(30px,5vw,72px)] font-normal leading-[1.02] tracking-tightest text-paper">
               On prouve, à l&apos;euro, ce que ça vous <span className="italic text-acid">rapporte</span>.
             </h2>
-            <p className="mt-5 max-w-[46ch] text-pretty text-[15px] leading-relaxed text-paper/70 md:mt-8 md:text-xl">
+            <SectionMore label="Comment on mesure">
               10 % de vos visiteurs ne voient jamais Shimmer. On compare ce qu&apos;ils dépensent à ceux
-              qui l&apos;ont vu. La différence, c&apos;est notre effet réel, mesuré sur vos commandes.
-              Pas une estimation.
-            </p>
-            <div className="mt-8 inline-flex flex-col gap-2">
-              <span className="inline-flex w-fit items-center gap-2 rounded-full border border-acid/40 bg-acid/10 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-acid">
-                <span className="h-1.5 w-1.5 rounded-full bg-acid" />
-                Ce surplus est à vous
-              </span>
-              <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-paper/50">
-                La part qu&apos;on facture au résultat ne porte que sur cet écart prouvé.
-              </span>
-            </div>
+              qui l&apos;ont vu. La différence, c&apos;est notre effet réel, mesuré sur vos commandes,
+              pas une estimation. La part qu&apos;on facture au résultat ne porte que sur cet écart
+              prouvé : le surplus est à vous.
+            </SectionMore>
           </div>
 
           {/* Visuel holdout */}

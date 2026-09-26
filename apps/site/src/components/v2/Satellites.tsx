@@ -85,7 +85,7 @@ export function Satellites() {
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
-        <h2 className="max-w-[22ch] font-display text-[clamp(27px,4.5vw,64px)] font-normal leading-[0.98] tracking-tightest text-paper">
+        <h2 className="max-w-[22ch] font-display text-[clamp(27px,4.5vw,64px)] font-normal leading-[1.02] tracking-tightest text-paper">
           Quatre automatisations qui <span className="italic text-acid">récupèrent chaque client</span>.
         </h2>
 

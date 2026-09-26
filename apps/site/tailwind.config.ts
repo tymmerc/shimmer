@@ -40,7 +40,10 @@ const config: Config = {
         mono: ['var(--font-jetbrains)', 'monospace'],
       },
       letterSpacing: {
-        tightest: '-0.045em',
+        // -0.045em à l'origine : les lettres se touchaient sur les grands
+        // titres (« typo agressive, dure à lire », retour testeurs 26/09).
+        // On garde Fraunces, on desserre.
+        tightest: '-0.022em',
         editorial: '-0.03em',
       },
       screens: {

@@ -40,7 +40,7 @@ export function ShimmerHero() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease, delay: 0.1 }}
-          className="max-w-[18ch] font-display text-balance text-[clamp(34px,9vw,150px)] font-normal leading-[0.94] tracking-tightest text-paper"
+          className="max-w-[18ch] font-display text-balance text-[clamp(34px,8.5vw,128px)] font-normal leading-[1.02] tracking-tightest text-paper"
         >
           Votre boutique{' '}
           <span className="italic text-acid">vend, répond et relance</span>{' '}
