@@ -49,20 +49,9 @@ html, body {
     #0d0b14;
 }
 /* Sur téléphone il n'y a pas de shader WebGL : cette nappe EST la toxine.
-   Elle doit donc être franchement visible (avant : alphas à 0.4, la page
-   était noire). Halo rose en haut, violet derrière le titre, reflet acide,
-   lueur profonde en bas. */
-@media (max-width: 767px) and (orientation: portrait) {
-  .toxic-static {
-    background:
-      radial-gradient(80% 32% at 82% 4%, rgba(255, 102, 236, 0.82), rgba(255, 102, 236, 0) 72%),
-      radial-gradient(95% 40% at 55% 20%, rgba(139, 77, 255, 0.7), rgba(139, 77, 255, 0) 74%),
-      radial-gradient(70% 28% at 15% 38%, rgba(232, 74, 255, 0.34), rgba(232, 74, 255, 0) 72%),
-      radial-gradient(55% 20% at 78% 56%, rgba(212, 255, 58, 0.13), rgba(212, 255, 58, 0) 70%),
-      radial-gradient(120% 44% at 50% 104%, rgba(106, 43, 245, 0.7), rgba(106, 43, 245, 0) 76%),
-      #0d0b14;
-  }
-}
+   On garde volontairement la MÊME composition qu'en desktop (celle de la
+   prod, rose vif pesé à droite) : une recomposition « portrait » plus
+   violette avait été tentée, Tym l'a refusée (« juste un fondu violet »). */
 .toxic-fluid-drift {
   position: absolute;
   inset: -22%;
@@ -71,16 +60,6 @@ html, body {
     radial-gradient(30% 38% at 72% 38%, rgba(255, 120, 240, 0.5), rgba(255, 120, 240, 0) 70%),
     radial-gradient(26% 32% at 60% 62%, rgba(168, 120, 255, 0.4), rgba(168, 120, 255, 0) 70%),
     radial-gradient(20% 26% at 80% 70%, rgba(212, 255, 58, 0.1), rgba(212, 255, 58, 0) 70%);
-}
-/* En portrait téléphone, la dérive suit la recomposition de .toxic-static :
-   halo haut derrière le titre, reflet léger au centre. */
-@media (max-width: 767px) and (orientation: portrait) {
-  .toxic-fluid-drift {
-    background:
-      radial-gradient(50% 22% at 72% 10%, rgba(255, 120, 240, 0.5), rgba(255, 120, 240, 0) 70%),
-      radial-gradient(44% 20% at 40% 28%, rgba(168, 120, 255, 0.42), rgba(168, 120, 255, 0) 70%),
-      radial-gradient(32% 14% at 66% 48%, rgba(212, 255, 58, 0.1), rgba(212, 255, 58, 0) 70%);
-  }
 }
 /* Dérive seulement sur desktop à pointeur fin (fluidité tactile préservée). */
 @media (hover: hover) and (pointer: fine) {
