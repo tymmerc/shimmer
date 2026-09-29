@@ -74,10 +74,10 @@ Les fixes P0 ont fait sauter les deux blocages les plus visibles. Les autres fri
 
 ## Régression sur les univers natifs
 
-Vérifié : le store legacy (`test-api-key`, univers ELECTROMENAGER hardcodé) répond toujours correctement avec sa question native « C'est pour un usage quotidien ou plutôt occasionnel ? ». Le fallback hardcodé est préservé pour les univers natifs sans `question` explicite.
+Vérifié : le store legacy (#1, univers ELECTROMENAGER hardcodé) répond toujours correctement avec sa question native « C'est pour un usage quotidien ou plutôt occasionnel ? ». Le fallback hardcodé est préservé pour les univers natifs sans `question` explicite.
 
 ```
-$ curl -H "Authorization: Bearer test-api-key" -d '{"message":"aspirateur pour mes 2 chats"}' .../api/search/assist
+$ curl -H "Authorization: Bearer $SHIMMER_API_KEY" -d '{"message":"aspirateur pour mes 2 chats"}' .../api/search/assist
 → "Noté ! C'est pour un usage quotidien ou plutôt occasionnel ?"  ✅
 ```
 
