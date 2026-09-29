@@ -91,8 +91,11 @@ describe('extractOrderNumber', () => {
     ['commande n° 1042 svp', '1042'],
     ['numéro 1042', '1042'],
     ['commande 1042', '1042'],
-    ['WC-1042', '1042'],
+    ['WC-1042', 'WC-1042'],
     ['order #1042', '1042'],
+    ['commande C42-5008', 'C42-5008'],
+    ['ma commande #ord-0001 svp', 'ORD-0001'],
+    ['commande n° EU1001-B', 'EU1001-B'],
   ])('reads "%s"', (msg, expected) => {
     expect(extractOrderNumber(msg)).toBe(expected);
   });
@@ -111,6 +114,17 @@ describe('extractOrderNumber', () => {
     expect(extractOrderNumber('1042.5', { allowBare: true })).toBeNull();
   });
 
+  it('reads a custom Shopify order name given alone once we asked for it', () => {
+    expect(extractOrderNumber('c42-5008', { allowBare: true })).toBe('C42-5008');
+    expect(extractOrderNumber('c42-5008')).toBeNull();
+  });
+
+  it('does not take a price or a word for an order number', () => {
+    expect(extractOrderNumber('commande de 150 euros', { allowBare: true })).toBeNull();
+    expect(extractOrderNumber('j\'ai payé 150 €', { allowBare: true })).toBeNull();
+    expect(extractOrderNumber('commande urgente')).toBeNull();
+  });
+
   it('ignores numbers that are too short to be an order number', () => {
     expect(extractOrderNumber('depuis 10 jours', { allowBare: true })).toBeNull();
   });
@@ -118,11 +132,13 @@ describe('extractOrderNumber', () => {
 
 describe('order number matching', () => {
   it('covers Shopify and WooCommerce storage formats', () => {
-    expect(orderNumberCandidates('1042')).toEqual(['#1042', '1042', 'WC-1042']);
+    expect(orderNumberCandidates('1042')).toEqual(['1042', '#1042', 'WC-1042']);
+    expect(orderNumberCandidates('C42-5008')).toEqual(['C42-5008', '#C42-5008']);
   });
-  it('matches whatever the stored format', () => {
+  it('matches whatever the stored format, ignoring case', () => {
     expect(sameOrderNumber('#1042', '1042')).toBe(true);
     expect(sameOrderNumber('WC-1042', '1042')).toBe(true);
+    expect(sameOrderNumber('c42-5008', 'C42-5008')).toBe(true);
     expect(sameOrderNumber('#10421', '1042')).toBe(false);
   });
 });

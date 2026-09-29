@@ -26,7 +26,7 @@ import {
 
 export interface OrderFlowDeps {
   /** La commande dont le numéro ET l'email correspondent, sinon null. */
-  findByRef(orderDigits: string, email: string): Promise<TrackedOrder | null>;
+  findByRef(orderRef: string, email: string): Promise<TrackedOrder | null>;
   /** Commandes récentes d'un client identifié (email signé). */
   findRecentForEmail(email: string): Promise<TrackedOrder[]>;
   throttle: { tryAcquire(keys: string[]): boolean; release(keys: string[]): void };

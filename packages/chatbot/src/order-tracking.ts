@@ -125,35 +125,51 @@ export function extractEmail(message: string): string | null {
   return m ? m[0].toLowerCase() : null;
 }
 
+// Référence de commande telle que le client la tape : "1042", "#1042",
+// "WC-1042", ou un format Shopify personnalisé ("C42-5008", "EU1001-B").
+// Au moins 3 chiffres, lettres et tirets autorisés.
+const REF = '([a-z0-9][a-z0-9-]{0,30})';
 const NUMBER_PATTERNS = [
-  /\bwc-(\d{3,10})\b/,
-  /#\s?(\d{3,10})\b/,
-  /\b(?:commande|cde|cmd|order|numero|n°|no)\s*(?:n°|no\.?|numero|#|:)?\s*(\d{3,10})\b/,
+  new RegExp(`\\bwc-(\\d{3,10})\\b`),
+  new RegExp(`#\\s?${REF}`),
+  new RegExp(`\\b(?:commande|cde|cmd|order|numero|n°|no)\\s*(?:n°|no\\.?|numero|#|:)?\\s*${REF}`),
 ];
-const BARE_NUMBER = /(?<![\w@.#-])(\d{3,10})(?![\w@-]|[.,]\d)(?!\s*(?:€|euros?\b|eur\b))/;
+const BARE_REF = /(?<![\w@.#-])([a-z0-9][a-z0-9-]{0,30})(?![\w@-]|[.,]\d)(?!\s*(?:€|euros?\b|eur\b))/g;
 
-/** Numéro de commande cité (chiffres seuls), ou null. `allowBare` : un nombre
- *  seul compte aussi, utile quand on vient de demander le numéro. */
+function asOrderRef(token: string | undefined): string | null {
+  if (!token) return null;
+  const t = token.replace(/-+$/, '').toUpperCase();
+  return (t.match(/\d/g) ?? []).length >= 3 ? t : null;
+}
+
+/** Référence de commande citée (majuscules, sans "#"), ou null. `allowBare` :
+ *  une référence seule compte aussi, utile quand on vient de la demander. */
 export function extractOrderNumber(message: string, opts: { allowBare?: boolean } = {}): string | null {
   const m = fold(message.replace(EMAIL_RE_G, ' '));
-  for (const re of NUMBER_PATTERNS) {
-    const hit = m.match(re);
-    if (hit) return hit[1];
+  const wc = m.match(NUMBER_PATTERNS[0]);
+  if (wc) return `WC-${wc[1]}`;
+  for (const re of NUMBER_PATTERNS.slice(1)) {
+    const ref = asOrderRef(m.match(re)?.[1]);
+    if (ref) return ref;
   }
   if (opts.allowBare) {
-    const hit = m.match(BARE_NUMBER);
-    if (hit) return hit[1];
+    for (const hit of m.matchAll(BARE_REF)) {
+      const ref = asOrderRef(hit[1]);
+      if (ref) return ref;
+    }
   }
   return null;
 }
 
-/** Formats de stockage connus : Shopify "#1042", brut "1042", WooCommerce "WC-1042". */
-export function orderNumberCandidates(digits: string): string[] {
-  return [`#${digits}`, digits, `WC-${digits}`];
+/** Formes possibles en base : telle quelle, avec "#" (Shopify), et pour un
+ *  numéro seul, "WC-" (WooCommerce). Toujours en majuscules. */
+export function orderNumberCandidates(ref: string): string[] {
+  const r = ref.toUpperCase();
+  return /^\d+$/.test(r) ? [r, `#${r}`, `WC-${r}`] : [r, `#${r}`];
 }
 
-export function sameOrderNumber(stored: string, digits: string): boolean {
-  return orderNumberCandidates(digits).includes(stored.trim());
+export function sameOrderNumber(stored: string, ref: string): boolean {
+  return orderNumberCandidates(ref).includes(stored.trim().toUpperCase());
 }
 
 // ─── État de la conversation ──────────────────────────────────────────────────
