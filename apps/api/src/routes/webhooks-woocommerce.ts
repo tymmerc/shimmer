@@ -115,7 +115,9 @@ function mapStatus(wc: string | undefined): string {
     case 'pending': return 'pending';
     case 'processing': return 'confirmed';
     case 'on-hold': return 'pending';
-    case 'completed': return 'delivered';
+    // "completed" = traitée par le marchand (en pratique expédiée), pas livrée :
+    // Woo ne sait rien de la livraison. Le chat SAV ne doit pas dire "livrée".
+    case 'completed': return 'shipped';
     case 'cancelled': return 'cancelled';
     case 'refunded': return 'returned';
     case 'failed': return 'cancelled';

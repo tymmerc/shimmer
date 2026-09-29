@@ -3,6 +3,7 @@
  */
 
 import { getPrisma, logger } from '@shimmer/core';
+import { findCustomerIdByEmail } from './order-lookup.js';
 
 export interface ChatContext {
   customer?: CustomerContext;
@@ -81,9 +82,8 @@ export async function buildChatContext(
 
   // If we have a customer email, load their data
   if (customerEmail) {
-    const customer = await prisma.customer.findFirst({
-      where: { storeId, email: customerEmail },
-    });
+    const customerId = await findCustomerIdByEmail(storeId, customerEmail);
+    const customer = customerId ? await prisma.customer.findUnique({ where: { id: customerId } }) : null;
 
     if (customer) {
       context.customer = {
@@ -164,8 +164,7 @@ export function formatContextForPrompt(ctx: ChatContext): string {
   if (ctx.customer) {
     parts.push(`## Client
 - Nom: ${ctx.customer.firstName} ${ctx.customer.lastName}
-- Email: ${ctx.customer.email}
-${ctx.customer.phone ? `- Téléphone: ${ctx.customer.phone}` : ''}`);
+- Email: ${ctx.customer.email}`);
   }
 
   if (ctx.recentOrders.length > 0) {

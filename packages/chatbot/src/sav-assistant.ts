@@ -1,18 +1,26 @@
 /**
- * SAV Assistant — Claude-powered customer service chatbot.
- * Dynamic system prompt, conversation memory, tool use (order lookup, return initiation).
+ * SAV Assistant — customer service chatbot.
+ * "Où est ma commande ?" is answered by code (order-flow.ts), never by the LLM.
+ * Everything else goes to the LLM with the store FAQ and, for a signed-in
+ * customer, their orders as context.
  */
 
 import { getPrisma, ClaudeClient, logger } from '@shimmer/core';
 import type { ClaudeMessage, ClaudeStreamChunk } from '@shimmer/core';
 import { buildChatContext, formatContextForPrompt, type ChatContext } from './context-builder.js';
 import { checkEscalation, getEscalationSummary } from './escalation.js';
+import { runOrderFlow, type OrderFlowResult } from './order-flow.js';
+import { orderFlowDeps } from './order-lookup.js';
+import { redactEmails, type TrackingLink } from './order-tracking.js';
 import { randomUUID } from 'node:crypto';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  /** Deterministic order-tracking turn (order_ask, order_status…). Absent on LLM turns. */
+  kind?: string;
+  orderNumber?: string;
 }
 
 export interface ChatResponse {
@@ -21,6 +29,10 @@ export interface ChatResponse {
   escalated: boolean;
   escalationReason?: string;
   status: 'ACTIVE' | 'ESCALATED' | 'RESOLVED' | 'CLOSED';
+  kind?: OrderFlowResult['kind'];
+  tracking?: TrackingLink[];
+  /** The widget must send the visitor's next message back to the SAV. */
+  awaitingOrderRef?: boolean;
 }
 
 const SYSTEM_PROMPT_BASE = `Tu es l'assistant SAV de la boutique en ligne. Tu aides les clients avec leurs commandes, livraisons, retours et questions sur les produits.
@@ -32,15 +44,52 @@ const SYSTEM_PROMPT_BASE = `Tu es l'assistant SAV de la boutique en ligne. Tu ai
 4. Pour les remboursements > 100€, indique que la demande sera transmise à un responsable
 5. Ne communique JAMAIS de données sensibles (numéros de CB, mots de passe)
 6. Si le client semble très frustré, propose de le mettre en relation avec un conseiller humain
-7. Résume les actions entreprises à la fin de chaque réponse
-8. Pour le suivi de colis, donne toujours le numéro de tracking et le transporteur
+7. N'affirme jamais avoir fait une action (retour, remboursement, annulation) : tu ne peux pas en faire. Oriente le client vers la boutique, en répondant à son email de confirmation de commande
+8. Ne donne un statut de commande, un transporteur ou un numéro de suivi que s'il figure dans le contexte ou plus haut dans la conversation. Sinon, demande le numéro de commande et l'adresse email utilisée pour la commande
 
 ## Capacités
-- Consulter le statut des commandes
-- Vérifier le suivi des colis
-- Initier un retour ou échange
-- Répondre aux questions sur les produits (via FAQ)
-- Escalader vers un conseiller humain si nécessaire`;
+- Répondre aux questions sur la livraison, les retours et les produits (FAQ de la boutique)
+- Le statut des commandes est donné par le système une fois le client identifié`;
+
+/** Order-tracking turn, or null when the message is not about an order. */
+async function answerOrderQuestion(
+  storeId: number,
+  message: string,
+  history: ChatMessage[],
+  trustedEmail?: string,
+): Promise<OrderFlowResult | null> {
+  // A customer asking for a human, or clearly upset, keeps going to the
+  // escalation path, as before order tracking existed.
+  const withMessage = [...history, { role: 'user' as const, content: message, timestamp: '' }];
+  if (checkEscalation(withMessage).shouldEscalate) return null;
+  return runOrderFlow(
+    { message, history, trustedEmail, throttleScope: String(storeId) },
+    orderFlowDeps(storeId),
+  );
+}
+
+/**
+ * Session messages after an order-tracking turn. Once the check is over
+ * (answered or locked), the emails the visitor typed are no longer needed:
+ * they are masked instead of being kept in chat_sessions.
+ */
+function withOrderTurn(history: ChatMessage[], message: string, reply: OrderFlowResult): ChatMessage[] {
+  const at = new Date().toISOString();
+  const done = reply.kind === 'order_status' || reply.kind === 'order_locked';
+  const clean = (m: ChatMessage): ChatMessage =>
+    done && m.role === 'user' ? { ...m, content: redactEmails(m.content) } : m;
+  return [
+    ...history.map(clean),
+    clean({ role: 'user', content: message, timestamp: at }),
+    {
+      role: 'assistant',
+      content: reply.text,
+      timestamp: at,
+      kind: reply.kind,
+      ...(reply.orderNumber ? { orderNumber: reply.orderNumber } : {}),
+    },
+  ];
+}
 
 /**
  * Handle a chat message — returns the assistant response.
@@ -62,6 +111,30 @@ export async function handleChatMessage(
   const existingMessages: ChatMessage[] = session
     ? (session.messages as unknown as ChatMessage[])
     : [];
+
+  // "Où est ma commande ?" : answered by code, before any LLM call.
+  const orderReply = await answerOrderQuestion(storeId, message, existingMessages, customerEmail);
+  if (orderReply) {
+    const messages = withOrderTurn(existingMessages, message, orderReply);
+    if (session) {
+      await prisma.chatSession.update({ where: { id: session.id }, data: { messages: messages as any } });
+    } else {
+      await prisma.chatSession.create({
+        data: { storeId, sessionToken: token, messages: messages as any, status: 'ACTIVE' },
+      });
+    }
+    // Never log the email or the order reference, only what happened.
+    logger.info({ storeId, sessionToken: token, kind: orderReply.kind }, 'chatbot.order.handled');
+    return {
+      message: orderReply.text,
+      sessionToken: token,
+      escalated: false,
+      status: 'ACTIVE',
+      kind: orderReply.kind,
+      tracking: orderReply.tracking,
+      awaitingOrderRef: orderReply.awaitingOrderRef,
+    };
+  }
 
   // Add user message
   const now = new Date().toISOString();
@@ -189,6 +262,18 @@ export async function* streamChatMessage(
     ? (session.messages as unknown as ChatMessage[])
     : [];
 
+  const orderReply = await answerOrderQuestion(storeId, message, existingMessages, customerEmail);
+  if (orderReply) {
+    await upsertSession(prisma, session, storeId, token, withOrderTurn(existingMessages, message, orderReply), 'ACTIVE');
+    logger.info({ storeId, sessionToken: token, kind: orderReply.kind }, 'chatbot.order.handled');
+    // SSE carries plain text only: the tracking link goes in the text.
+    const links = orderReply.tracking.map(t => t.url).filter((u): u is string => !!u);
+    const text = links.length ? `${orderReply.text}\n${links.join('\n')}` : orderReply.text;
+    yield { type: 'text', text, sessionToken: token };
+    yield { type: 'done', sessionToken: token, escalated: false };
+    return;
+  }
+
   existingMessages.push({
     role: 'user',
     content: message,
@@ -275,8 +360,8 @@ export async function resolveSession(
   storeId: number,
 ): Promise<void> {
   const prisma = getPrisma();
-  await prisma.chatSession.update({
-    where: { id: sessionId },
+  await prisma.chatSession.updateMany({
+    where: { id: sessionId, storeId },
     data: {
       status: 'RESOLVED',
       resolvedAt: new Date(),

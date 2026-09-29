@@ -3,7 +3,19 @@
  * Drop-in search + chat + review widgets for any e-commerce site.
  */
 
+import { looksLikeOrderTracking } from './order-intent';
+
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+/** Client connecté à la boutique, signé par le thème (voir l'admin, "Suivi de
+ *  commande dans le chat"). La signature vient du serveur de la boutique
+ *  (Liquid), elle n'est pas calculable dans le navigateur. */
+interface ShimmerCustomer {
+  email: string;
+  /** Heure du rendu de la page (secondes), signée avec l'email. */
+  ts: string;
+  signature: string;
+}
 
 interface ShimmerConfig {
   apiUrl: string;
@@ -37,6 +49,11 @@ interface ShimmerConfig {
    *  le visiteur n'entre PAS dans l'expérience holdout et sa commande n'est
    *  pas attribuée. Toute perte joue contre Shimmer, jamais contre le marchand. */
   consentMode?: 'auto' | 'strict' | 'granted' | 'denied';
+  /** Client connecté (suivi de commande dans le chat). Gardé en mémoire
+   *  seulement : ni cookie, ni stockage, et envoyé uniquement quand le
+   *  visiteur pose une question sur sa commande. Indépendant du consentement
+   *  de mesure, puisque ça ne sert qu'à répondre à sa propre demande. */
+  customer?: ShimmerCustomer | null;
 }
 
 interface ShimmerTheme {
@@ -181,6 +198,14 @@ interface CrossSellOptions {
   productUrl?: string | null;
 }
 
+interface SavResponse {
+  message: string | null;
+  sessionToken: string | null;
+  kind?: string;
+  tracking?: { carrier: string; trackingNumber: string; url: string | null }[];
+  awaitingOrderRef?: boolean;
+}
+
 interface ReviewStats {
   averageRating: number;
   totalReviews: number;
@@ -203,6 +228,8 @@ const LABELS = {
     chatPlaceholder: 'Posez votre question...',
     chatTitle: 'Assistant Shimmer',
     chatWelcome: 'Bonjour ! Comment puis-je vous aider ?',
+    trackParcel: 'Suivre mon colis',
+    savUnavailable: "Je n'arrive pas à consulter votre commande pour le moment. Réessayez dans un instant.",
     send: 'Envoyer',
     close: 'Fermer',
     noResults: 'Aucun résultat trouvé.',
@@ -216,6 +243,8 @@ const LABELS = {
     chatPlaceholder: 'Ask a question...',
     chatTitle: 'Shimmer Assistant',
     chatWelcome: 'Hello! How can I help you?',
+    trackParcel: 'Track my parcel',
+    savUnavailable: "I can't look up your order right now. Please try again in a moment.",
     send: 'Send',
     close: 'Close',
     noResults: 'No results found.',
@@ -350,6 +379,17 @@ class ShimmerClient {
     });
 
     return ctrl;
+  }
+
+  /** SAV (suivi de commande). Jamais de visitorId ici : rien de ce qui passe
+   *  par ce canal ne sert à la mesure. */
+  savMessage(message: string, sessionToken?: string, customer?: ShimmerCustomer | null): Promise<SavResponse> {
+    return this.request('POST', '/api/chat/message', {
+      message,
+      sessionToken,
+      mode: 'sav',
+      ...(customer ? { customerEmail: customer.email, customerTs: customer.ts, customerSignature: customer.signature } : {}),
+    });
   }
 
   chatMessage(message: string, sessionToken?: string): Promise<{ reply: string; sessionToken: string }> {
@@ -520,6 +560,12 @@ function buildStyles(theme: ShimmerTheme): string {
     .shimmer-chat-msg { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 13px; word-wrap: break-word; }
     .shimmer-chat-msg.user { align-self: flex-end; background: ${theme.primaryColor}; color: #fff; border-bottom-right-radius: 4px; }
     .shimmer-chat-msg.assistant { align-self: flex-start; background: #f3f4f6; color: #1f2937; border-bottom-left-radius: 4px; }
+    .shimmer-track-link {
+      display: inline-block; margin-top: 8px; padding: 4px 10px; border-radius: 8px;
+      background: #fff; border: 1px solid #e5e7eb; color: ${theme.primaryColor};
+      font-size: 12px; font-weight: 600; text-decoration: none;
+    }
+    .shimmer-track-link:hover { border-color: ${theme.primaryColor}; }
     .shimmer-chat-form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #e5e7eb; }
     .shimmer-chat-form input {
       flex: 1; padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 24px;
@@ -1025,10 +1071,15 @@ class ChatWidget {
   private knownCriteria: Record<string, string> | null = null;
   private mode: 'chat' | 'assist' = 'assist';
   private isOpen = false;
+  /** Conversation SAV (suivi de commande), distincte de celle du vendeur. */
+  private savSessionToken: string | null = null;
+  /** Le SAV attend un numéro de commande ou un email : la réponse lui revient. */
+  private awaitingOrderRef = false;
 
   constructor(
     private client: ShimmerClient,
     private labels: typeof LABELS['fr'],
+    private getCustomer: () => ShimmerCustomer | null = () => null,
   ) {
     this.createBubble();
     this.createWindow();
@@ -1124,6 +1175,16 @@ class ChatWidget {
     this.formInput.value = '';
     this.sendBtn.disabled = true;
     this.addMessage('user', msg);
+
+    // "Où est ma commande ?" et la suite (numéro, email) : au SAV, pas au
+    // vendeur. Ces messages n'entrent pas dans l'historique du vendeur (il
+    // n'a pas à voir un email ou un numéro de commande).
+    const answersOrderQuestion = this.awaitingOrderRef && /[@\d]/.test(msg);
+    if (answersOrderQuestion || looksLikeOrderTracking(msg)) {
+      void this.sendSavMessage(msg);
+      return;
+    }
+    this.awaitingOrderRef = false;
     this.history.push({ role: 'user', content: msg });
 
     // Create streaming message bubble
@@ -1199,6 +1260,29 @@ class ChatWidget {
     );
   }
 
+  private async sendSavMessage(msg: string) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'shimmer-chat-msg assistant';
+    msgDiv.innerHTML = '<span class="shimmer-typing"><span></span><span></span><span></span></span>';
+    this.messagesEl.appendChild(msgDiv);
+    this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+
+    try {
+      const res = await this.client.savMessage(msg, this.savSessionToken || undefined, this.getCustomer());
+      this.savSessionToken = res.sessionToken ?? this.savSessionToken;
+      this.awaitingOrderRef = !!res.awaitingOrderRef;
+      const text = res.message || this.labels.savUnavailable;
+      renderSavReply(msgDiv, text, res.tracking ?? [], this.labels.trackParcel);
+    } catch {
+      this.awaitingOrderRef = false;
+      renderSavReply(msgDiv, this.labels.savUnavailable, [], this.labels.trackParcel);
+    } finally {
+      this.sendBtn.disabled = false;
+      this.formInput.focus();
+      this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+    }
+  }
+
   private renderSuggestions(suggestions: string[]) {
     // Remove existing suggestions
     this.messagesEl.querySelectorAll('.shimmer-suggestions').forEach(el => el.remove());
@@ -1230,6 +1314,45 @@ class ChatWidget {
 }
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
+
+/** Réponse SAV construite par le DOM (jamais d'innerHTML sur du texte ou une URL
+ *  venus de l'API) ; seuls les liens http(s) sont rendus cliquables. */
+function renderSavReply(
+  el: HTMLElement,
+  text: string,
+  tracking: { carrier: string; trackingNumber: string; url: string | null }[],
+  trackLabel: string,
+): void {
+  el.textContent = '';
+  text.split('\n').forEach((line, i) => {
+    if (i > 0) el.appendChild(document.createElement('br'));
+    el.appendChild(document.createTextNode(line));
+  });
+  for (const t of tracking) {
+    if (!t.url) continue;
+    let href: URL;
+    try { href = new URL(t.url); } catch { continue; }
+    if (href.protocol !== 'https:' && href.protocol !== 'http:') continue;
+    const a = document.createElement('a');
+    a.className = 'shimmer-track-link';
+    a.href = href.toString();
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = t.carrier ? `↗ ${trackLabel} (${t.carrier})` : `↗ ${trackLabel}`;
+    el.appendChild(document.createElement('br'));
+    el.appendChild(a);
+  }
+}
+
+/** Garde l'identité seulement si elle a la forme attendue ; sinon le chat
+ *  passe par numéro de commande + email. L'email est envoyé tel quel : c'est
+ *  exactement cette chaîne que le thème a signée. */
+function validCustomer(c: ShimmerCustomer | null | undefined): ShimmerCustomer | null {
+  if (!c || !c.email || !c.email.includes('@')) return null;
+  const signature = (c.signature || '').trim();
+  const ts = (c.ts || '').trim();
+  return /^[0-9a-f]{64}$/i.test(signature) && /^\d{9,11}$/.test(ts) ? { email: c.email, ts, signature } : null;
+}
 
 function esc(s: string): string {
   const el = document.createElement('span');
@@ -1787,6 +1910,8 @@ export class Shimmer {
   private theme: ShimmerTheme;
   private labels: typeof LABELS['fr'];
   private consent: ConsentState = 'unknown';
+  /** Client connecté, en mémoire seulement (voir ShimmerConfig.customer). */
+  private customer: ShimmerCustomer | null = null;
   /** Vrai une fois le plein mode (cookie + holdout) démarré : idempotent. */
   private measuredBootDone = false;
 
@@ -1795,6 +1920,7 @@ export class Shimmer {
     this.theme = { ...DEFAULT_THEME, ...config.theme };
     this.labels = LABELS[config.locale || 'fr'];
     this.client = new ShimmerClient(config.apiUrl, config.apiKey, config.storeId);
+    this.customer = validCustomer(config.customer) ?? Shimmer.pendingCustomer;
   }
 
   /**
@@ -1883,7 +2009,7 @@ export class Shimmer {
   private async sessionBoot(): Promise<void> {
     if (this.searchWidget) return;
     this.searchWidget = new SearchWidget(this.client, this.labels, this.config.searchSelector, undefined);
-    if (this.config.enableChat) this.chatWidget = new ChatWidget(this.client, this.labels);
+    if (this.config.enableChat) this.chatWidget = new ChatWidget(this.client, this.labels, () => this.customer);
   }
 
   /** Plein mode : cookie 365 j, décision holdout, attribution, enrôlement. */
@@ -1959,7 +2085,7 @@ export class Shimmer {
       this.searchWidget = new SearchWidget(this.client, this.labels, this.config.searchSelector, onQuery);
     }
     if (this.config.enableChat && !this.chatWidget) {
-      this.chatWidget = new ChatWidget(this.client, this.labels);
+      this.chatWidget = new ChatWidget(this.client, this.labels, () => this.customer);
     }
   }
 
@@ -1971,6 +2097,21 @@ export class Shimmer {
   static consent(granted: boolean): void {
     Shimmer.instance?.applyConsent(granted);
   }
+
+  /**
+   * Client connecté, pour le suivi de commande dans le chat (sites headless ou
+   * SPA : l'équivalent de data-customer-email / data-customer-signature).
+   *   Shimmer.identify({ email, signature })  → le chat retrouve ses commandes
+   *   Shimmer.identify(null)                  → déconnexion
+   * La signature doit être calculée côté serveur de la boutique.
+   */
+  static identify(customer: ShimmerCustomer | null): void {
+    Shimmer.pendingCustomer = validCustomer(customer);
+    if (Shimmer.instance) Shimmer.instance.customer = Shimmer.pendingCustomer;
+  }
+
+  /** identify() appelé avant init() : repris à l'init. */
+  private static pendingCustomer: ShimmerCustomer | null = null;
 
   /** Convenience accessor for `Shimmer.chat()` — allows `Shimmer.assistant.chat(msg)`. */
   static get assistant() {
@@ -2158,6 +2299,12 @@ export class Shimmer {
         enableChat: el.hasAttribute('data-chat'),
         // data-consent="auto|strict|granted|denied" — voir ShimmerConfig.consentMode.
         consentMode: (el.getAttribute('data-consent') as ShimmerConfig['consentMode']) || undefined,
+        // Client connecté (thème Liquid) : suivi de commande sans rien redemander.
+        customer: {
+          email: el.getAttribute('data-customer-email') || '',
+          ts: el.getAttribute('data-customer-ts') || '',
+          signature: el.getAttribute('data-customer-signature') || '',
+        },
       });
     } catch (e) {
       console.warn('[shimmer] init échouée', e);

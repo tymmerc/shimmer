@@ -6,6 +6,7 @@ import { SectionHeader, Loading, ErrorBlock, Panel } from './AdminOverview';
 interface IntegrationStatus {
  store: { id: number; name: string };
  publishableKey: string;
+ customerIdentitySecret: string | null;
  base: string;
  email: { provider: string; configured: boolean };
  sms: { provider: string; configured: boolean };
@@ -47,6 +48,8 @@ export function AdminIntegration() {
  { event: 'Panier abandonné', topic: 'checkouts/update', path: `${data.base}/api/webhooks/shopify/abandoned_checkout?store=${data.store.id}` },
  { event: 'Commande payée', topic: 'orders/paid', path: `${data.base}/api/webhooks/shopify/orders_paid?store=${data.store.id}` },
  { event: 'Commande expédiée', topic: 'orders/fulfilled', path: `${data.base}/api/webhooks/shopify/orders_fulfilled?store=${data.store.id}` },
+ { event: 'Colis créé (transporteur et suivi)', topic: 'fulfillments/create', path: `${data.base}/api/webhooks/shopify/fulfillments_update?store=${data.store.id}` },
+ { event: 'Colis mis à jour (en transit, livré)', topic: 'fulfillments/update', path: `${data.base}/api/webhooks/shopify/fulfillments_update?store=${data.store.id}` },
  { event: 'Produit mis à jour (retour de stock)', topic: 'products/update', path: `${data.base}/api/webhooks/shopify/products_update?store=${data.store.id}` },
  { event: 'Niveau de stock (optionnel, plus précis)', topic: 'inventory_levels/update', path: `${data.base}/api/webhooks/shopify/inventory_levels_update?store=${data.store.id}` },
  ];
@@ -94,7 +97,7 @@ export function AdminIntegration() {
  </span>
  </div>
  <p className="mb-4 text-xs text-neutral-500">
- Dans Shopify Admin → Settings → Notifications → Webhooks, créez ces webhooks au format JSON (les 4 premiers suffisent, le 5e affine le retour de stock) :
+ Dans Shopify Admin → Settings → Notifications → Webhooks, créez ces webhooks au format JSON (le dernier est optionnel, il affine le retour de stock). Les deux webhooks « Colis » permettent au chat de répondre à « où est ma commande ? » :
  </p>
  <div className="space-y-2">
  {shopifyUrls.map(w => (
@@ -147,6 +150,24 @@ export function AdminIntegration() {
  />
  <p className="mt-3 text-xs text-neutral-400">
  RGPD : par défaut (<code className="rounded bg-neutral-50 px-1">data-consent=&quot;auto&quot;</code>), le widget détecte votre bannière de consentement (Axeptio, Cookiebot, tarteaucitron, TCF) et n&apos;utilise aucun cookie tant que le visiteur n&apos;a pas accepté ; sans bannière sur le site, il démarre normalement. Le vendeur fonctionne dans tous les cas ; seule la mesure dépend du consentement. Intégration manuelle : <code className="rounded bg-neutral-50 px-1">Shimmer.consent(true|false)</code>.
+ </p>
+ </Panel>
+
+ <Panel title="Suivi de commande dans le chat (Shopify)">
+ <p className="mb-3 text-xs text-neutral-500">
+ Pour que le chat retrouve directement les commandes d&apos;un client connecté à votre boutique, remplacez le snippet ci-dessus par celui-ci dans <code className="rounded bg-neutral-50 px-1">layout/theme.liquid</code> (Boutique en ligne → Thèmes → Modifier le code), juste avant &lt;/body&gt;. Sans compte connecté, le chat demande le numéro de commande et l&apos;email, qui doivent correspondre à la même commande.
+ </p>
+ {data.customerIdentitySecret ? (
+ <CopyBox
+ value={`{%- if customer -%}{%- assign shimmer_ts = 'now' | date: '%s' -%}{%- capture shimmer_id -%}{{ customer.email }}|{{ shimmer_ts }}{%- endcapture -%}{%- endif -%}
+<script src="${data.base}/shimmer/sdk/shimmer.iife.js" data-shimmer data-store="${data.store.id}" data-key="${data.publishableKey}" data-chat{% if customer %} data-customer-email="{{ customer.email | escape }}" data-customer-ts="{{ shimmer_ts }}" data-customer-signature="{{ shimmer_id | hmac_sha256: '${data.customerIdentitySecret}' }}"{% endif %} defer></script>`}
+ multiline
+ />
+ ) : (
+ <p className="text-xs text-amber-600">Indisponible pour le moment.</p>
+ )}
+ <p className="mt-3 text-xs text-neutral-400">
+ La valeur <code className="rounded bg-neutral-50 px-1">sid_…</code> est <strong>secrète</strong> : ne la mettez nulle part ailleurs que dans ce code Liquid. Shopify l&apos;exécute sur son serveur, elle n&apos;arrive jamais dans le navigateur de vos visiteurs. Elle prouve que l&apos;email vient bien de votre boutique (la preuve expire au bout de 24 h), personne ne peut consulter les commandes d&apos;un autre client. Si ce code a fuité, demandez-nous un nouveau secret. L&apos;email n&apos;est envoyé qu&apos;au moment où le client pose une question sur sa commande dans le chat, jamais pour la mesure, sans cookie.
  </p>
  </Panel>
 
