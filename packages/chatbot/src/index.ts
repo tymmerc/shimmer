@@ -20,3 +20,10 @@ export {
   getEscalationSummary,
   type EscalationCheck,
 } from './escalation.js';
+export {
+  detectOrderTrackingIntent,
+  composeOrderStatusReply,
+  type TrackedOrder,
+  type TrackingLink,
+} from './order-tracking.js';
+export { runOrderFlow, type OrderFlowResult } from './order-flow.js';
