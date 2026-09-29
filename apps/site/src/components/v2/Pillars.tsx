@@ -114,7 +114,7 @@ function SavDemo() {
         className="w-fit max-w-[88%] space-y-2 rounded-2xl rounded-bl-sm border border-acid/25 bg-acid/[0.07] px-3.5 py-2.5"
       >
         <p className="text-sm leading-snug text-paper/90">
-          Elle est expédiée, livraison prévue demain. Voici votre suivi.
+          Votre commande #1042 est en route avec Colissimo, elle est partie hier. Voici votre suivi.
         </p>
         <span className="inline-flex items-center gap-1.5 rounded-md bg-ink/50 px-2 py-1 font-mono text-[10px] text-acid">
           ↗ suivre mon colis
