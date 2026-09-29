@@ -56,9 +56,14 @@ function defaultFromDomain(): string {
   return process.env.EMAIL_FROM_DOMAIN ?? process.env.MAILGUN_DOMAIN ?? 'shimmer.eu';
 }
 
+/**
+ * Expéditeur par défaut : le NOM de la boutique en nom affiché (« Caves
+ * Forty-Two »), pas un identifiant (« caves-forty-two »). Le nom est nettoyé
+ * (guillemets, retours ligne, chevrons) pour ne jamais casser l'en-tête From.
+ */
 function defaultFromAddr(storeName: string): string {
-  const slug = storeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'boutique';
-  return `${slug} <no-reply@${defaultFromDomain()}>`;
+  const display = storeName.replace(/["<>\r\n\\]/g, '').replace(/\s+/g, ' ').trim() || 'Boutique';
+  return `"${display}" <no-reply@${defaultFromDomain()}>`;
 }
 
 async function sendViaResend(

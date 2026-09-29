@@ -8,6 +8,8 @@ export {
 export {
   handleSalesMessage,
   isSoldOut,
+  mentionsName,
+  pickSoldOutRedirect,
   type SalesChatResponse,
 } from './sales-assistant.js';
 export {

@@ -197,3 +197,41 @@ describe('isSoldOut (vendeur conscient du stock)', () => {
     expect(isSoldOut({ stock: 0, stockStatus: 'preorder' })).toBe(false);
   });
 });
+
+// ── Épuisé nommé : bon produit reconnu, redirection sensée ──
+import { mentionsName, pickSoldOutRedirect } from '@shimmer/chatbot';
+
+describe('mentionsName (produit cité par le visiteur)', () => {
+  it('finds a product named without its vintage', () => {
+    expect(mentionsName('et le crozes-hermitage ?', 'Crozes-Hermitage 2021')).toBeGreaterThanOrEqual(0);
+  });
+  it('does not match a name that is only part of a longer compound name', () => {
+    // « hermitage » est dans « crozes-hermitage » : ce n'est PAS l'Hermitage.
+    expect(mentionsName('et le crozes-hermitage ?', 'Hermitage Rouge 2018')).toBe(-1);
+    expect(mentionsName('et le crozes-hermitage ?', 'Hermitage Blanc 2020')).toBe(-1);
+  });
+  it('still matches the real Hermitage when named on its own, accents and case ignored', () => {
+    expect(mentionsName("Vous avez de l'Hermitage ?", 'Hermitage Rouge 2018')).toBeGreaterThanOrEqual(0);
+    expect(mentionsName('un côtes-du-rhône villages', 'Côtes-du-Rhône Villages 2021')).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('pickSoldOutRedirect (alternative à un épuisé)', () => {
+  const c = (id: number, category: string, price: number, soldOut = false) => ({ id, product: { id, category, price, soldOut } });
+  const ok = (x: { product: { soldOut: boolean } }) => !x.product.soldOut;
+  it('prefers the in-stock wine of the same category closest in price', () => {
+    const asked = c(1, 'Vin rouge', 21, true);
+    const pool = [c(2, 'Vin rouge', 98), c(3, 'Vin blanc', 20), c(4, 'Vin rouge', 26), c(5, 'Vin rouge', 19)];
+    expect(pickSoldOutRedirect(asked, pool, ok)?.product.id).toBe(5);
+  });
+  it('keeps the pool order to break a price tie', () => {
+    const asked = c(1, 'Vin rouge', 21, true);
+    const pool = [c(6, 'Vin rouge', 23), c(7, 'Vin rouge', 19)];
+    expect(pickSoldOutRedirect(asked, pool, ok)?.product.id).toBe(6);
+  });
+  it('falls back to any in-stock product, then to null', () => {
+    const asked = c(1, 'Vin rouge', 21, true);
+    expect(pickSoldOutRedirect(asked, [c(8, 'Vin blanc', 30)], ok)?.product.id).toBe(8);
+    expect(pickSoldOutRedirect(asked, [c(9, 'Vin rouge', 20, true)], ok)).toBeNull();
+  });
+});

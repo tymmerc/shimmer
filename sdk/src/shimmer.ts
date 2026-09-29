@@ -504,7 +504,7 @@ function buildStyles(theme: ShimmerTheme): string {
     }
     .shimmer-dock-footer button:hover { color: #374151; text-decoration: underline; }
     .shimmer-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 14px 8px; }
-    .shimmer-chip { border: 1px solid ${theme.primaryColor}; background: transparent; color: ${theme.primaryColor};
+    .shimmer-chip { border: 1px solid ${theme.primaryColor}; background: transparent; color: ${theme.primaryColor}; font-family: inherit; line-height: 1.5;
       border-radius: 999px; padding: 8px 14px; font-size: 14px; cursor: pointer; transition: .15s; }
     .shimmer-chip:hover { background: ${theme.primaryColor}; color: #fff; }
     .shimmer-search-item {

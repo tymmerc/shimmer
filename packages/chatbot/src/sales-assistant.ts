@@ -86,22 +86,66 @@ function normalize(s: string): string {
  * cards coherent with what the vendeur recommended, instead of dumping the raw
  * top-N search results (which pad with irrelevant items on weak queries).
  */
-function pickCitedProducts(reply: string, candidates: ScoredProduct[]): ScoredProduct[] {
-  const normReply = normalize(reply);
-  const cited: { product: ScoredProduct; at: number }[] = [];
+/**
+ * Position d'un nom de produit dans un texte (normalisé), ou -1. La
+ * correspondance est délimitée : le nom ne doit être collé à aucune lettre,
+ * chiffre ou trait d'union. Sinon « hermitage » serait trouvé dans
+ * « crozes-hermitage » et l'Hermitage à 98 € passerait pour le vin demandé.
+ * On essaie le nom complet, puis le nom sans millésime ni couleur
+ * (« pessac-leognan rouge 2019 » est cité par « le pessac-leognan »).
+ */
+export function mentionsName(text: string, name: string): number {
+  const hay = normalize(text);
+  const full = normalize(name);
+  const core = full.replace(/\b(19|20)\d{2}\b/g, '').replace(/\b(rouge|blanc|rose)\b/g, '').replace(/\s+/g, ' ').trim();
+  const bounded = (needle: string): number => {
+    if (!needle) return -1;
+    let from = 0;
+    for (;;) {
+      const i = hay.indexOf(needle, from);
+      if (i === -1) return -1;
+      const before = i === 0 ? '' : hay[i - 1]!;
+      const after = hay[i + needle.length] ?? '';
+      if (!/[a-z0-9-]/.test(before) && !/[a-z0-9-]/.test(after)) return i;
+      from = i + 1;
+    }
+  };
+  const i = bounded(full);
+  if (i !== -1) return i;
+  return core.length >= 8 ? bounded(core) : -1;
+}
 
+function pickCitedProducts(reply: string, candidates: ScoredProduct[]): ScoredProduct[] {
+  const cited: { product: ScoredProduct; at: number }[] = [];
   for (const c of candidates) {
-    const fullName = normalize(c.product.name);
-    // Also try the name without a trailing vintage year and color word, so
-    // "pessac-leognan rouge 2019" still matches "le pessac-leognan".
-    const core = fullName.replace(/\b(19|20)\d{2}\b/g, '').replace(/\b(rouge|blanc|rose)\b/g, '').trim();
-    let idx = normReply.indexOf(fullName);
-    if (idx === -1 && core.length >= 8) idx = normReply.indexOf(core);
+    const idx = mentionsName(reply, c.product.name);
     if (idx !== -1) cited.push({ product: c, at: idx });
   }
-
   cited.sort((a, b) => a.at - b.at);
   return cited.map(c => c.product);
+}
+
+/**
+ * Alternative à un produit épuisé demandé nommément : un produit en stock de
+ * la MÊME catégorie, au prix le plus proche (à égalité, l'ordre du pool). Un
+ * novice qui demande un vin à 21 € ne doit pas être envoyé vers un à 98 €.
+ * À défaut, n'importe quel produit disponible ; sinon null.
+ */
+export function pickSoldOutRedirect<T extends { product: { category?: string | null; price?: unknown } }>(
+  asked: T,
+  candidates: T[],
+  isOk: (c: T) => boolean,
+): T | null {
+  const target = Number(asked.product.price ?? 0);
+  const sameCat = candidates.filter(c => isOk(c) && c.product.category === asked.product.category);
+  if (sameCat.length > 0) {
+    let best = sameCat[0]!;
+    for (const c of sameCat) {
+      if (Math.abs(Number(c.product.price ?? 0) - target) < Math.abs(Number(best.product.price ?? 0) - target)) best = c;
+    }
+    return best;
+  }
+  return candidates.find(isOk) ?? null;
 }
 
 function dedupeById(list: ScoredProduct[]): ScoredProduct[] {
@@ -303,9 +347,7 @@ export async function handleSalesMessage(
     const names = askedByVisitor.map(o => o.product.name).join(', ');
     const wantedCat = askedByVisitor[0]!.product.category;
     const isOk = (c: ScoredProduct) => !isSoldOut(c.product) && !soldOutCited.some(o => o.product.id === c.product.id);
-    forcedAlt = candidates.find(c => isOk(c) && c.product.category === wantedCat)
-      ?? candidates.find(isOk)
-      ?? null;
+    forcedAlt = pickSoldOutRedirect(askedByVisitor[0]!, candidates, isOk);
     const vouvoie = config.tone !== 'tu';
     const prevenir = vouvoie ? 'je peux vous prévenir dès qu\'il revient' : 'je peux te prévenir dès qu\'il revient';
     const redirect = forcedAlt
