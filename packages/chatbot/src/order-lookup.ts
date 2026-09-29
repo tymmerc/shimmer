@@ -27,13 +27,18 @@ const orderSelect = {
 } as const;
 
 /** Commande de cette boutique dont le numéro ET l'email du client correspondent. */
-export async function findOrderByRef(storeId: number, orderDigits: string, email: string): Promise<TrackedOrder | null> {
+export async function findOrderByRef(storeId: number, orderRef: string, email: string): Promise<TrackedOrder | null> {
   const prisma = getPrisma();
   const wanted = email.trim().toLowerCase();
+  // Numéro comparé en majuscules : le client tape "c42-5008" pour "C42-5008".
+  const ids = await prisma.$queryRaw<{ id: number }[]>`
+    SELECT id FROM orders
+    WHERE store_id = ${storeId} AND upper(trim(order_number)) = ANY(${orderNumberCandidates(orderRef)}::text[])
+    LIMIT 5`;
+  if (!ids.length) return null;
   const orders = await prisma.order.findMany({
-    where: { storeId, orderNumber: { in: orderNumberCandidates(orderDigits) } },
+    where: { storeId, id: { in: ids.map(r => r.id) } },
     select: { ...orderSelect, customer: { select: { email: true } } },
-    take: 5,
   });
   const match = orders.find(o => o.customer.email.trim().toLowerCase() === wanted);
   if (!match) return null;
@@ -77,7 +82,7 @@ const throttle = new VerificationThrottle(10, 60 * 60 * 1000);
 
 export function orderFlowDeps(storeId: number): OrderFlowDeps {
   return {
-    findByRef: (digits, email) => findOrderByRef(storeId, digits, email),
+    findByRef: (ref, email) => findOrderByRef(storeId, ref, email),
     findRecentForEmail: email => findRecentOrdersForEmail(storeId, email),
     throttle,
   };
