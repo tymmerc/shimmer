@@ -410,24 +410,13 @@ class ShimmerClient {
   }
 
   crossSellEvents(events: CrossSellEvent[]): Promise<void> {
-    // Use sendBeacon when available for the impression batch on unload, fall back to fetch.
-    const payload = JSON.stringify({ events });
-    const url = `${this.apiUrl}/api/catalog/cross-sell/events`;
-    if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-      const blob = new Blob([payload], { type: 'application/json' });
-      // sendBeacon doesn't accept custom headers, so we send a plain POST. The
-      // server doesn't require auth on /events from the same domain because nginx
-      // forwards the Bearer header; for cross-origin we fall back to fetch below.
-      // Keep it simple: try beacon first, fetch on failure or cross-origin.
-      try {
-        const ok = navigator.sendBeacon(url, blob);
-        if (ok) return Promise.resolve();
-      } catch { /* fall through */ }
-    }
-    return fetch(url, {
+    // fetch + keepalive survives page unload like sendBeacon, but can carry the
+    // auth headers (sendBeacon can't, so the API answered 401 and the batch was
+    // lost). X-Shimmer-Store is what lets a publishable key (pk_) through.
+    return fetch(`${this.apiUrl}/api/catalog/cross-sell/events`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.apiKey}` },
-      body: payload,
+      headers: this.headers(),
+      body: JSON.stringify({ events }),
       keepalive: true,
     }).then(() => undefined).catch(() => undefined);
   }
@@ -1700,7 +1689,7 @@ class CrossSellWidget {
   }
 
   /** Queue an event for batched ingestion. Flushed every 1.5 s, on widget
-   *  unmount, and on page unload via navigator.sendBeacon. */
+   *  unmount, and on page unload (fetch keepalive). */
   private trackEvent(ev: Omit<CrossSellEvent, 'session_id'>): void {
     this.eventQueue.push({ ...ev, session_id: this.sessionId });
     if (this.flushTimer === null && typeof window !== 'undefined') {
