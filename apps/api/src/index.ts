@@ -10,7 +10,7 @@ import { logger, closePrisma, closeRedis, getPrisma, getRedis } from '@shimmer/c
 import { initializeIndexes } from '@shimmer/smart-search';
 import { authMiddleware, widgetAuth } from './middleware/auth.js';
 import { errorHandler } from './middleware/error-handler.js';
-import { createRateLimiter } from './middleware/rate-limiter.js';
+import { createRateLimiter, trustProxy } from './middleware/rate-limiter.js';
 import { searchRouter } from './routes/search.js';
 import { taxonomyRouter } from './routes/taxonomy.js';
 import { pipelineRouter } from './routes/pipeline.js';
@@ -52,6 +52,7 @@ const PORT = Number(process.env.API_PORT) || 3003;
 const HOST = process.env.API_HOST || '0.0.0.0';
 
 const app = express();
+app.set('trust proxy', trustProxy);
 
 // Global middleware
 app.use(helmet());
