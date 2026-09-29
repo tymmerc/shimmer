@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { getPrisma } from '@shimmer/core';
 import { isControl, resolveHoldoutConfig } from '../lib/holdout/bucket.js';
 import { isLive } from './onboarding.js';
+import { resolveTrustedEmail, identityEpoch } from '../lib/customer-identity.js';
 import {
   handleChatMessage,
   streamChatMessage,
@@ -18,10 +19,25 @@ import {
 
 export const chatRouter = Router();
 
+// Tout le routeur accepte la clé publique (widget). Les routes de lecture et
+// de gestion des conversations sont pour le marchand seulement : elles
+// contiennent les messages des clients (numéros de commande, suivi…).
+function requireSecretKey(req: Request, res: Response, next: NextFunction): void {
+  if (req.authScope !== 'secret') {
+    res.status(403).json({ error: 'Secret API key required' });
+    return;
+  }
+  next();
+}
+
 const messageSchema = z.object({
   message: z.string().min(1).max(2000),
-  sessionToken: z.string().optional(),
-  customerEmail: z.string().email().optional(),
+  sessionToken: z.string().max(100).optional(),
+  // Signed-in customer (order tracking). With the publishable key the email is
+  // only used when customerSignature proves it, see lib/customer-identity.ts.
+  customerEmail: z.string().email().max(254).optional(),
+  customerSignature: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
+  customerTs: z.string().regex(/^\d{9,11}$/).optional(),
   // Default = sales. The primary surface is a storefront search bar, where
   // intent is always "find me a product". The client widget declares its
   // context: search bar / product vendeur sends 'sales' (or nothing); a SAV
@@ -51,6 +67,16 @@ const escalateSchema = z.object({
 chatRouter.post('/message', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = messageSchema.parse(req.body);
+    // Never trust a raw email from the storefront: anyone can put any address
+    // there and read that customer's orders through the SAV.
+    const customerEmail = resolveTrustedEmail({
+      scope: req.authScope,
+      storeId: req.storeId!,
+      email: body.customerEmail,
+      signature: body.customerSignature,
+      ts: body.customerTs,
+      epoch: identityEpoch(req.store?.config),
+    }) ?? undefined;
 
     // Phase guard: the vendeur only answers when the store is in 'live'. During
     // ingestion / observation / validation, the widget is hidden and any direct
@@ -83,7 +109,7 @@ chatRouter.post('/message', async (req: Request, res: Response, next: NextFuncti
         req.storeId!,
         body.message,
         body.sessionToken,
-        body.customerEmail,
+        customerEmail,
       );
 
       for await (const chunk of generator) {
@@ -105,10 +131,11 @@ chatRouter.post('/message', async (req: Request, res: Response, next: NextFuncti
     } else {
       // Non-streaming — dispatch sales vs SAV
       const mode = detectMode(body.message, body.mode);
-      const result = mode === 'sales'
-        ? await handleSalesMessage(req.storeId!, body.message, body.sessionToken, body.customerEmail)
-        : await handleChatMessage(req.storeId!, body.message, body.sessionToken, body.customerEmail);
-      res.json(result);
+      if (mode === 'sales') {
+        res.json(await handleSalesMessage(req.storeId!, body.message, body.sessionToken, customerEmail));
+      } else {
+        res.json({ ...(await handleChatMessage(req.storeId!, body.message, body.sessionToken, customerEmail)), mode: 'sav' });
+      }
     }
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -135,7 +162,7 @@ chatRouter.post('/escalate', async (req: Request, res: Response, next: NextFunct
 });
 
 // GET /api/chat/session/:id
-chatRouter.get('/session/:id', async (req: Request, res: Response, next: NextFunction) => {
+chatRouter.get('/session/:id', requireSecretKey, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const prisma = getPrisma();
     const session = await prisma.chatSession.findFirst({
@@ -157,7 +184,7 @@ chatRouter.get('/session/:id', async (req: Request, res: Response, next: NextFun
 });
 
 // GET /api/chat/escalations
-chatRouter.get('/escalations', async (req: Request, res: Response, next: NextFunction) => {
+chatRouter.get('/escalations', requireSecretKey, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const prisma = getPrisma();
     const escalations = await prisma.chatSession.findMany({
@@ -176,7 +203,7 @@ chatRouter.get('/escalations', async (req: Request, res: Response, next: NextFun
 });
 
 // POST /api/chat/resolve/:id
-chatRouter.post('/resolve/:id', async (req: Request, res: Response, next: NextFunction) => {
+chatRouter.post('/resolve/:id', requireSecretKey, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const sessionId = Number(req.params.id);
     await resolveSession(sessionId, req.storeId!);

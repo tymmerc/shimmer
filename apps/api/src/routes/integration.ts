@@ -7,6 +7,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { getPrisma, getLlmBudgetStatus } from '@shimmer/core';
 import { derivePublishableKey } from '../lib/publishable-key.js';
+import { deriveCustomerIdentitySecret, identityEpoch } from '../lib/customer-identity.js';
 
 export const integrationRouter = Router();
 
@@ -46,9 +47,14 @@ integrationRouter.get('/status', async (req: Request, res: Response, next: NextF
       ? !!process.env.CLAUDE_API_KEY
       : true;
 
+    // Contient un secret (sid_) : jamais en cache.
+    res.setHeader('Cache-Control', 'no-store');
     res.json({
       store: { id: store.id, name: store.name },
       publishableKey: derivePublishableKey(store.id),
+      // Secret de signature de l'email client (suivi de commande dans le chat).
+      // Route réservée à la clé secrète : il ne va que dans le thème, rendu côté serveur.
+      customerIdentitySecret: deriveCustomerIdentitySecret(store.id, identityEpoch(store.config)),
       base: publicBase(req),
       email: { provider: emailProvider ?? 'Démo (mock)', configured: emailConfigured },
       sms: { provider: smsConfigured ? 'Twilio' : 'Démo (mock)', configured: smsConfigured },

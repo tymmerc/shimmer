@@ -50,12 +50,19 @@ erasureRouter.post('/', async (req: Request, res: Response, next: NextFunction) 
       sentEmails: 0,
     };
 
-    // 1. Chat sessions (by email — we don't store customerId there)
+    // 1. Chat sessions (by email — we don't store customerId there). The SAV
+    // order tracking keeps the email only inside the messages while a check
+    // is pending, so also delete sessions whose transcript contains it
+    // (position(), not LIKE: no wildcard in an email can widen the match).
     if (customer.email) {
       const r = await prisma.chatSession.deleteMany({
         where: { storeId, customerEmail: customer.email },
       });
-      counts.chatSessions = r.count;
+      const inTranscript = await prisma.$executeRaw`
+        DELETE FROM chat_sessions
+        WHERE store_id = ${storeId}
+          AND position(${customer.email.trim().toLowerCase()} in lower(messages::text)) > 0`;
+      counts.chatSessions = r.count + inTranscript;
     }
 
     // 2. Knowledge chunks generated from this customer's reviews
