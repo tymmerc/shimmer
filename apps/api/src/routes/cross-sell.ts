@@ -10,15 +10,22 @@
  *
  * Endpoints:
  *   POST /api/catalog/cross-sell/generate   — kick off precompute for current store
- *   GET  /api/catalog/products/:id/cross-sell?limit=N — live lookup with merchant overrides
+ *   GET  /api/catalog/cross-sell/product/:id?limit=N — live lookup with merchant overrides (widget)
+ *   POST /api/catalog/cross-sell/events     — SDK event ingestion (widget)
  *   DELETE /api/catalog/cross-sell          — wipe and regenerate clean
+ *
+ * Two routers: crossSellWidgetRouter holds the routes the storefront widget
+ * calls and accepts a publishable key (widgetAuth, per route). crossSellRouter
+ * holds the management routes and is mounted behind authMiddleware (secret key).
  */
 
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { getPrisma, ClaudeClient, logger } from '@shimmer/core';
+import { widgetAuth } from '../middleware/auth.js';
 
 export const crossSellRouter = Router();
+export const crossSellWidgetRouter = Router();
 
 // LLM-augmented reasons are gated behind CROSS_SELL_USE_LLM=true. By default we
 // skip the LLM entirely and use the algorithmic engine, which is fast (no
@@ -698,7 +705,7 @@ crossSellRouter.get('/stats', async (req: Request, res: Response) => {
 
 // GET /api/catalog/products/:id/cross-sell?limit=4
 // Mounted under /api/catalog so it sits next to /products/:id endpoints.
-crossSellRouter.get('/product/:id', async (req: Request, res: Response) => {
+crossSellWidgetRouter.get('/product/:id', widgetAuth, async (req: Request, res: Response) => {
   try {
     const storeId = req.storeId!;
     const id = Number(req.params.id);
@@ -834,7 +841,7 @@ crossSellRouter.get('/product/:id', async (req: Request, res: Response) => {
 /** POST /api/catalog/cross-sell/events
  *  Ingests one or a batch of events from the SDK. Returns 204 on success.
  *  Accepts: { events: [{...}] } or { ...singleEvent } for backwards compat. */
-crossSellRouter.post('/events', async (req: Request, res: Response) => {
+crossSellWidgetRouter.post('/events', widgetAuth, async (req: Request, res: Response) => {
   try {
     const storeId = req.storeId!;
     const body = Array.isArray(req.body?.events)

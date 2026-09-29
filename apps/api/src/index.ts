@@ -26,7 +26,7 @@ import { reviewsRouter } from './routes/reviews.js';
 import { searchAssistRouter } from './routes/search-assist.js';
 import { universeGenRouter } from './routes/universe-gen.js';
 import { catalogImportRouter } from './routes/catalog-import.js';
-import { crossSellRouter } from './routes/cross-sell.js';
+import { crossSellRouter, crossSellWidgetRouter } from './routes/cross-sell.js';
 import { outboundRouter } from './routes/outbound.js';
 import { savRouter } from './routes/sav.js';
 import { ordersTrackingRouter } from './routes/orders-tracking.js';
@@ -150,6 +150,9 @@ app.use('/api/search/assist', widgetAuth, searchAssistRouter);
 app.use('/api/chat', widgetAuth, chatRouter);
 // Retour de stock : POST public (widgetAuth dans le router), GET admin (auth secrète dans le router).
 app.use('/api/stock-alerts', stockAlertsRouter);
+// Cross-sell du widget (fiche produit + événements), widgetAuth dans le router.
+// Doit rester AVANT `/api/catalog` : son authMiddleware refuserait une pk_.
+app.use('/api/catalog/cross-sell', crossSellWidgetRouter);
 
 // Authenticated routes (secret key only)
 app.use('/api/taxonomy', authMiddleware, taxonomyRouter);
