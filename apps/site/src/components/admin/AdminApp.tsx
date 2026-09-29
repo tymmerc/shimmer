@@ -251,12 +251,6 @@ function LoginScreen({
  {error}
  </div>
  )}
-
- <div className="mt-5 border-t border-neutral-100 pt-4 text-xs leading-relaxed text-neutral-500">
- <strong className="font-medium text-neutral-700">Démo :</strong> utilisez{' '}
- <code className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-700">test-api-key</code>{' '}
- ou la clé de Caves Forty-Two.
- </div>
  </div>
  </div>
  );
