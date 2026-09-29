@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -120,23 +121,47 @@ const products: ProductSeed[] = [
 // Main seed function
 // ---------------------------------------------------------------------------
 
+const TEST_STORE_NAME = 'Boutique Test Shimmer';
+
+/**
+ * Store de test, sans clé en dur (le dépôt est public).
+ * - SEED_STORE_API_KEY défini : upsert sur cette clé.
+ * - sinon : on réutilise le store existant du même nom, ou on le crée avec une
+ *   clé sk_ aléatoire, affichée une seule fois dans le terminal.
+ */
+async function upsertTestStore() {
+  const config = {
+    locale: 'fr-FR',
+    currency: 'EUR',
+    features: ['search', 'chat', 'mail', 'sav'],
+  };
+
+  const envKey = process.env.SEED_STORE_API_KEY?.trim();
+  if (envKey) {
+    return prisma.store.upsert({
+      where: { apiKey: envKey },
+      update: { name: TEST_STORE_NAME },
+      create: { name: TEST_STORE_NAME, apiKey: envKey, config },
+    });
+  }
+
+  const existing = await prisma.store.findFirst({
+    where: { name: TEST_STORE_NAME },
+    orderBy: { id: 'asc' },
+  });
+  if (existing) return existing;
+
+  const apiKey = `sk_${randomUUID().replace(/-/g, '')}`;
+  const created = await prisma.store.create({ data: { name: TEST_STORE_NAME, apiKey, config } });
+  console.log(`  Clé API générée (à garder hors du dépôt) : ${apiKey}`);
+  return created;
+}
+
 export async function main() {
   console.log('Seeding database...');
 
   // 1. Create test store
-  const store = await prisma.store.upsert({
-    where: { apiKey: 'test-api-key' },
-    update: { name: 'Boutique Test Shimmer' },
-    create: {
-      name: 'Boutique Test Shimmer',
-      apiKey: 'test-api-key',
-      config: {
-        locale: 'fr-FR',
-        currency: 'EUR',
-        features: ['search', 'chat', 'mail', 'sav'],
-      },
-    },
-  });
+  const store = await upsertTestStore();
   console.log(`  Store: ${store.name} (id=${store.id})`);
 
   // 2. Upsert usage taxonomy
