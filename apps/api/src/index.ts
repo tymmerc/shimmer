@@ -6,7 +6,6 @@ import express, { type Request } from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
 import cors from 'cors';
-import pinoHttp from 'pino-http';
 import { logger, closePrisma, closeRedis, getPrisma, getRedis } from '@shimmer/core';
 import { initializeIndexes } from '@shimmer/smart-search';
 import { authMiddleware, widgetAuth } from './middleware/auth.js';
@@ -47,6 +46,7 @@ import { knowledgeRouter } from './routes/knowledge.js';
 import { erasureRouter } from './routes/erasure.js';
 import { onboardingRouter, observationRouter, previewRouter } from './routes/onboarding.js';
 import { buildReadinessReport } from './lib/config-check.js';
+import { createHttpLogger } from './lib/http-logger.js';
 
 const PORT = Number(process.env.API_PORT) || 3003;
 const HOST = process.env.API_HOST || '0.0.0.0';
@@ -72,7 +72,7 @@ app.use(express.json({
   },
 }));
 app.use(express.text({ limit: '50mb', type: 'text/csv' }));
-app.use(pinoHttp({ logger }));
+app.use(createHttpLogger());
 app.use(createRateLimiter());
 
 // Health check (no auth) — fast liveness probe + deeper readiness

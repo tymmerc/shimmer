@@ -1,7 +1,7 @@
 export { ClaudeClient, ShimmerError, hasClaudeFallback, resolveClaudeApiKey } from './claude-client.js';
 export { getPrisma, closePrisma } from './db.js';
 export { getRedis, closeRedis } from './redis.js';
-export { logger } from './logger.js';
+export { logger, createLogger, LOG_REDACT_PATHS } from './logger.js';
 export * from './types.js';
 
 import { ClaudeClient } from './claude-client.js';
