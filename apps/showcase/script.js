@@ -336,7 +336,10 @@ function initLive() {
   if (!chat || !input || !send) return;
 
   const API_URL = window.location.port === '8080' ? 'http://localhost:3003' : '/shimmer';
-  const API_KEY = 'sk_fc215c787b2c48d9808a4638e2d51899';
+  // Clé PUBLIABLE (pk_) du store 4 : /api/search/assist passe par widgetAuth.
+  // Jamais de clé secrète sk_ dans une page publique.
+  const API_KEY = 'pk_uUrPNXjew9_HENo4ZkS5k2iLu77sKjWCpn7hd8e5';
+  const STORE_ID = '4';
 
   const history = [];
   let known = {};
@@ -378,7 +381,7 @@ function initLive() {
     try {
       const r = await fetch(API_URL + '/api/search/assist', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, 'X-Shimmer-Store': STORE_ID },
         body: JSON.stringify({ message: q.trim(), history: history.slice(-6), knownCriteria: known, sessionToken: token }),
       });
       const data = await r.json();
