@@ -603,12 +603,16 @@ model Shipment {
   estimatedDelivery DateTime? @map("estimated_delivery")
   deliveredAt       DateTime? @map("delivered_at")
   lastLocation      String?   @map("last_location") @db.VarChar(200)
+  trackingUrl       String?   @map("tracking_url") @db.VarChar(500)
+  /// Id du colis côté plateforme (Shopify fulfillment id) : clé de mise à jour.
+  platformFulfillmentId String? @map("platform_fulfillment_id") @db.VarChar(64)
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
   @@index([status])
   @@index([trackingNumber])
+  @@index([orderId, platformFulfillmentId])
   @@map("shipments")
 }
 

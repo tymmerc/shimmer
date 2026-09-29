@@ -18,6 +18,14 @@ import { enqueueCartReminders } from '../lib/automations/queue.js';
 import { attributeOrderToChat } from '../lib/attribution.js';
 import { recordOrderForVisitor } from './holdout.js';
 import { detectRestock, notifyRestock, recordStockAlertConversions } from '../lib/stock-alerts.js';
+import {
+  shipmentsFromFulfillment,
+  orderNameFromFulfillment,
+  orderStatusFromShipments,
+  fulfillmentKey,
+  planFulfillmentSync,
+  type ShopifyFulfillment,
+} from '../lib/shopify-fulfillments.js';
 
 export const webhooksShopifyRouter = Router();
 
@@ -86,6 +94,7 @@ interface ShopifyOrder {
   created_at?: string;
   // Shimmer visitor id carried through checkout as a note/cart attribute.
   note_attributes?: Array<{ name?: string; value?: string }>;
+  fulfillments?: ShopifyFulfillment[];
 }
 
 /** Extract the Shimmer visitor id from Shopify note/cart attributes. */
@@ -308,17 +317,14 @@ webhooksShopifyRouter.post(
       const orderNumber = payload.name ?? (payload.order_number ? `#${payload.order_number}` : '');
       const order = await prisma.order.findFirst({ where: { storeId, orderNumber } });
       if (!order) {
-        throw new ShimmerError('Order not found', 'NOT_FOUND', 404);
+        // 200, pas 404 : Shopify supprime un webhook qui échoue trop souvent.
+        logger.warn({ storeId, source: 'shopify' }, 'shopify.order.fulfilled.unknown-order');
+        res.json({ accepted: false, reason: 'unknown order' });
+        return;
       }
 
-      const newStatus = payload.fulfillment_status === 'fulfilled' ? 'delivered' : 'shipped';
-      await prisma.order.update({
-        where: { id: order.id },
-        data: {
-          status: newStatus,
-          ...(newStatus === 'delivered' ? { deliveredAt: new Date() } : {}),
-        },
-      });
+      // "fulfilled" = expédiée. Livrée seulement quand le transporteur le dit.
+      const newStatus = await applyFulfillments(order, payload.fulfillments ?? [], 'shipped');
 
       logger.info({ storeId, orderId: order.id, source: 'shopify', newStatus }, 'shopify.order.fulfilled');
       res.json({ accepted: true, orderId: order.id, status: newStatus });
@@ -327,6 +333,94 @@ webhooksShopifyRouter.post(
     }
   },
 );
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/webhooks/shopify/fulfillments_update
+// Topics fulfillments/create + fulfillments/update : transporteur, numéro et
+// lien de suivi, puis l'avancement (en transit, en livraison, livré).
+// Le chat SAV s'en sert pour répondre à "où est ma commande ?".
+// ─────────────────────────────────────────────────────────────
+webhooksShopifyRouter.post(
+  '/fulfillments_update',
+  rawJson,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id: storeId, shopifyConfig } = await resolveStore(req);
+      if (!verifyHmac(req as Request & { rawBody?: Buffer }, shopifyConfig?.webhookSecret)) {
+        throw new ShimmerError('Invalid HMAC', 'INVALID_SIGNATURE', 401);
+      }
+      const payload = req.body as ShopifyFulfillment;
+      const orderNumber = orderNameFromFulfillment(payload.name);
+      if (!orderNumber) throw new ShimmerError('Missing fulfillment name', 'BAD_REQUEST', 400);
+
+      const prisma = getPrisma();
+      const order = await prisma.order.findFirst({ where: { storeId, orderNumber } });
+      if (!order) {
+        logger.warn({ storeId, source: 'shopify' }, 'shopify.fulfillment.unknown-order');
+        res.json({ accepted: false, reason: 'unknown order' });
+        return;
+      }
+
+      const newStatus = await applyFulfillments(order, [payload], 'confirmed');
+      logger.info({ storeId, orderId: order.id, source: 'shopify', newStatus }, 'shopify.fulfillment.updated');
+      res.json({ accepted: true, orderId: order.id, status: newStatus });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// Espace de verrou Postgres pour les colis (pg_advisory_xact_lock(ns, orderId)).
+const SHIPMENT_LOCK_NS = 7301;
+
+/**
+ * Enregistre les colis, puis recalcule le statut de la commande.
+ * orders/fulfilled et fulfillments/create arrivent souvent en même temps : un
+ * verrou par commande les fait passer l'un après l'autre (sinon doublons).
+ */
+async function applyFulfillments(
+  order: { id: number; status: string; deliveredAt: Date | null },
+  fulfillments: ShopifyFulfillment[],
+  whenEmpty: 'shipped' | 'confirmed',
+): Promise<string> {
+  return getPrisma().$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT count(*) FROM (SELECT pg_advisory_xact_lock(${SHIPMENT_LOCK_NS}::int, ${order.id}::int)) AS l`;
+
+    for (const f of fulfillments) {
+      const key = fulfillmentKey(f);
+      if (!key) continue;
+      const existing = await tx.shipment.findMany({
+        where: { orderId: order.id, platformFulfillmentId: key },
+        orderBy: { id: 'asc' },
+      });
+      const plan = planFulfillmentSync(existing, shipmentsFromFulfillment(f));
+      if (plan.remove.length) await tx.shipment.deleteMany({ where: { id: { in: plan.remove } } });
+      for (const u of plan.update) await tx.shipment.update({ where: { id: u.id }, data: u.data });
+      for (const c of plan.create) await tx.shipment.create({ data: { orderId: order.id, ...c } });
+    }
+
+    // Une commande annulée ou retournée ne repart pas en livraison.
+    if (order.status === 'cancelled' || order.status === 'returned') return order.status;
+
+    const shipments = await tx.shipment.findMany({
+      where: { orderId: order.id },
+      select: { status: true, deliveredAt: true },
+    });
+    const status = orderStatusFromShipments(shipments.map(s => s.status), whenEmpty);
+    const lastDelivery = shipments.reduce<Date | null>(
+      (acc, s) => (s.deliveredAt && (!acc || s.deliveredAt > acc) ? s.deliveredAt : acc),
+      null,
+    );
+    await tx.order.update({
+      where: { id: order.id },
+      data: {
+        status,
+        deliveredAt: status === 'delivered' ? (order.deliveredAt ?? lastDelivery ?? new Date()) : null,
+      },
+    });
+    return status;
+  });
+}
 
 // ─────────────────────────────────────────────────────────────
 // Retour de stock — détection de la transition 0 → >0

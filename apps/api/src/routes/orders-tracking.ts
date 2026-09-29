@@ -21,6 +21,18 @@ const updateStatusSchema = z.object({
   estimatedDelivery: z.string().datetime().optional(),
 });
 
+// Statuts transporteur (webhooks Shopify) lisibles dans la frise admin.
+const SHIPMENT_LABELS: Record<string, string> = {
+  preparing: 'En préparation',
+  shipped: 'Expédiée',
+  in_transit: 'En transit',
+  out_for_delivery: 'En cours de livraison',
+  attempted_delivery: 'Tentative de livraison',
+  ready_for_pickup: 'En point de retrait',
+  delivered: 'Livrée',
+  failure: 'Incident de livraison',
+};
+
 // Friendly customer messages per status
 function customerMessage(orderNumber: string, status: string, carrier?: string, trackingNumber?: string): string {
   switch (status) {
@@ -95,7 +107,7 @@ ordersTrackingRouter.get('/:id/timeline', async (req: Request, res: Response, ne
       message: customerMessage(order.orderNumber, 'confirmed'),
     });
     for (const s of order.shipments) {
-      const lbl = s.status === 'shipped' ? 'Expédiée' : s.status === 'in_transit' ? 'En transit' : s.status;
+      const lbl = SHIPMENT_LABELS[s.status] ?? s.status;
       const eventAt = s.shippedAt ?? s.estimatedDelivery ?? s.deliveredAt ?? order.createdAt;
       events.push({
         at: eventAt,
@@ -141,13 +153,15 @@ ordersTrackingRouter.patch('/:id/status', async (req: Request, res: Response, ne
 
     await prisma.order.update({ where: { id }, data });
 
-    if (body.status === 'shipped' || body.status === 'in_transit') {
+    // Un colis seulement avec un vrai numéro de suivi : le chat SAV le montre
+    // au client, un numéro inventé l'enverrait suivre un colis qui n'existe pas.
+    if ((body.status === 'shipped' || body.status === 'in_transit') && body.trackingNumber) {
       await prisma.shipment.create({
         data: {
           orderId: id,
           status: body.status,
-          carrier: body.carrier ?? 'Colissimo',
-          trackingNumber: body.trackingNumber ?? `LP${Math.floor(Math.random() * 1e9)}`,
+          carrier: body.carrier ?? '',
+          trackingNumber: body.trackingNumber,
           shippedAt: body.status === 'shipped' ? new Date() : undefined,
           estimatedDelivery: body.estimatedDelivery ? new Date(body.estimatedDelivery) : undefined,
         },
