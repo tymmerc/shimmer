@@ -167,7 +167,7 @@ curl "https://tymmerc.eu/shimmer/api/catalog/cross-sell/product/123?limit=4" \
 </script>
 ```
 
-Le SDK tient sous 30kb gzip. Il utilise `IntersectionObserver` pour les impressions et `sendBeacon` pour les events, donc aucun impact perçu sur le LCP.
+Le SDK tient sous 30kb gzip. Il utilise `IntersectionObserver` pour les impressions et `fetch` en `keepalive` pour les events (envoi par lots, qui survit à la fermeture de la page), donc aucun impact perçu sur le LCP.
 
 ## Cross-sell : comment ça marche
 

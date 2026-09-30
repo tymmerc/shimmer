@@ -413,12 +413,18 @@ class ShimmerClient {
     // fetch + keepalive survives page unload like sendBeacon, but can carry the
     // auth headers (sendBeacon can't, so the API answered 401 and the batch was
     // lost). X-Shimmer-Store is what lets a publishable key (pk_) through.
-    return fetch(`${this.apiUrl}/api/catalog/cross-sell/events`, {
-      method: 'POST',
-      headers: this.headers(),
-      body: JSON.stringify({ events }),
-      keepalive: true,
-    }).then(() => undefined).catch(() => undefined);
+    // The API refuses batches over 50 events, so bigger queues are split.
+    const url = `${this.apiUrl}/api/catalog/cross-sell/events`;
+    const sends: Promise<void>[] = [];
+    for (let i = 0; i < events.length; i += 50) {
+      sends.push(fetch(url, {
+        method: 'POST',
+        headers: this.headers(),
+        body: JSON.stringify({ events: events.slice(i, i + 50) }),
+        keepalive: true,
+      }).then(() => undefined).catch(() => undefined));
+    }
+    return Promise.all(sends).then(() => undefined);
   }
 }
 
