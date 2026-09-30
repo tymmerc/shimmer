@@ -6,6 +6,14 @@ import { estimateLlmCostEUR, isOverLlmBudget, recordLlmSpend } from './llm-budge
 const LLM_PROVIDER = process.env.LLM_PROVIDER || 'ollama'; // 'claude' | 'ollama'
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:3b';
+/**
+ * Fils de calcul du modèle local. Ollama prend par défaut tous les cœurs (8
+ * ici) ; sur ce VPS il tourne en priorité basse (nice 19) pour protéger les
+ * sites, et dès qu'un autre process prend un cœur, les 8 fils s'attendent les
+ * uns les autres : une génération de 60 mots passait de 8 s à l'expiration.
+ * Mesuré le 30/09 : 8 fils = timeout à 150 s, 6 fils = 8,3 s, 4 fils = 9,5 s.
+ */
+const OLLAMA_NUM_THREAD = Math.max(1, Number(process.env.OLLAMA_NUM_THREAD) || 6);
 
 const DEFAULT_MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514';
 const DEFAULT_MAX_TOKENS = 4096;
@@ -188,6 +196,7 @@ export class ClaudeClient {
             options: {
               temperature,
               num_predict: maxTokens,
+              num_thread: OLLAMA_NUM_THREAD,
             },
           }),
           signal: controller.signal,
@@ -266,6 +275,7 @@ export class ClaudeClient {
           options: {
             temperature,
             num_predict: maxTokens,
+            num_thread: OLLAMA_NUM_THREAD,
           },
         }),
         signal: controller.signal,
