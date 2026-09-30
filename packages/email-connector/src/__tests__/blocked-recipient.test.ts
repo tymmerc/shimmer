@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isBlockedRecipient } from '../index.js';
+import { isBlockedRecipient, maskEmail } from '../index.js';
 
 // Les données de démo (example.com, test.com) ne doivent jamais recevoir de
 // vrai e-mail le jour où un fournisseur est branché.
@@ -12,5 +12,12 @@ describe('isBlockedRecipient', () => {
   });
   it('laisse passer les vraies adresses', () => {
     for (const a of ['tym@gmail.com', 'contact@brouillon.store', 'x@latest.com', 'y@contest.fr', 'z@example.fr']) expect(isBlockedRecipient(a)).toBe(false);
+  });
+});
+
+describe('maskEmail', () => {
+  it('garde la première lettre et le domaine', () => {
+    expect(maskEmail('visiteur6@example.com')).toBe('v***@example.com');
+    expect(maskEmail('pas-une-adresse')).toBe('***');
   });
 });

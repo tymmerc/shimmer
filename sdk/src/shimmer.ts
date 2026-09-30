@@ -98,6 +98,8 @@ interface OutOfStockProduct {
 
 interface VendeurResponse {
   message: string;
+  /** Le serveur a classé le visiteur dans le groupe témoin : pas de vendeur. */
+  control?: boolean;
   sessionToken: string;
   recommendedProducts: VendeurProduct[];
   outOfStock?: OutOfStockProduct[];
@@ -953,12 +955,23 @@ class SearchWidget {
    * est conservé pour que la conversation se resserre tour après tour.
    */
   private async askVendor(query: string) {
+    // Gardée ici : si le widget est retiré pendant l'appel (visiteur témoin),
+    // on a encore la barre native pour rejouer la recherche.
+    const anchor = this.anchor;
     this.setThinking();
     try {
       // chat/message : le vendeur fiable. Il garde le contexte via le
       // sessionToken (côté serveur), pose une question si la demande est vague,
       // et recommande dès qu'il a un élément concret.
       const res = await this.client.vendeur(query, this.sessionToken || undefined);
+      if (res.control) {
+        // Témoin (connu du serveur avant que le widget ne le sache, dans les
+        // premières secondes) : sa recherche part vers la recherche native
+        // du thème au lieu de se perdre dans un panneau vide.
+        this.close();
+        if (anchor?.form) { anchor.value = query; anchor.form.submit(); }
+        return;
+      }
       this.sessionToken = res.sessionToken || this.sessionToken;
       this.setQuestion(res.message);
       this.renderProducts(res.recommendedProducts || []);

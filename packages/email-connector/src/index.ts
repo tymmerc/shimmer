@@ -159,6 +159,11 @@ async function sendViaMailgun(
  */
 const BLOCKED_RECIPIENT = /@(?:[^@\s]+\.)?(?:example\.(?:com|net|org)|test\.com|[^@\s]+\.(?:test|example|invalid|localhost))$/i;
 
+export function maskEmail(to: string): string {
+  const [local, domain] = to.trim().split('@');
+  return domain ? `${(local ?? '').slice(0, 1)}***@${domain}` : '***';
+}
+
 export function isBlockedRecipient(to: string): boolean {
   // « Nom <adresse> » : on teste l'adresse. Liste, espaces, format douteux ou
   // domaine sans point (a@localhost) : bloqué, jamais un envoi réel.
@@ -200,7 +205,8 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   // mistaken for a delivered email.
   if (provider === 'mock') {
     logger.warn(
-      { emailId: row.id, to: input.to, subject: input.subject, tag: input.tag, storeId: input.storeId },
+      // Jamais l'adresse complète dans les journaux : j***@domaine suffit pour diagnostiquer.
+      { emailId: row.id, to: maskEmail(input.to), subject: input.subject, tag: input.tag, storeId: input.storeId },
       'email.mock.not-sent (no provider configured — set RESEND_API_KEY)',
     );
     await prisma.sentEmail.update({
