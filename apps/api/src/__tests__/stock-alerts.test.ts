@@ -235,3 +235,20 @@ describe('pickSoldOutRedirect (alternative à un épuisé)', () => {
     expect(pickSoldOutRedirect(asked, [c(9, 'Vin rouge', 20, true)], ok)).toBeNull();
   });
 });
+
+// ── Le petit modèle recopie parfois le format du contexte catalogue ──
+import { stripCatalogEcho } from '@shimmer/chatbot';
+
+describe('stripCatalogEcho (réponse du vendeur montrée au client)', () => {
+  it('drops a raw catalogue line echoed by the model and keeps the sentence', () => {
+    const raw = "Brouilly 2022 | 15€ | Vin rouge | Château Thivin | charcuterie, quotidien, apero, Gamay, fruite\n\nC'est un vin idéal pour accompagner vos grillades entre amis. Santé !";
+    expect(stripCatalogEcho(raw)).toBe("C'est un vin idéal pour accompagner vos grillades entre amis. Santé !");
+  });
+  it('leaves a normal reply untouched', () => {
+    const ok = 'Pour des grillades, prenez le Vacqueyras 2021 à 21 €. Il est fruité et épicé.';
+    expect(stripCatalogEcho(ok)).toBe(ok);
+  });
+  it('returns an empty string when the reply was only catalogue lines', () => {
+    expect(stripCatalogEcho('A | 1€ | Vin rouge\nB | 2€ | Vin blanc')).toBe('');
+  });
+});

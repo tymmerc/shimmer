@@ -87,6 +87,16 @@ function normalize(s: string): string {
  * top-N search results (which pad with irrelevant items on weak queries).
  */
 /**
+ * Retire les lignes où le modèle a recopié le format du contexte catalogue
+ * (au moins deux séparateurs « | » : « nom | prix | catégorie | … »), puis
+ * resserre les lignes vides. Renvoie '' si la réponse n'était que ça.
+ */
+export function stripCatalogEcho(text: string): string {
+  const kept = text.split('\n').filter((line) => (line.match(/\|/g) ?? []).length < 2);
+  return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
  * Position d'un nom de produit dans un texte (normalisé), ou -1. La
  * correspondance est délimitée : le nom ne doit être collé à aucune lettre,
  * chiffre ou trait d'union. Sinon « hermitage » serait trouvé dans
@@ -327,6 +337,17 @@ export async function handleSalesMessage(
   // apparaît dans le message du visiteur (ou que le vendeur a cité) déclenche
   // l'accroche "préviens-moi", même si le petit modèle a ignoré la consigne.
   const citedRaw = llmDegraded ? [] : pickCitedProducts(assistantReply, candidates);
+  // Le petit modèle recopie parfois une ligne brute du contexte catalogue
+  // (« Brouilly 2022 | 15€ | Vin rouge | … »). Les citations ci-dessus sont
+  // lues sur le texte brut ; le client, lui, ne voit que des phrases.
+  if (!llmDegraded) {
+    const cleaned = stripCatalogEcho(assistantReply);
+    if (cleaned !== assistantReply) {
+      assistantReply = cleaned || (citedRaw.length > 0
+        ? `Je vous conseille ${citedRaw.slice(0, 2).map(c => `${c.product.name} (${c.product.price} €)`).join(' ou ')}.`
+        : "Voici les références qui correspondent le mieux à votre demande.");
+    }
+  }
   const askedByVisitor = pickCitedProducts(message, candidates).filter(c => isSoldOut(c.product));
   const soldOutCited = dedupeById([...askedByVisitor, ...citedRaw.filter(c => isSoldOut(c.product))]);
 

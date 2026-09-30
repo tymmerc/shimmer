@@ -9,6 +9,7 @@ export {
   handleSalesMessage,
   isSoldOut,
   mentionsName,
+  stripCatalogEcho,
   pickSoldOutRedirect,
   type SalesChatResponse,
 } from './sales-assistant.js';
