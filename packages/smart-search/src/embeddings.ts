@@ -55,23 +55,36 @@ export async function embed(
   return results as number[][];
 }
 
-async function fetchEmbeddings(
+/** Limite du sidecar ONNX (embedding-sidecar/app.py, MAX_BATCH). */
+export const SIDECAR_MAX_BATCH = 64;
+
+/**
+ * Appelle le sidecar par lots de 64 textes au plus (au-delà il répond 400
+ * « Max batch size is 64 » et l'index vectoriel ne se construit pas), dans
+ * l'ordre, et recolle les vecteurs.
+ */
+export async function fetchEmbeddings(
   texts: string[],
   prefix: string,
 ): Promise<EmbeddingResponse> {
-  const res = await fetch(`${SIDECAR_URL}/embed`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ texts, prefix }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    logger.error({ status: res.status, body }, 'embedding.sidecar.error');
-    throw new Error(`Embedding sidecar error: ${res.status}`);
+  const embeddings: number[][] = [];
+  let last: EmbeddingResponse | undefined;
+  for (let i = 0; i < texts.length; i += SIDECAR_MAX_BATCH) {
+    const batch = texts.slice(i, i + SIDECAR_MAX_BATCH);
+    const res = await fetch(`${SIDECAR_URL}/embed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texts: batch, prefix }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      logger.error({ status: res.status, body, batch: batch.length }, 'embedding.sidecar.error');
+      throw new Error(`Embedding sidecar error: ${res.status}`);
+    }
+    last = (await res.json()) as EmbeddingResponse;
+    embeddings.push(...last.embeddings);
   }
-
-  return res.json() as Promise<EmbeddingResponse>;
+  return { ...(last as EmbeddingResponse), embeddings };
 }
 
 function hashText(text: string): string {
