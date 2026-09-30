@@ -1,0 +1,82 @@
+{
+ "note": "Voix off du film POV (30/09/2026). Fenêtres en secondes du film ; texte à dire pendant que la réplique est verte dans le guide.",
+ "lines": [
+  {
+   "id": "L1",
+   "start_s": 4.3,
+   "end_s": 6.36,
+   "text": "Sauf que j'y connais rien.",
+   "direction": "le « Je gère ! » retombe : petit blanc après « Sauf que », puis lâché avec un rire gêné"
+  },
+  {
+   "id": "L2+L3",
+   "start_s": 6.96,
+   "end_s": 9.9,
+   "text": "Tous ces rouges… Bon, je tape rouge.",
+   "direction": "perdu devant la page, vrai temps sur les « ... », puis résigné et un peu bête ; « rouge » tombe sur la touche Entrée"
+  },
+  {
+   "id": "L4",
+   "start_s": 13.1,
+   "end_s": 14.5,
+   "text": "Comme un caviste.",
+   "direction": "surprise amusée, à mi-voix, sans appuyer ; on a déjà lu la question, se taire avant le clic sur « Un repas »"
+  },
+  {
+   "id": "L5",
+   "start_s": 21.3,
+   "end_s": 23.37,
+   "text": "Je réponds dans la barre.",
+   "direction": "décontracté, comme une évidence, juste après Entrée"
+  },
+  {
+   "id": "L6",
+   "start_s": 29.67,
+   "end_s": 30.67,
+   "text": "Là, je gère.",
+   "direction": "petit souffle de soulagement avant, sourire dans la voix, clin d'oeil au « Je gère ! » du texto"
+  },
+  {
+   "id": "L7",
+   "start_s": 31.47,
+   "end_s": 32.83,
+   "text": "Et le Crozes ?",
+   "direction": "maintenant qu'il gère, il fait un peu le connaisseur, léger crâneur, pendant la frappe"
+  },
+  {
+   "id": "L7b",
+   "start_s": 37.4,
+   "end_s": 38.7,
+   "text": "Il me prévient.",
+   "direction": "agréablement surpris, pendant qu'il tape son e-mail"
+  },
+  {
+   "id": "S08",
+   "start_s": 42.77,
+   "end_s": 45.87,
+   "text": "Personne a su que j'y connaissais rien.",
+   "direction": "fier en douce, presque en confidence, calé sur la grande ligne, pas pressé"
+  },
+  {
+   "id": "S09",
+   "start_s": 47.4,
+   "end_s": 49.8,
+   "text": "Et ils m'ont pas oublié.",
+   "direction": "touché, plus lent et plus doux, laisser la notif arriver avant de parler"
+  },
+  {
+   "id": "L8",
+   "start_s": 51.67,
+   "end_s": 53.67,
+   "text": "Une IA, dans la barre.",
+   "direction": "le déclic : petite pause après « Une IA », on comprend enfin, la voix se pose"
+  },
+  {
+   "id": "REV",
+   "start_s": 54.93,
+   "end_s": 55.87,
+   "text": "Shimmer.",
+   "direction": "autre ton : un cran plus grave, calme et sûr, on sort de la tête de Camille ; prononcé à l'anglaise (chi-meur), pas de voix de pub"
+  }
+ ]
+}

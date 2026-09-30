@@ -4,7 +4,7 @@ import { S } from "../pov/brand";
 import { Toxic } from "../pov/Toxic";
 import { Band } from "./Band";
 import { Annotation, Brand, EndCard } from "./Brand";
-import { LifeGradients, S01, S01Line2, S08, S09 } from "./Life";
+import { LifeGradients, S01, S01Line2, S01Thought, S08, S09 } from "./Life";
 import { ShopTake } from "./ShopTake";
 import { curtainY, EZ, keyed, lerp, seg, storyAt, toxinVeil } from "./timeline";
 
@@ -101,6 +101,7 @@ export const ShimmerPOV: React.FC<{ subtitles?: boolean }> = ({
             }}
           >
             {f < 140 && <S01 f={f} fps={fps} />}
+            {!subtitles && f < 140 && <S01Thought f={f} />}
             {f >= 1092 && f < 1195 && <S08 f={f} />}
             {f >= 1180 && f < 1300 && <S09 f={f} fps={fps} />}
           </AbsoluteFill>

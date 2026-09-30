@@ -28,5 +28,7 @@ apps/showcase-dev/
 apps/showcase-main.bak-*.tar.gz
 *.bak-*.tar.gz
 video/out/
+# Prises de voix off (données personnelles, jamais dans le dépôt public)
+video/vo/in/
 video/node_modules/
 .secrets.local
