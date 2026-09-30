@@ -5,6 +5,7 @@
 
 import { Worker, type Job } from 'bullmq';
 import { getPrisma, logger } from '@shimmer/core';
+import { isSafeKeyword } from './reindex-worker.js';
 
 export interface CorpusEnrichJob {
   query: string;
@@ -33,6 +34,13 @@ export function createCorpusEnricherWorker(connection: { host: string; port: num
       // Normalize query for keyword storage
       const normalizedQuery = query.toLowerCase().trim();
 
+      // La taxonomie est commune à toutes les boutiques : même garde-fou que le
+      // réindexage (tournure courte, lettres seulement, aucune donnée personnelle).
+      if (!isSafeKeyword(normalizedQuery)) {
+        logger.debug({ usageCode }, 'corpus_enricher.unsafe_query_skipped');
+        return;
+      }
+
       // Only add if not already present
       if (!taxonomy.keywords.includes(normalizedQuery)) {
         await prisma.usageTaxonomy.update({
@@ -44,7 +52,6 @@ export function createCorpusEnricherWorker(connection: { host: string; port: num
 
         logger.info({
           usageCode,
-          query: normalizedQuery,
           keywordsCount: taxonomy.keywords.length + 1,
         }, 'corpus_enricher.keyword_added');
       }

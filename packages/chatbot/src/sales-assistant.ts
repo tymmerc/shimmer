@@ -13,7 +13,7 @@
  * real bottles/garments/skis/etc, not generic LLM advice.
  */
 
-import { getPrisma, ClaudeClient, logger, getRedis } from '@shimmer/core';
+import { getPrisma, ClaudeClient, logger, getRedis, interactiveProvider } from '@shimmer/core';
 import type { ClaudeMessage, ScoredProduct } from '@shimmer/core';
 import { search } from '@shimmer/smart-search';
 import { randomUUID } from 'node:crypto';
@@ -69,6 +69,41 @@ interface StoreConfig {
 // its reply are shown as cards — see pickCitedProducts.
 const CANDIDATE_POOL = 12;
 const FALLBACK_CARDS = 3;
+
+/**
+ * Échéance du modèle pour le vendeur. Il vit dans une barre de recherche : au
+ * delà de quelques secondes le visiteur est parti. Avant le 30/09, un appel
+ * pouvait attendre 120 s et être retenté 3 fois (médiane mesurée : 40 s,
+ * 8 réponses sur 24 au-delà de 2 min). Passé ce délai, le code répond seul.
+ */
+export const VENDOR_LLM_DEADLINE_MS = Number(process.env.VENDOR_LLM_DEADLINE_MS) || 20_000;
+
+function priceText(price: unknown): string {
+  const n = Number(price);
+  if (!Number.isFinite(n)) return '';
+  return Number.isInteger(n) ? `${n} €` : `${n.toFixed(2).replace('.', ',')} €`;
+}
+
+/**
+ * Réponse écrite par le code quand le modèle ne répond pas à temps : les
+ * meilleurs produits en stock de la recherche, nommés avec leur prix. Le
+ * visiteur a toujours une vraie suggestion, jamais un « réessayez ».
+ */
+export function fallbackReply(
+  candidates: Array<{ product: { name: string; price?: unknown; stock?: number | null; stockStatus?: string | null } }>,
+  tone: 'tu' | 'vous',
+): string {
+  const picks = candidates.filter((c) => !isSoldOut(c.product)).slice(0, 2);
+  if (picks.length === 0) {
+    return tone === 'tu'
+      ? "Je n'ai rien trouvé de précis pour ça. Dis-m'en un peu plus (occasion, budget, goût) et je cherche."
+      : "Je n'ai rien trouvé de précis pour cela. Dites-m'en un peu plus (occasion, budget, goût) et je cherche.";
+  }
+  const named = picks.map((c) => `${c.product.name} (${priceText(c.product.price)})`).join(' ou ');
+  return tone === 'tu'
+    ? `Je te propose ${named}. Dis-m'en un peu plus (occasion, budget) et j'affine.`
+    : `Je vous propose ${named}. Dites-m'en un peu plus (occasion, budget) et j'affine.`;
+}
 
 /** Lowercase, strip accents, collapse whitespace for fuzzy text matching. */
 function normalize(s: string): string {
@@ -223,6 +258,7 @@ export async function handleSalesMessage(
   message: string,
   sessionToken?: string,
   customerEmail?: string,
+  visitorId?: string,
 ): Promise<SalesChatResponse> {
   const prisma = getPrisma();
   const token = sessionToken || randomUUID();
@@ -255,6 +291,7 @@ export async function handleSalesMessage(
             messages: msgs as unknown as Parameters<typeof prisma.chatSession.create>[0]['data']['messages'],
             recommendedProductIds: data.recommendedProducts.map(p => p.id) as unknown as Parameters<typeof prisma.chatSession.create>[0]['data']['recommendedProductIds'],
             customerEmail: customerEmail ?? null,
+            visitorId: visitorId ?? null,
             mode: 'sales',
             status: 'ACTIVE',
           },
@@ -310,7 +347,9 @@ export async function handleSalesMessage(
     content: m.content,
   }));
 
-  const claude = new ClaudeClient();
+  // Mistral si une clé est posée (1 à 2 s), sinon l'IA locale. Le SAV, qui
+  // voit des données clients, reste en local.
+  const claude = new ClaudeClient({ provider: interactiveProvider() });
 
   // Graceful degradation: the search already produced relevant candidates
   // without the LLM. If the LLM is fully unavailable (Ollama down AND no Claude
@@ -322,15 +361,16 @@ export async function handleSalesMessage(
     assistantReply = await claude.complete(claudeMessages, {
       systemPrompt,
       temperature: 0.5,
-      maxTokens: 700,
+      // 3 à 5 phrases : 300 tokens suffisent, et bornent le temps de génération.
+      maxTokens: 300,
+      timeout: VENDOR_LLM_DEADLINE_MS,
+      maxRetries: 1,
       storeId,
     });
   } catch (err) {
     llmDegraded = true;
     logger.warn({ storeId, error: (err as Error).message }, 'sales.message.llm-unavailable → degraded reply');
-    assistantReply = candidates.length > 0
-      ? "Voici les références qui correspondent le mieux à votre demande. Je peux préciser si vous m'en dites un peu plus."
-      : "Je n'arrive pas à répondre à l'instant. Réessayez dans un moment, ou parcourez la boutique en attendant.";
+    assistantReply = fallbackReply(candidates, config.tone === 'tu' ? 'tu' : 'vous');
   }
 
   // Épuisé DEMANDÉ : le code décide, pas le LLM. Un produit épuisé dont le nom
@@ -409,6 +449,7 @@ export async function handleSalesMessage(
         messages: history as unknown as Parameters<typeof prisma.chatSession.update>[0]['data']['messages'],
         recommendedProductIds: accumulatedIds as unknown as Parameters<typeof prisma.chatSession.update>[0]['data']['recommendedProductIds'],
         customerEmail: customerEmail ?? session.customerEmail,
+        visitorId: session.visitorId ?? visitorId ?? null,
         mode: 'sales',
       },
     });
@@ -420,6 +461,7 @@ export async function handleSalesMessage(
         messages: history as unknown as Parameters<typeof prisma.chatSession.create>[0]['data']['messages'],
         recommendedProductIds: accumulatedIds as unknown as Parameters<typeof prisma.chatSession.create>[0]['data']['recommendedProductIds'],
         customerEmail: customerEmail ?? null,
+        visitorId: visitorId ?? null,
         mode: 'sales',
         status: 'ACTIVE',
       },

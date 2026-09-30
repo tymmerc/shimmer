@@ -312,7 +312,10 @@ class ShimmerClient {
   /** One-shot vendeur: returns a recommendation sentence + products immediately
    *  (same backend as the public demo). Used by the search-bar vendeur. */
   vendeur(message: string, sessionToken?: string): Promise<VendeurResponse> {
-    return this.request('POST', '/api/chat/message', { message, sessionToken });
+    // Cookie posé seulement avec consentement (mode session : aucun) : il
+    // relie une commande payée à la conversation (attribution, apprentissage).
+    const visitorId = readCookie(VID_COOKIE) ?? undefined;
+    return this.request('POST', '/api/chat/message', { message, sessionToken, visitorId });
   }
 
   /** Retour de stock : "prévenez-moi quand ça revient". Idempotent côté serveur. */
@@ -1460,6 +1463,20 @@ function sessionVisitorId(): string {
   return 'svid_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
+/**
+ * Mesure et stockage autorisés (consentement donné). Lu par tout ce qui
+ * écrit dans le navigateur ou envoie une mesure : cross-sell (localStorage),
+ * enrôlement témoin, marquage du panier. Faux tant qu'aucun accord n'est
+ * arrivé, et de nouveau faux après un retrait.
+ */
+let measurementAllowed = false;
+
+const CROSS_SELL_KEYS = ['shimmer_xs_sid', 'shimmer_xs_intent'];
+
+function clearMeasurementStorage(): void {
+  try { for (const k of CROSS_SELL_KEYS) localStorage.removeItem(k); } catch { /* ignore */ }
+}
+
 function deleteCookie(name: string): void {
   if (typeof document === 'undefined') return;
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
@@ -1559,6 +1576,7 @@ const ENROLL_FLAG = 'shimmer_enrolled';
  * the sessionStorage flag just avoids re-sending during the same session.
  */
 function trackSearchEnrollment(apiUrl: string, apiKey: string, storeId: number, visitorId: string, exposed: boolean): void {
+  if (!measurementAllowed) return;
   try {
     if (window.sessionStorage.getItem(ENROLL_FLAG)) return;
   } catch { /* private mode: we just send every time, server dedupes */ }
@@ -1634,7 +1652,7 @@ async function setupShopifyCartAttribution(visitorId: string, bucket: number): P
       const res = await origFetch(...args);
       try {
         const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
-        if (/\/cart\/(add|change|clear)(?:\.js)?\b/.test(url)) {
+        if (measurementAllowed && /\/cart\/(add|change|clear)(?:\.js)?\b/.test(url)) {
           // Re-inject in the background, don't await
           void origFetch('/cart/update.js', {
             method: 'POST',
@@ -1652,8 +1670,14 @@ async function setupShopifyCartAttribution(visitorId: string, bucket: number): P
 const SESSION_STORAGE_KEY = 'shimmer_xs_sid';
 const SESSION_MAX_AGE_MS = 30 * 86_400_000;
 
+// Sans consentement : un identifiant en mémoire pour la page, rien d'écrit.
+let pageSessionId: string | null = null;
+
 function getOrCreateSessionId(): string {
-  if (typeof localStorage === 'undefined') return 'no-storage-' + Math.random().toString(36).slice(2);
+  if (!measurementAllowed || typeof localStorage === 'undefined') {
+    pageSessionId ??= 'xs-page-' + Math.random().toString(36).slice(2);
+    return pageSessionId;
+  }
   try {
     const raw = localStorage.getItem(SESSION_STORAGE_KEY);
     if (raw) {
@@ -1690,7 +1714,7 @@ function getIntents(): CrossSellIntent[] {
 }
 
 function setIntents(intents: CrossSellIntent[]): void {
-  if (typeof localStorage === 'undefined') return;
+  if (!measurementAllowed || typeof localStorage === 'undefined') return;
   try {
     // Cap at 20 to keep storage small. Most recent first.
     const trimmed = intents.slice(0, 20);
@@ -2002,6 +2026,15 @@ export class Shimmer {
     if (mode === 'granted') { this.applyConsent(true); return; }
     if (mode === 'denied') { await this.sessionBoot(); return; }
 
+    // Signal reçu avant le démarrage : il prime sur la détection de CMP.
+    if (Shimmer.pendingConsent !== null) {
+      const granted = Shimmer.pendingConsent;
+      Shimmer.pendingConsent = null;
+      if (!granted) await this.sessionBoot();
+      this.applyConsent(granted);
+      return;
+    }
+
     const cmpFound = detectAndWatchCmp(g => this.applyConsent(g));
     // En attendant le signal : mode session (le vendeur marche, zéro cookie).
     await this.sessionBoot();
@@ -2021,6 +2054,7 @@ export class Shimmer {
   private applyConsent(granted: boolean): void {
     const prev = this.consent;
     this.consent = granted ? 'granted' : 'denied';
+    measurementAllowed = granted;
     if (granted && !this.measuredBootDone) {
       this.measuredBootDone = true;
       void this.measuredBoot().catch(e => console.warn('[shimmer] measured boot', e));
@@ -2030,9 +2064,19 @@ export class Shimmer {
       getOrCreateVisitorId();
     }
     if (!granted && prev !== 'denied') {
-      // Retrait : on efface le cookie. Les widgets déjà montés restent (le
-      // service continue), mais plus aucune mesure ne part.
+      // Retrait : on efface le cookie et le stockage du cross-sell, et on
+      // retire l'identifiant du panier Shopify. Les widgets déjà montés restent
+      // (le service continue), mais plus aucune mesure ne part.
       deleteCookie(VID_COOKIE);
+      clearMeasurementStorage();
+      if (isShopifyStorefront()) {
+        void fetch('/cart/update.js', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ attributes: { shimmer_vid: '', shimmer_bucket: '' } }),
+          credentials: 'same-origin',
+        }).catch(() => { /* ignore */ });
+      }
     }
   }
 
@@ -2130,7 +2174,12 @@ export class Shimmer {
    *   Shimmer.consent(false) → mode session, cookie effacé
    */
   static consent(granted: boolean): void {
-    Shimmer.instance?.applyConsent(granted);
+    if (!Shimmer.instance) {
+      // Appelé avant init() (CMP plus rapide que le script) : repris au démarrage.
+      Shimmer.pendingConsent = granted;
+      return;
+    }
+    Shimmer.instance.applyConsent(granted);
   }
 
   /**
@@ -2144,6 +2193,9 @@ export class Shimmer {
     Shimmer.pendingCustomer = validCustomer(customer);
     if (Shimmer.instance) Shimmer.instance.customer = Shimmer.pendingCustomer;
   }
+
+  /** consent() appelé avant init() : repris au démarrage. */
+  private static pendingConsent: boolean | null = null;
 
   /** identify() appelé avant init() : repris à l'init. */
   private static pendingCustomer: ShimmerCustomer | null = null;

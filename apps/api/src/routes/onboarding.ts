@@ -24,7 +24,7 @@
 
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { getPrisma, getClaude, logger, ShimmerError } from '@shimmer/core';
+import { getPrisma, getClaude, getRedis, logger, ShimmerError } from '@shimmer/core';
 import { handleSalesMessage } from '@shimmer/chatbot';
 import { scrubPII } from '../lib/scrub-pii.js';
 import { authMiddleware, widgetAuth } from '../middleware/auth.js';
@@ -219,6 +219,14 @@ observationRouter.get('/report', authMiddleware, async (req: Request, res: Respo
       return;
     }
 
+    // Le rapport ne change que si de nouvelles requêtes arrivent : en cache,
+    // sinon chaque affichage de l'admin relançait l'IA (jusqu'à 3 × 2 min).
+    const cacheKey = `obs-report:v1:${storeId}:${queries.length}:${queries[0]!.id}`;
+    try {
+      const hit = await getRedis().get(cacheKey);
+      if (hit) { res.json(JSON.parse(hit)); return; }
+    } catch { /* fail-open */ }
+
     // Cluster the corpus into intents + extract vocabulary + identify gaps.
     const corpus = queries.map(q => `- ${q.rawText.slice(0, 200)}`).join('\n').slice(0, 8000);
     const claude = getClaude();
@@ -235,20 +243,25 @@ observationRouter.get('/report', authMiddleware, async (req: Request, res: Respo
       `Requêtes :\n${corpus}`;
     let analysis: Record<string, unknown> = {};
     try {
-      const raw = await claude.complete([{ role: 'user', content: prompt }], { temperature: 0.2, maxTokens: 900 });
+      const raw = await claude.complete([{ role: 'user', content: prompt }], { temperature: 0.2, maxTokens: 900, timeout: 90_000, maxRetries: 1, storeId });
       const m = raw.match(/\{[\s\S]*\}/);
       if (m) analysis = JSON.parse(m[0]);
     } catch (err) {
       logger.warn({ err }, 'observation.report.llm-failed');
     }
 
-    res.json({
+    const report = {
       sample: queries.length,
       windowStart: queries[queries.length - 1]?.createdAt,
       windowEnd: queries[0]?.createdAt,
       analysis,
       ready: queries.length >= 50,
-    });
+    };
+    // Un rapport vide (IA en échec) n'est pas gardé : on réessaiera.
+    if (Object.keys(analysis).length > 0) {
+      try { await getRedis().set(cacheKey, JSON.stringify(report), 'EX', 6 * 3600); } catch { /* fail-open */ }
+    }
+    res.json(report);
   } catch (err) {
     next(err);
   }

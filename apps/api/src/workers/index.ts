@@ -10,6 +10,7 @@ import { createUsageExtractorWorker } from './usage-extractor.js';
 import { createCorpusEnricherWorker } from './corpus-enricher.js';
 import { createReindexWorker } from './reindex-worker.js';
 import { createKnowledgeWorker } from './knowledge-worker.js';
+import { createAutomationSweepWorker, AUTOMATION_SWEEP_QUEUE, AUTOMATION_SWEEP_EVERY_MS } from './automation-sweep.js';
 import { createAutomationsWorker, openAutomationsQueue, closeAutomationsQueue } from '../lib/automations/queue.js';
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6381';
@@ -23,6 +24,11 @@ const workers: Worker[] = [];
 let indexRebuildQueue: Queue | null = null;
 let learningReindexQueue: Queue | null = null;
 let knowledgeQueue: Queue | null = null;
+let sweepQueue: Queue | null = null;
+
+// Historique borné : sans ça, Redis gardait tous les jobs (4 774 échecs du
+// réindexage accumulés en six mois).
+const KEEP = { removeOnComplete: 50, removeOnFail: 200 };
 
 // Export queues for use in API routes
 export let feedbackQueue: Queue;
@@ -37,6 +43,7 @@ export async function startWorkers(): Promise<void> {
   indexRebuildQueue = new Queue('index-rebuild', { connection });
   learningReindexQueue = new Queue('learning-reindex', { connection });
   knowledgeQueue = new Queue('knowledge-ingest', { connection });
+  sweepQueue = new Queue(AUTOMATION_SWEEP_QUEUE, { connection });
 
   // Create workers
   workers.push(
@@ -48,6 +55,7 @@ export async function startWorkers(): Promise<void> {
     // Ici (process de l'API) et pas dans worker-runner : c'est ce process qui a
     // la configuration de l'IA locale utilisée pour extraire les objections.
     createKnowledgeWorker(connection),
+    createAutomationSweepWorker(connection),
   );
 
   // Schedule periodic index rebuild (every 6 hours)
@@ -57,6 +65,7 @@ export async function startWorkers(): Promise<void> {
     {
       name: 'scheduled-rebuild',
       data: { trigger: 'scheduled' },
+      opts: KEEP,
     },
   );
 
@@ -67,6 +76,7 @@ export async function startWorkers(): Promise<void> {
     {
       name: 'scheduled-reindex',
       data: { trigger: 'scheduled' },
+      opts: KEEP,
     },
   );
 
@@ -81,7 +91,14 @@ export async function startWorkers(): Promise<void> {
     {
       name: 'scheduled-knowledge',
       data: { trigger: 'scheduled' },
+      opts: KEEP,
     },
+  );
+
+  await sweepQueue.upsertJobScheduler(
+    'automation-sweep',
+    { every: AUTOMATION_SWEEP_EVERY_MS },
+    { name: 'scheduled-sweep', data: {}, opts: KEEP },
   );
 
   openAutomationsQueue(connection);
@@ -89,7 +106,7 @@ export async function startWorkers(): Promise<void> {
 
   logger.info({
     workers: workers.length,
-    queues: ['feedback', 'usage-extraction', 'corpus-enrich', 'index-rebuild', 'learning-reindex', 'knowledge-ingest'],
+    queues: ['feedback', 'usage-extraction', 'corpus-enrich', 'index-rebuild', 'learning-reindex', 'knowledge-ingest', AUTOMATION_SWEEP_QUEUE],
   }, 'workers.started');
 }
 
@@ -102,6 +119,7 @@ export async function stopWorkers(): Promise<void> {
   if (indexRebuildQueue) await indexRebuildQueue.close();
   if (learningReindexQueue) await learningReindexQueue.close();
   if (knowledgeQueue) await knowledgeQueue.close();
+  if (sweepQueue) await sweepQueue.close();
   if (feedbackQueue) await feedbackQueue.close();
   if (usageExtractionQueue) await usageExtractionQueue.close();
   if (corpusEnrichQueue) await corpusEnrichQueue.close();

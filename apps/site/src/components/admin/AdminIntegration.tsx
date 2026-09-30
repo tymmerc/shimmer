@@ -50,7 +50,9 @@ export function AdminIntegration() {
  { event: 'Commande expédiée', topic: 'orders/fulfilled', path: `${data.base}/shimmer/api/webhooks/shopify/orders_fulfilled?store=${data.store.id}` },
  { event: 'Colis créé (transporteur et suivi)', topic: 'fulfillments/create', path: `${data.base}/shimmer/api/webhooks/shopify/fulfillments_update?store=${data.store.id}` },
  { event: 'Colis mis à jour (en transit, livré)', topic: 'fulfillments/update', path: `${data.base}/shimmer/api/webhooks/shopify/fulfillments_update?store=${data.store.id}` },
- { event: 'Produit mis à jour (retour de stock)', topic: 'products/update', path: `${data.base}/shimmer/api/webhooks/shopify/products_update?store=${data.store.id}` },
+ { event: 'Produit créé (catalogue)', topic: 'products/create', path: `${data.base}/shimmer/api/webhooks/shopify/products_update?store=${data.store.id}` },
+ { event: 'Produit mis à jour (catalogue, retour de stock)', topic: 'products/update', path: `${data.base}/shimmer/api/webhooks/shopify/products_update?store=${data.store.id}` },
+ { event: 'Produit supprimé (retiré du vendeur)', topic: 'products/delete', path: `${data.base}/shimmer/api/webhooks/shopify/products_delete?store=${data.store.id}` },
  { event: 'Niveau de stock (optionnel, plus précis)', topic: 'inventory_levels/update', path: `${data.base}/shimmer/api/webhooks/shopify/inventory_levels_update?store=${data.store.id}` },
  ];
 

@@ -30,7 +30,8 @@ export const DEFAULT_LLM_BUDGET_EUR = 10;
 /** €/Mtoken (entrée, sortie). Ordres de grandeur, pas des prix contractuels. */
 const PRICE_TABLE: Array<{ match: RegExp; inEUR: number; outEUR: number }> = [
   { match: /qwen|llama|gemma|phi[0-9-]|:\d+b/i, inEUR: 0, outEUR: 0 }, // local (Ollama)
-  { match: /mistral-small|ministral|open-mistral/i, inEUR: 0.09, outEUR: 0.28 },
+  // Mistral Small 4 : 0,15 $ / 0,60 $ le million (septembre 2026), arrondi au-dessus.
+  { match: /mistral-small|ministral|open-mistral/i, inEUR: 0.14, outEUR: 0.56 },
   { match: /mistral-large|mistral-medium/i, inEUR: 1.8, outEUR: 5.5 },
   { match: /haiku/i, inEUR: 0.9, outEUR: 4.6 },
   { match: /sonnet/i, inEUR: 2.8, outEUR: 14 },

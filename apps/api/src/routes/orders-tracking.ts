@@ -3,12 +3,11 @@
  * The actual notification (SMS / email) is queued; the route returns what will be sent.
  */
 
-import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { getPrisma, logger, ShimmerError } from '@shimmer/core';
 import { sendEmail } from '@shimmer/email-connector';
-import { enqueueReviewRequest } from '../lib/automations/queue.js';
+import { scheduleReviewOnDelivery } from '../lib/review-on-delivery.js';
 import { sendSms } from '@shimmer/sms-connector';
 
 export const ordersTrackingRouter = Router();
@@ -202,32 +201,9 @@ ordersTrackingRouter.patch('/:id/status', async (req: Request, res: Response, ne
     }
 
     // When the order becomes delivered, create a review request and send the ask
-    let reviewRequestId: number | null = null;
-    if (body.status === 'delivered' && customer) {
-      const existing = await prisma.reviewRequest.findFirst({ where: { orderId: id } });
-      if (!existing) {
-        // Le jeton est la seule protection de la page d'avis publique : aléatoire fort.
-        const token = randomUUID();
-        const scheduledAt = new Date(Date.now() + 48 * 3600 * 1000);
-        const expiresAt = new Date(Date.now() + 30 * 86400 * 1000);
-        const rr = await prisma.reviewRequest.create({
-          data: {
-            storeId,
-            orderId: id,
-            customerId: customer.id,
-            token,
-            scheduledAt,
-            expiresAt,
-          },
-        });
-        reviewRequestId = rr.id;
-        try {
-          await enqueueReviewRequest(rr.id, scheduledAt);
-        } catch (err) {
-          logger.warn({ err, reviewRequestId: rr.id }, 'review-request.enqueue-failed');
-        }
-      }
-    }
+    const reviewRequestId = body.status === 'delivered' && customer
+      ? await scheduleReviewOnDelivery(storeId, id)
+      : null;
 
     logger.info({ storeId, orderId: id, status: body.status, emailId: emailResult?.id, smsId: smsResult?.id, reviewRequestId }, 'order.status.updated');
     res.json({

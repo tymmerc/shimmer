@@ -1,4 +1,5 @@
 export { ClaudeClient, ShimmerError, hasClaudeFallback, resolveClaudeApiKey } from './claude-client.js';
+export { hasMistral, interactiveProvider, resolveMistralApiKey, mistralChat, MISTRAL_MODEL } from './mistral.js';
 export { getPrisma, closePrisma } from './db.js';
 export { getRedis, closeRedis } from './redis.js';
 export { logger, createLogger, LOG_REDACT_PATHS } from './logger.js';

@@ -9,7 +9,7 @@
 
 import { isEmailConfigured, pickEmailProvider } from '@shimmer/email-connector';
 import { isSmsConfigured } from '@shimmer/sms-connector';
-import { hasClaudeFallback } from '@shimmer/core';
+import { hasClaudeFallback, hasMistral, MISTRAL_MODEL } from '@shimmer/core';
 
 export interface ReadinessItem {
   key: string;
@@ -27,6 +27,7 @@ export interface ReadinessReport {
 export function buildReadinessReport(): ReadinessReport {
   const llmProvider = process.env.LLM_PROVIDER || 'ollama';
   const claudeFallback = hasClaudeFallback();
+  const mistral = hasMistral();
 
   const items: ReadinessItem[] = [
     {
@@ -54,6 +55,14 @@ export function buildReadinessReport(): ReadinessReport {
         : claudeFallback
           ? 'Ollama (primary) + Claude fallback'
           : 'Ollama only — no Claude fallback. If Ollama is down, the vendeur degrades to product lists.',
+    },
+    {
+      key: 'llm-vendor',
+      ok: true,
+      level: mistral ? 'ready' : 'degraded',
+      detail: mistral
+        ? `Vendeur sur Mistral (${MISTRAL_MODEL}, hébergé en Europe) ; SAV et tâches de nuit en local.`
+        : 'Vendeur sur l\'IA locale (lente sur ce VPS : ~18 s) ; au-delà de VENDOR_LLM_DEADLINE_MS le code répond seul. Poser MISTRAL_API_KEY pour 1 à 2 s.',
     },
     {
       key: 'database',

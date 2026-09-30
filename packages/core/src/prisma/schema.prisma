@@ -375,6 +375,9 @@ model ChatSession {
   escalationReason      String?    @map("escalation_reason") @db.Text
   resolvedAt            DateTime?  @map("resolved_at")
   customerEmail         String?    @map("customer_email") @db.VarChar(255)
+  /// Identifiant visiteur du widget (cookie shimmer, avec consentement) : relie
+  /// une commande payée (note_attributes.shimmer_vid) à la conversation.
+  visitorId             String?    @map("visitor_id") @db.VarChar(80)
   recommendedProductIds Json       @default("[]") @map("recommended_product_ids")
   attributedOrderId     Int?       @map("attributed_order_id")
   mode                  String     @default("sav") @db.VarChar(20)
@@ -386,6 +389,7 @@ model ChatSession {
   @@index([sessionToken])
   @@index([status])
   @@index([storeId, customerEmail])
+  @@index([storeId, visitorId])
   @@map("chat_sessions")
 }
 

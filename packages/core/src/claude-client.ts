@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { ClaudeMessage, ClaudeOptions, ClaudeStreamChunk } from './types.js';
 import { logger } from './logger.js';
 import { estimateLlmCostEUR, isOverLlmBudget, recordLlmSpend } from './llm-budget.js';
+import { mistralChat, resolveMistralApiKey } from './mistral.js';
 
 const LLM_PROVIDER = process.env.LLM_PROVIDER || 'ollama'; // 'claude' | 'ollama'
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
@@ -25,7 +26,7 @@ export interface ClaudeClientOptions {
   apiKey?: string;
   /** Force a provider, overriding LLM_PROVIDER env. Use "claude" for quality-critical
    *  flows that should not fall back to the local ollama instance. */
-  provider?: 'claude' | 'ollama';
+  provider?: 'claude' | 'ollama' | 'mistral';
 }
 
 /**
@@ -78,6 +79,7 @@ export class ClaudeClient {
     messages: ClaudeMessage[],
     options: ClaudeOptions = {},
   ): Promise<string> {
+    if (this.provider === 'mistral') return this.mistralComplete(messages, options);
     if (this.provider === 'ollama') {
       try {
         return await this.ollamaComplete(messages, options);
@@ -106,6 +108,12 @@ export class ClaudeClient {
     messages: ClaudeMessage[],
     options: ClaudeOptions = {},
   ): AsyncGenerator<ClaudeStreamChunk> {
+    if (this.provider === 'mistral') {
+      // Réponse en 1 à 2 s : pas besoin de flux, on la rend d'un bloc.
+      yield { type: 'text', text: await this.mistralComplete(messages, options) };
+      yield { type: 'done' };
+      return;
+    }
     if (this.provider === 'ollama') {
       // For streaming we can't retroactively switch mid-stream, so probe with a
       // buffered fallback only if the stream errors before yielding anything.
@@ -159,6 +167,31 @@ export class ClaudeClient {
         throw new ShimmerError('LLM returned invalid JSON', 'LLM_INVALID_JSON', 500);
       }
     }
+  }
+
+  // ── Mistral ───────────────────────────────────────────────────
+
+  private async mistralComplete(messages: ClaudeMessage[], options: ClaudeOptions = {}): Promise<string> {
+    const apiKey = resolveMistralApiKey();
+    // Sans clé, ou boutique au plafond du mois : l'IA locale, comme pour Claude.
+    if (!apiKey || (options.storeId && (await isOverLlmBudget(options.storeId)))) {
+      return this.ollamaComplete(messages, options);
+    }
+    const r = await mistralChat({
+      apiKey,
+      messages,
+      systemPrompt: options.systemPrompt,
+      model: options.model && !/:/.test(options.model) ? options.model : undefined,
+      temperature: options.temperature,
+      maxTokens: options.maxTokens,
+      timeout: options.timeout,
+      maxRetries: options.maxRetries,
+    });
+    if (options.storeId) {
+      void recordLlmSpend(options.storeId, estimateLlmCostEUR(r.model, r.inputTokens, r.outputTokens));
+    }
+    logger.info({ provider: 'mistral', model: r.model, inputTokens: r.inputTokens, outputTokens: r.outputTokens }, 'llm.complete');
+    return r.text;
   }
 
   // ── Ollama ────────────────────────────────────────────────────

@@ -4,8 +4,8 @@
  * Runs all sweeps in sequence. Each sweep is isolated: an error in one does
  * not abort the others. Returns a single combined report.
  *
- * Called periodically (setInterval from workers/index.ts) and on demand
- * (POST /api/automations/run for ops).
+ * Called every 15 min by the automation-sweep scheduler (workers/index.ts,
+ * safety net for lost per-entity jobs) and on demand (POST /api/automations/run).
  */
 
 import { logger } from '@shimmer/core';
@@ -62,10 +62,9 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickRep
   return report;
 }
 
-// runAutomationTick is kept as a manual backfill tool, invoked via
-// POST /api/automations/run. There is no background timer — the per-entity
-// jobs are scheduled at the actual event (cart created, order delivered, etc.)
-// through the BullMQ queue defined in queue.ts.
+// The per-entity jobs are scheduled at the actual event (cart created, order
+// delivered, etc.) through the BullMQ queue defined in queue.ts; this tick is
+// the safety net that catches anything those jobs missed.
 
 let lastReport: TickReport | null = null;
 

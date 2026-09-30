@@ -6,11 +6,11 @@ API : `http://localhost:3003` en dev, `https://tymmerc.eu/shimmer/api` en prod.
 
 ---
 
-## 1. Créer le store (public, pas d'auth)
+## 1. Créer le store (public, pas d'auth ; `config` n'accepte que ownerEmail, vertical, platform, createdVia)
 
 ```bash
 curl -X POST -H "Content-Type: application/json" \
-  -d '{"name":"Ma Boutique"}' \
+  -d '{"name":"Ma Boutique","config":{"ownerEmail":"vous@boutique.fr"}}' \
   http://localhost:3003/api/stores
 ```
 

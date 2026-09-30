@@ -132,7 +132,7 @@ chatRouter.post('/message', async (req: Request, res: Response, next: NextFuncti
       // Non-streaming — dispatch sales vs SAV
       const mode = detectMode(body.message, body.mode);
       if (mode === 'sales') {
-        res.json(await handleSalesMessage(req.storeId!, body.message, body.sessionToken, customerEmail));
+        res.json(await handleSalesMessage(req.storeId!, body.message, body.sessionToken, customerEmail, body.visitorId));
       } else {
         res.json({ ...(await handleChatMessage(req.storeId!, body.message, body.sessionToken, customerEmail)), mode: 'sav' });
       }

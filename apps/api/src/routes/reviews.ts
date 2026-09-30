@@ -173,6 +173,10 @@ reviewsRouter.post('/:id/moderate', async (req: Request, res: Response, next: Ne
     const review = await moderateReview(id, req.storeId!, body.action, body.note);
     res.json(review);
   } catch (err) {
+    if (err instanceof Error && err.message === 'Review not found') {
+      res.status(404).json({ error: 'Review not found' });
+      return;
+    }
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Validation error', details: err.errors });
       return;

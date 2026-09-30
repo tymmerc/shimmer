@@ -150,6 +150,19 @@ async function sendViaMailgun(
  * structured result. Never throws (except when the store itself is missing,
  * which is a programming error worth surfacing).
  */
+/**
+ * Destinataires qui ne doivent jamais recevoir un vrai e-mail : domaines
+ * réservés aux exemples (RFC 2606) et domaines de test des données de démo.
+ * test.com appartient à quelqu'un : les 10 clients de test de la boutique 1
+ * y ont leur adresse, et les automatisations leur écriraient dès qu'un vrai
+ * fournisseur serait branché.
+ */
+const BLOCKED_RECIPIENT = /@(?:[^@\s]+\.)?(?:example\.(?:com|net|org)|test\.com|[^@\s]+\.(?:test|example|invalid|localhost))$/i;
+
+export function isBlockedRecipient(to: string): boolean {
+  return BLOCKED_RECIPIENT.test(to.trim());
+}
+
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
   const prisma = getPrisma();
   const store = await prisma.store.findUnique({ where: { id: input.storeId } });
@@ -191,7 +204,14 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     return { id: row.id, status: 'mock', provider: 'mock', providerMessageId: `mock-${row.id}` };
   }
 
-  // 3. Real send through the chosen provider.
+  // 3. Adresse de démo ou de test : jamais d'envoi réel.
+  if (isBlockedRecipient(input.to)) {
+    await prisma.sentEmail.update({ where: { id: row.id }, data: { status: 'failed', error: 'blocked: test or example domain' } });
+    logger.warn({ emailId: row.id, provider, tag: input.tag }, 'email.send.blocked-test-domain');
+    return { id: row.id, status: 'failed', provider, error: 'blocked: test or example domain' };
+  }
+
+  // 4. Real send through the chosen provider.
   const result = provider === 'resend'
     ? await sendViaResend(fromAddr, input.to, input.subject, input.bodyText, input.bodyHtml)
     : await sendViaMailgun(fromAddr, input.to, input.subject, input.bodyText, input.bodyHtml);

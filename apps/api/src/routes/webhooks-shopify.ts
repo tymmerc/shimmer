@@ -18,6 +18,8 @@ import { enqueueCartReminders } from '../lib/automations/queue.js';
 import { attributeOrderToChat } from '../lib/attribution.js';
 import { recordOrderForVisitor } from './holdout.js';
 import { detectRestock, notifyRestock, recordStockAlertConversions } from '../lib/stock-alerts.js';
+import { scheduleReviewOnDelivery } from '../lib/review-on-delivery.js';
+import { syncCatalogProduct, deactivateCatalogProduct, type CatalogSyncResult, type ShopifyCatalogProduct } from '../lib/shopify-products.js';
 import {
   shipmentsFromFulfillment,
   orderNameFromFulfillment,
@@ -258,14 +260,15 @@ webhooksShopifyRouter.post(
         },
       });
 
+      // Link the order to the holdout visitor (if the cart carried a shimmer id)
+      const vid = shimmerVisitorId(payload);
+
       try {
-        await attributeOrderToChat(storeId, order.id, email);
+        await attributeOrderToChat(storeId, order.id, email, vid);
       } catch (err) {
         logger.warn({ err, orderId: order.id }, 'shopify.order.attribution-failed');
       }
 
-      // Link the order to the holdout visitor (if the cart carried a shimmer id)
-      const vid = shimmerVisitorId(payload);
       if (vid) {
         try {
           await recordOrderForVisitor(storeId, vid, Number(payload.total_price ?? 0));
@@ -325,6 +328,7 @@ webhooksShopifyRouter.post(
 
       // "fulfilled" = expédiée. Livrée seulement quand le transporteur le dit.
       const newStatus = await applyFulfillments(order, payload.fulfillments ?? [], 'shipped');
+      if (newStatus === 'delivered') await reviewOnDelivery(storeId, order.id);
 
       logger.info({ storeId, orderId: order.id, source: 'shopify', newStatus }, 'shopify.order.fulfilled');
       res.json({ accepted: true, orderId: order.id, status: newStatus });
@@ -362,6 +366,7 @@ webhooksShopifyRouter.post(
       }
 
       const newStatus = await applyFulfillments(order, [payload], 'confirmed');
+      if (newStatus === 'delivered') await reviewOnDelivery(storeId, order.id);
       logger.info({ storeId, orderId: order.id, source: 'shopify', newStatus }, 'shopify.fulfillment.updated');
       res.json({ accepted: true, orderId: order.id, status: newStatus });
     } catch (err) {
@@ -369,6 +374,15 @@ webhooksShopifyRouter.post(
     }
   },
 );
+
+/** Livrée : on programme la demande d'avis (48 h après). Jamais bloquant pour le webhook. */
+async function reviewOnDelivery(storeId: number, orderId: number): Promise<void> {
+  try {
+    await scheduleReviewOnDelivery(storeId, orderId);
+  } catch (err) {
+    logger.warn({ err, storeId, orderId }, 'shopify.review-on-delivery.failed');
+  }
+}
 
 // Espace de verrou Postgres pour les colis (pg_advisory_xact_lock(ns, orderId)).
 const SHIPMENT_LOCK_NS = 7301;
@@ -479,7 +493,27 @@ function productUrlFor(shopDomain: string | undefined, handle: string | null | u
   return `https://${shopDomain}/products/${handle}`;
 }
 
-// POST /api/webhooks/shopify/products_update
+// POST /api/webhooks/shopify/products_delete — la fiche sort du vendeur.
+webhooksShopifyRouter.post(
+  '/products_delete',
+  rawJson,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id: storeId, shopifyConfig } = await resolveStore(req);
+      if (!verifyHmac(req as Request & { rawBody?: Buffer }, shopifyConfig?.webhookSecret)) {
+        throw new ShimmerError('Invalid HMAC', 'INVALID_SIGNATURE', 401);
+      }
+      const id = (req.body as { id?: number }).id;
+      const deactivated = id ? await deactivateCatalogProduct(storeId, String(id)) : 0;
+      logger.info({ storeId, productId: id, deactivated, source: 'shopify' }, 'shopify.product.delete');
+      res.json({ accepted: true, deactivated });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// POST /api/webhooks/shopify/products_update (aussi products/create : même URL)
 webhooksShopifyRouter.post(
   '/products_update',
   rawJson,
@@ -511,8 +545,17 @@ webhooksShopifyRouter.post(
           notified += r.notified;
         }
       }
-      logger.info({ storeId, productId: p.id, restocked, notified, source: 'shopify' }, 'shopify.product.update');
-      res.json({ accepted: true, restocked, notified });
+      // La fiche du catalogue suit Shopify (prix, stock, statut, image). Jamais
+      // bloquant : le retour de stock ci-dessus est déjà traité.
+      let catalog: CatalogSyncResult | 'failed' = 'skipped';
+      try {
+        catalog = await syncCatalogProduct(storeId, req.body as ShopifyCatalogProduct);
+      } catch (err) {
+        catalog = 'failed';
+        logger.warn({ err, storeId, productId: p.id }, 'shopify.product.catalog-sync-failed');
+      }
+      logger.info({ storeId, productId: p.id, restocked, notified, catalog, source: 'shopify' }, 'shopify.product.update');
+      res.json({ accepted: true, restocked, notified, catalog });
     } catch (err) {
       next(err);
     }

@@ -8,6 +8,11 @@
  *
  * Returns counts deleted per table so the merchant can record proof of
  * propagation for their own RGPD register.
+ *
+ * Depuis le 30/09 : une personne sans fiche client (inscrite au retour de
+ * stock, qui a seulement écrit) s'efface aussi par son e-mail ; les alertes
+ * de retour de stock et les SMS sont effacés ; les e-mails se comparent sans
+ * tenir compte de la casse.
  */
 
 import { Router, type Request, type Response, type NextFunction } from 'express';
@@ -35,11 +40,15 @@ erasureRouter.post('/', async (req: Request, res: Response, next: NextFunction) 
       ? await prisma.customer.findFirst({ where: { id: body.customerId, storeId } })
       : await prisma.customer.findFirst({ where: { email: body.email!, storeId } });
 
-    if (!customer) {
+    if (!customer && !body.email) {
       throw new ShimmerError('Customer not found', 'NOT_FOUND', 404);
     }
+    const email = (customer?.email ?? body.email ?? '').trim().toLowerCase();
+    const sameEmail = { equals: email, mode: 'insensitive' as const };
 
     const counts = {
+      stockAlerts: 0,
+      sentSms: 0,
       chatSessions: 0,
       knowledgeChunksFromReviews: 0,
       savRequests: 0,
@@ -55,15 +64,34 @@ erasureRouter.post('/', async (req: Request, res: Response, next: NextFunction) 
     // order tracking keeps the email only inside the messages while a check
     // is pending, so also delete sessions whose transcript contains it
     // (position(), not LIKE: no wildcard in an email can widen the match).
-    if (customer.email) {
+    if (email) {
       const r = await prisma.chatSession.deleteMany({
-        where: { storeId, customerEmail: customer.email },
+        where: { storeId, customerEmail: sameEmail },
       });
       const inTranscript = await prisma.$executeRaw`
         DELETE FROM chat_sessions
         WHERE store_id = ${storeId}
-          AND position(${customer.email.trim().toLowerCase()} in lower(messages::text)) > 0`;
+          AND position(${email} in lower(messages::text)) > 0`;
       counts.chatSessions = r.count + inTranscript;
+
+      // Inscriptions au retour de stock (souvent sans fiche client).
+      const alerts = await prisma.stockAlert.deleteMany({ where: { storeId, email: sameEmail } });
+      counts.stockAlerts = alerts.count;
+    }
+
+    if (!customer) {
+      // Pas de fiche : on efface ce qui tient à l'e-mail seul.
+      const carts = await prisma.abandonedCart.deleteMany({ where: { storeId, customerEmail: sameEmail } });
+      counts.abandonedCarts = carts.count;
+      const sent = await prisma.sentEmail.deleteMany({ where: { storeId, toAddr: sameEmail } });
+      counts.sentEmails = sent.count;
+      const mails = await prisma.mailQueue.deleteMany({
+        where: { storeId, OR: [{ fromAddr: sameEmail }, { fromAddr: { endsWith: `<${email}>`, mode: 'insensitive' } }] },
+      });
+      counts.mailQueue = mails.count;
+      logger.info({ storeId, customerId: null, counts }, 'rgpd.erasure.complete');
+      res.json({ ok: true, customerId: null, email, deleted: counts });
+      return;
     }
 
     // 2. Knowledge chunks generated from this customer's reviews
@@ -105,24 +133,29 @@ erasureRouter.post('/', async (req: Request, res: Response, next: NextFunction) 
         storeId,
         OR: [
           { customerId: customer.id },
-          ...(customer.email ? [{ customerEmail: customer.email }] : []),
+          ...(email ? [{ customerEmail: sameEmail }] : []),
         ],
       },
     });
     counts.abandonedCarts = r5.count;
 
     // 6. Sent emails to this customer
-    if (customer.email) {
+    if (email) {
       const r = await prisma.sentEmail.deleteMany({
-        where: { storeId, toAddr: customer.email },
+        where: { storeId, toAddr: sameEmail },
       });
       counts.sentEmails = r.count;
     }
+    if (customer.phone) {
+      const r = await prisma.sentSms.deleteMany({ where: { storeId, toNumber: customer.phone } });
+      counts.sentSms = r.count;
+    }
 
     // 7. Inbound mails from this customer
-    if (customer.email) {
+    if (email) {
+      // L'expéditeur est parfois au format « Nom <adresse> ».
       const r = await prisma.mailQueue.deleteMany({
-        where: { storeId, fromAddr: customer.email },
+        where: { storeId, OR: [{ fromAddr: sameEmail }, { fromAddr: { endsWith: `<${email}>`, mode: 'insensitive' } }] },
       });
       counts.mailQueue = r.count;
     }
