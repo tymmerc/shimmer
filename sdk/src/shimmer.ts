@@ -4,6 +4,7 @@
  */
 
 import { looksLikeOrderTracking } from './order-intent';
+import { formatPrice } from './price';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -913,7 +914,7 @@ class SearchWidget {
 
   /** Affiche une question de précision + des puces de réponse rapide. */
   private askToRefine(query: string) {
-    this.setQuestion(`Avec plaisir. Pour bien vous orienter sur « ${query} », c'est pour quelle occasion ?`);
+    this.setQuestion(`Avec plaisir. Pour bien vous orienter sur «\u00A0${query}\u00A0», c'est pour quelle occasion\u00A0?`);
     const chips = ['Apéritif', 'Un repas', 'Un cadeau', 'Découvrir', 'Petit budget'];
     this.chipsEl.innerHTML =
       `<div class="shimmer-chips">${chips.map(c => `<button class="shimmer-chip" type="button">${esc(c)}</button>`).join('')}</div>`;
@@ -1003,7 +1004,7 @@ class SearchWidget {
     const box = document.createElement('div');
     box.className = 'shimmer-restock';
     box.innerHTML = `
-      <div class="shimmer-restock-title"><strong>${esc(it.name)}</strong> est épuisé. Je vous préviens dès qu'il revient ?</div>
+      <div class="shimmer-restock-title"><strong>${esc(it.name)}</strong> est épuisé. Je vous préviens dès qu'il revient\u00A0?</div>
       <form class="shimmer-restock-form">
         <input type="email" required placeholder="votre@email.fr" autocomplete="email" />
         <button type="submit">Prévenez-moi</button>
@@ -1045,8 +1046,31 @@ class SearchWidget {
           <div class="shimmer-search-item-name">${esc(p.name)}</div>
           <div class="shimmer-search-item-desc">${esc(p.category || '')} ${p.brand ? '· ' + esc(p.brand) : ''}</div>
         </div>
-        <div class="shimmer-search-item-price">${esc(p.price)} €</div>
+        <div class="shimmer-search-item-price">${esc(formatPrice(p.price))}</div>
       </div>`).join('');
+    // Une ligne mène au produit : on rejoue la recherche NATIVE du thème sur
+    // son nom (même mécanisme que « Voir les résultats classiques »). Sans
+    // formulaire natif, la ligne reste une simple recommandation.
+    const shown = products.slice(0, 8);
+    this.resultsEl.querySelectorAll<HTMLElement>('.shimmer-search-item').forEach((row, i) => {
+      const product = shown[i];
+      if (!product || !this.anchor?.form) return;
+      row.setAttribute('role', 'link');
+      row.tabIndex = 0;
+      const go = () => this.searchNative(product.name);
+      row.addEventListener('click', go);
+      row.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    });
+  }
+
+  /** Lance la recherche native du thème sur `query` (nos handlers sont contournés). */
+  private searchNative(query: string) {
+    const a = this.anchor;
+    this.close();
+    if (!a?.form) return;
+    a.value = query;
+    this.bypassNext = true;
+    a.form.submit();
   }
 
   /** Branche (ou remplace) le callback d'enrôlement après coup : utilisé quand
