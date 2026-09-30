@@ -33,7 +33,7 @@ integrationRouter.get('/status', async (req: Request, res: Response, next: NextF
     }
 
     const cfg = (store.config ?? {}) as {
-      shopify?: { shop?: string; webhookSecret?: string };
+      shopify?: { shop?: string; shopDomain?: string; webhookSecret?: string };
       woocommerce?: { siteUrl?: string; webhookSecret?: string };
     };
 
@@ -66,7 +66,7 @@ integrationRouter.get('/status', async (req: Request, res: Response, next: NextF
         budget: await getLlmBudgetStatus(storeId),
       },
       shopify: {
-        configured: !!cfg.shopify?.shop,
+        configured: !!(cfg.shopify?.shopDomain ?? cfg.shopify?.shop),
         secretSet: !!cfg.shopify?.webhookSecret,
       },
       woocommerce: {

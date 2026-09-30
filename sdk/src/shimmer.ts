@@ -1036,7 +1036,7 @@ class SearchWidget {
     if (!products.length) { this.resultsEl.innerHTML = ''; return; }
     this.resultsEl.innerHTML = products.slice(0, 8).map((p) => `
       <div class="shimmer-search-item" data-id="${p.id}">
-        ${p.imageUrl ? `<img src="${p.imageUrl}" alt="${esc(p.name)}" />` : '<div style="width:56px;height:56px;background:#f3f4f6;border-radius:8px"></div>'}
+        ${safeUrl(p.imageUrl) ? `<img src="${safeUrl(p.imageUrl)}" alt="${esc(p.name)}" />` : '<div style="width:56px;height:56px;background:#f3f4f6;border-radius:8px"></div>'}
         <div class="shimmer-search-item-info">
           <div class="shimmer-search-item-name">${esc(p.name)}</div>
           <div class="shimmer-search-item-desc">${esc(p.category || '')} ${p.brand ? '· ' + esc(p.brand) : ''}</div>
@@ -1157,10 +1157,10 @@ class ChatWidget {
     if (products?.length) {
       html += `<div class="shimmer-products">${products.map((p) => `
         <div class="shimmer-product-card">
-          ${p.imageUrl ? `<img src="${p.imageUrl}" alt="${esc(p.name)}" />` : ''}
+          ${safeUrl(p.imageUrl) ? `<img src="${safeUrl(p.imageUrl)}" alt="${esc(p.name)}" />` : ''}
           <div class="shimmer-product-card-info">
             <div class="shimmer-product-card-name">${esc(p.name)}</div>
-            <div class="shimmer-product-card-price">${p.price}${p.currency === 'EUR' ? '€' : ' ' + p.currency}</div>
+            <div class="shimmer-product-card-price">${esc(p.price)}${p.currency === 'EUR' ? '€' : ' ' + esc(p.currency)}</div>
           </div>
         </div>
       `).join('')}</div>`;
@@ -1225,7 +1225,8 @@ class ChatWidget {
           }
           fullText += text;
           // Render with bold support
-          msgDiv.innerHTML = fullText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+          // Texte du LLM : échappé d'abord, seul le gras est rendu.
+          msgDiv.innerHTML = esc(fullText).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
           this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
         },
         onMeta: (meta: any) => {
@@ -1248,7 +1249,7 @@ class ChatWidget {
                 <div class="shimmer-product-card-info">
                   <div class="shimmer-product-card-name">${esc(p.name)}</div>
                   <div style="font-size:11px;color:#6b7280">${esc(p.brand)}</div>
-                  <div class="shimmer-product-card-price">${p.price}</div>
+                  <div class="shimmer-product-card-price">${esc(p.price)}</div>
                 </div>
               </div>
             `).join('')}</div>`;
@@ -1256,8 +1257,8 @@ class ChatWidget {
 
           if (metaData?.qualification?.score > 0) {
             html += `<div class="shimmer-progress">
-              <div class="shimmer-progress-bar"><div class="shimmer-progress-fill" style="width:${metaData.qualification.score}%"></div></div>
-              <div class="shimmer-progress-label">Qualification: ${metaData.qualification.score}%</div>
+              <div class="shimmer-progress-bar"><div class="shimmer-progress-fill" style="width:${Number(metaData.qualification.score) || 0}%"></div></div>
+              <div class="shimmer-progress-label">Qualification: ${Number(metaData.qualification.score) || 0}%</div>
             </div>`;
           }
 
@@ -1373,10 +1374,22 @@ function validCustomer(c: ShimmerCustomer | null | undefined): ShimmerCustomer |
   return /^[0-9a-f]{64}$/i.test(signature) && /^\d{9,11}$/.test(ts) ? { email: c.email, ts, signature } : null;
 }
 
-function esc(s: string): string {
-  const el = document.createElement('span');
-  el.textContent = s;
-  return el.innerHTML;
+/** Échappe pour le HTML, attributs compris (guillemets). L'ancienne version
+ *  passait par textContent, qui laisse passer `"` : un nom de produit pouvait
+ *  sortir d'un attribut alt="…" et poser un gestionnaire d'événement. */
+function esc(s: unknown): string {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** URL d'image acceptée seulement en http(s), échappée pour l'attribut. */
+function safeUrl(u: unknown): string {
+  const v = String(u ?? '').trim();
+  return /^https?:\/\//i.test(v) ? esc(v) : '';
 }
 
 /** Une requête est "vague" si c'est un ou deux mots très génériques (couleur,
@@ -1521,6 +1534,7 @@ function detectAndWatchCmp(onSignal: (granted: boolean) => void): boolean {
 
 async function fetchHoldoutDecision(
   apiUrl: string,
+  apiKey: string,
   storeId: number,
   visitorId: string,
 ): Promise<{ control: boolean; bucket: number; holdoutPct: number }> {
@@ -1528,7 +1542,7 @@ async function fetchHoldoutDecision(
   // the caller defaults to treatment (widget shown).
   const res = await fetchWithTimeout(
     `${apiUrl}/api/holdout/decision?store=${storeId}&visitorId=${encodeURIComponent(visitorId)}`,
-    {},
+    { headers: { Authorization: `Bearer ${apiKey}` } },
     5_000,
   );
   if (!res.ok) throw new Error('holdout-decision-failed');
@@ -1544,16 +1558,18 @@ const ENROLL_FLAG = 'shimmer_enrolled';
  * enrolled populations stay comparable. Server side is first-trigger-wins;
  * the sessionStorage flag just avoids re-sending during the same session.
  */
-function trackSearchEnrollment(apiUrl: string, storeId: number, visitorId: string, exposed: boolean): void {
+function trackSearchEnrollment(apiUrl: string, apiKey: string, storeId: number, visitorId: string, exposed: boolean): void {
   try {
     if (window.sessionStorage.getItem(ENROLL_FLAG)) return;
   } catch { /* private mode: we just send every time, server dedupes */ }
   void fetch(`${apiUrl}/api/holdout/track`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ visitorId, store: storeId, exposed, trigger: 'search' }),
     keepalive: true,
-  }).then(() => {
+  }).then((res) => {
+    // Refusé (clé, limite) : on réessaiera à la prochaine recherche.
+    if (!res.ok) return;
     try { window.sessionStorage.setItem(ENROLL_FLAG, '1'); } catch { /* ignore */ }
   }).catch(() => { /* fail-silent: never break the host page */ });
 }
@@ -2054,7 +2070,7 @@ export class Shimmer {
         } catch { /* ignore */ }
       }
       if (storeId) {
-        const decision = await fetchHoldoutDecision(this.config.apiUrl, storeId, visitorId);
+        const decision = await fetchHoldoutDecision(this.config.apiUrl, this.config.apiKey, storeId, visitorId);
         control = decision.control;
         bucket = decision.bucket;
       }
@@ -2085,7 +2101,7 @@ export class Shimmer {
       this.chatWidget = null;
       if (resolvedStoreId) {
         watchNativeSearchForEnrollment(this.config.searchSelector, () =>
-          trackSearchEnrollment(this.config.apiUrl, resolvedStoreId, visitorId, false));
+          trackSearchEnrollment(this.config.apiUrl, this.config.apiKey, resolvedStoreId, visitorId, false));
       }
       return;
     }
@@ -2095,7 +2111,7 @@ export class Shimmer {
     // input[type=search]). Le chatbot flottant n'est PAS monté par défaut — il
     // ne l'est que si le marchand l'active explicitement (enableChat).
     const onQuery = resolvedStoreId
-      ? () => trackSearchEnrollment(this.config.apiUrl, resolvedStoreId, visitorId, true)
+      ? () => trackSearchEnrollment(this.config.apiUrl, this.config.apiKey, resolvedStoreId, visitorId, true)
       : undefined;
     if (this.searchWidget) {
       // Monté en mode session avant le signal : on branche juste l'enrôlement.

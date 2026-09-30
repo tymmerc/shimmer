@@ -52,7 +52,7 @@ export async function processReviewRequestJob({ reviewRequestId }: { reviewReque
       `Bonjour ${firstName},\n\n` +
       `Votre commande ${rr.order.orderNumber} vous est bien parvenue ? ` +
       `Un mot, deux étoiles, ça nous aide vraiment.\n\n` +
-      `Lien : https://tymmerc.eu/shimmer/v4/review/?token=${rr.token}\n\n` +
+      `Lien : https://tymmerc.eu/shimmer/review/?token=${rr.token}\n\n` +
       `Merci, l'équipe ${rr.store.name}.`,
     tag: 'review-request',
     relatedEntity: 'review_request',
@@ -99,7 +99,7 @@ export async function sweepReviewRequests(now: Date = new Date()): Promise<Sweep
           `Bonjour ${firstName},\n\n` +
           `Votre commande ${rr.order.orderNumber} vous est bien parvenue ? ` +
           `Un mot, deux étoiles, ça nous aide vraiment.\n\n` +
-          `Lien : https://tymmerc.eu/shimmer/v4/review/?token=${rr.token}\n\n` +
+          `Lien : https://tymmerc.eu/shimmer/review/?token=${rr.token}\n\n` +
           `Merci, l'équipe ${rr.store.name}.`,
         tag: 'review-request',
         relatedEntity: 'review_request',

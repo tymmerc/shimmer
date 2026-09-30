@@ -7,6 +7,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { getPrisma } from '@shimmer/core';
 import { getQueueHealth } from '../lib/automations/queue.js';
 import { buildReadinessReport } from '../lib/config-check.js';
+import { isOperator } from '../middleware/operator.js';
 
 export const adminStatsRouter = Router();
 
@@ -288,10 +289,12 @@ adminStatsRouter.get('/summary', async (req: Request, res: Response, next: NextF
 // Lets the operator answer "did the cart reminders / review requests actually
 // run, and if not, why?". Failed jobs are retained for 7 days (dead-letter).
 // ─────────────────────────────────────────────────────────────
-adminStatsRouter.get('/queues', async (_req: Request, res: Response, next: NextFunction) => {
+adminStatsRouter.get('/queues', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const health = await getQueueHealth(25);
-    res.json(health);
+    // La file est commune à toutes les boutiques : les échecs (ids, données
+    // des jobs, raisons) ne sont montrés qu'à l'opérateur.
+    res.json(isOperator(req.storeId) ? health : { ...health, failures: [] });
   } catch (err) {
     next(err);
   }

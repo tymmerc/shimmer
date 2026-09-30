@@ -45,19 +45,19 @@ export function AdminIntegration() {
  if (!data) return <ErrorBlock message="Aucune donnée" />;
 
  const shopifyUrls = [
- { event: 'Panier abandonné', topic: 'checkouts/update', path: `${data.base}/api/webhooks/shopify/abandoned_checkout?store=${data.store.id}` },
- { event: 'Commande payée', topic: 'orders/paid', path: `${data.base}/api/webhooks/shopify/orders_paid?store=${data.store.id}` },
- { event: 'Commande expédiée', topic: 'orders/fulfilled', path: `${data.base}/api/webhooks/shopify/orders_fulfilled?store=${data.store.id}` },
- { event: 'Colis créé (transporteur et suivi)', topic: 'fulfillments/create', path: `${data.base}/api/webhooks/shopify/fulfillments_update?store=${data.store.id}` },
- { event: 'Colis mis à jour (en transit, livré)', topic: 'fulfillments/update', path: `${data.base}/api/webhooks/shopify/fulfillments_update?store=${data.store.id}` },
- { event: 'Produit mis à jour (retour de stock)', topic: 'products/update', path: `${data.base}/api/webhooks/shopify/products_update?store=${data.store.id}` },
- { event: 'Niveau de stock (optionnel, plus précis)', topic: 'inventory_levels/update', path: `${data.base}/api/webhooks/shopify/inventory_levels_update?store=${data.store.id}` },
+ { event: 'Panier abandonné', topic: 'checkouts/update', path: `${data.base}/shimmer/api/webhooks/shopify/abandoned_checkout?store=${data.store.id}` },
+ { event: 'Commande payée', topic: 'orders/paid', path: `${data.base}/shimmer/api/webhooks/shopify/orders_paid?store=${data.store.id}` },
+ { event: 'Commande expédiée', topic: 'orders/fulfilled', path: `${data.base}/shimmer/api/webhooks/shopify/orders_fulfilled?store=${data.store.id}` },
+ { event: 'Colis créé (transporteur et suivi)', topic: 'fulfillments/create', path: `${data.base}/shimmer/api/webhooks/shopify/fulfillments_update?store=${data.store.id}` },
+ { event: 'Colis mis à jour (en transit, livré)', topic: 'fulfillments/update', path: `${data.base}/shimmer/api/webhooks/shopify/fulfillments_update?store=${data.store.id}` },
+ { event: 'Produit mis à jour (retour de stock)', topic: 'products/update', path: `${data.base}/shimmer/api/webhooks/shopify/products_update?store=${data.store.id}` },
+ { event: 'Niveau de stock (optionnel, plus précis)', topic: 'inventory_levels/update', path: `${data.base}/shimmer/api/webhooks/shopify/inventory_levels_update?store=${data.store.id}` },
  ];
 
  const wooUrls = [
- { event: 'Nouvelle commande', topic: 'order.created', path: `${data.base}/api/webhooks/woocommerce/order_created?store=${data.store.id}` },
- { event: 'Commande mise à jour', topic: 'order.updated', path: `${data.base}/api/webhooks/woocommerce/order_updated?store=${data.store.id}` },
- { event: 'Panier abandonné', topic: 'cart.abandoned', path: `${data.base}/api/webhooks/woocommerce/cart_abandoned?store=${data.store.id}` },
+ { event: 'Nouvelle commande', topic: 'order.created', path: `${data.base}/shimmer/api/webhooks/woocommerce/order_created?store=${data.store.id}` },
+ { event: 'Commande mise à jour', topic: 'order.updated', path: `${data.base}/shimmer/api/webhooks/woocommerce/order_updated?store=${data.store.id}` },
+ { event: 'Panier abandonné', topic: 'cart.abandoned', path: `${data.base}/shimmer/api/webhooks/woocommerce/cart_abandoned?store=${data.store.id}` },
  ];
 
  return (

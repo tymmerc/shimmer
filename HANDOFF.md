@@ -13,7 +13,7 @@ Plateforme IA e-commerce : un vendeur conversationnel dans la barre de recherche
 - Banc d'essai automatisations : https://tymmerc.eu/shimmer/lab/
 - Fausse boutique (vendeur barre de recherche) : https://tymmerc.eu/shimmer/lab/boutique-test.html
 - Vidéo de présentation (Remotion) : https://tymmerc.eu/shimmer/lab/shimmer-video.mp4
-- n8n : https://tymmerc.eu/n8n/ — owner `admin@tymmerc.eu` / mot de passe temporaire `ShimmerN8n2026` (à changer)
+- n8n : https://tymmerc.eu/n8n/ (fermé au public depuis le 30/09, accès par tunnel SSH `ssh -L 5678:127.0.0.1:5678`). Compte propriétaire `admin@tymmerc.eu`, mot de passe à changer : il a été publié dans l’historique de ce dépôt public (commit f94867d).
 
 ## 3. Accès / secrets (où ils sont)
 - DB password : dans `/opt/shimmer/.env` (`DATABASE_URL`, Postgres port 5434, base `ecommerce_db`, user `ecommerce`).

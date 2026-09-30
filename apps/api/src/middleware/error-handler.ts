@@ -36,6 +36,14 @@ export function errorHandler(
     return;
   }
 
+  // body-parser : corps trop gros (413) ou JSON invalide (400).
+  const status = (err as { status?: unknown }).status;
+  if (typeof status === 'number' && status >= 400 && status < 500) {
+    logger.warn({ status, type: (err as { type?: unknown }).type }, 'request.body.rejected');
+    res.status(status).json({ error: status === 413 ? 'Payload too large' : 'Invalid request body', code: 'BAD_BODY' });
+    return;
+  }
+
   logger.error({ err }, 'unhandled.error');
   res.status(500).json({
     error: 'Internal server error',

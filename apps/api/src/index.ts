@@ -2,7 +2,7 @@
  * Shimmer API — Express server entry point.
  */
 
-import express, { type Request } from 'express';
+import express, { type Request, type Response, type NextFunction } from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
 import cors from 'cors';
@@ -11,6 +11,7 @@ import { initializeIndexes } from '@shimmer/smart-search';
 import { authMiddleware, widgetAuth } from './middleware/auth.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { createRateLimiter, trustProxy } from './middleware/rate-limiter.js';
+import { assertPublishableSecret } from './lib/publishable-key.js';
 import { searchRouter } from './routes/search.js';
 import { taxonomyRouter } from './routes/taxonomy.js';
 import { pipelineRouter } from './routes/pipeline.js';
@@ -65,18 +66,29 @@ app.use(compression());
 // maxAge : le préflight (Authorization + X-Shimmer-Store) reste en cache 10 min,
 // sinon chaque envoi du SDK, y compris à la fermeture de page, en paie un.
 app.use(cors({ origin: '*', credentials: false, maxAge: 600 }));
+// Le limiteur passe AVANT la lecture des corps : un inconnu ne fait plus lire
+// 50 Mo à l'API avant d'être compté (audit du 30/09).
+app.use(createRateLimiter());
 // We capture rawBody so downstream HMAC checks (Shopify, WooCommerce, etc.)
 // can verify signatures against the exact bytes Shopify sent. Without this,
 // JSON.parse/re-stringify would invalidate the HMAC.
-app.use(express.json({
-  limit: '50mb',
-  verify: (req: Request & { rawBody?: Buffer }, _res, buf) => {
-    req.rawBody = Buffer.from(buf);
-  },
-}));
-app.use(express.text({ limit: '50mb', type: 'text/csv' }));
+const keepRawBody = (req: Request & { rawBody?: Buffer }, _res: unknown, buf: Buffer) => {
+  req.rawBody = Buffer.from(buf);
+};
+const jsonDefault = express.json({ limit: '1mb', verify: keepRawBody });
+// Un produit Shopify avec beaucoup de variantes et d'images pèse lourd.
+const jsonWebhooks = express.json({ limit: '5mb', verify: keepRawBody });
+// Import du catalogue : seule route à gros corps, lue APRÈS la clé secrète.
+const catalogBody = [
+  express.json({ limit: '50mb', verify: keepRawBody }),
+  express.text({ limit: '50mb', type: 'text/csv' }),
+];
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.path.startsWith('/api/catalog/') && !req.path.startsWith('/api/catalog/cross-sell/')) return next();
+  if (req.path.startsWith('/api/webhooks/')) return jsonWebhooks(req, res, next);
+  return jsonDefault(req, res, next);
+});
 app.use(createHttpLogger());
-app.use(createRateLimiter());
 
 // Health check (no auth) — fast liveness probe + deeper readiness
 app.get('/health', (_req, res) => {
@@ -166,7 +178,7 @@ app.use('/api/feedback', authMiddleware, feedbackRouter);
 app.use('/api/mail', authMiddleware, mailRouter);
 app.use('/api/reviews', authMiddleware, reviewsRouter);
 app.use('/api/universe', authMiddleware, universeGenRouter);
-app.use('/api/catalog', authMiddleware, catalogImportRouter);
+app.use('/api/catalog', authMiddleware, ...catalogBody, catalogImportRouter);
 app.use('/api/catalog/cross-sell', authMiddleware, crossSellRouter);
 app.use('/api/outbound', authMiddleware, outboundRouter);
 app.use('/api/sav', authMiddleware, savRouter);
@@ -205,6 +217,8 @@ async function start() {
   } catch (err) {
     logger.warn({ err }, 'Index initialization failed — search will be limited');
   }
+
+  assertPublishableSecret();
 
   // Start BullMQ workers
   try {

@@ -3,6 +3,7 @@
  * The actual notification (SMS / email) is queued; the route returns what will be sent.
  */
 
+import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { getPrisma, logger, ShimmerError } from '@shimmer/core';
@@ -205,7 +206,8 @@ ordersTrackingRouter.patch('/:id/status', async (req: Request, res: Response, ne
     if (body.status === 'delivered' && customer) {
       const existing = await prisma.reviewRequest.findFirst({ where: { orderId: id } });
       if (!existing) {
-        const token = `rr_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+        // Le jeton est la seule protection de la page d'avis publique : aléatoire fort.
+        const token = randomUUID();
         const scheduledAt = new Date(Date.now() + 48 * 3600 * 1000);
         const expiresAt = new Date(Date.now() + 30 * 86400 * 1000);
         const rr = await prisma.reviewRequest.create({

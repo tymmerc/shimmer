@@ -14,11 +14,12 @@ export type PublishTarget = 'PRODUCT_PAGE' | 'GOOGLE' | 'TRUSTPILOT';
 export async function publishReview(
   reviewId: number,
   targets: PublishTarget[],
+  storeId: number,
 ) {
   const prisma = getPrisma();
 
-  const review = await prisma.review.findUnique({
-    where: { id: reviewId },
+  const review = await prisma.review.findFirst({
+    where: { id: reviewId, storeId },
     include: { customer: true, product: true },
   });
 

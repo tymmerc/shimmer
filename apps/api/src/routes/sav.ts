@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { getPrisma, logger, ShimmerError } from '@shimmer/core';
 import { sendEmail } from '@shimmer/email-connector';
 import { enqueueSavEscalationCheck } from '../lib/automations/queue.js';
+import { assertCustomerInStore, assertOrderInStore } from '../lib/tenant.js';
 
 export const savRouter = Router();
 
@@ -45,9 +46,12 @@ savRouter.post('/tickets', async (req: Request, res: Response, next: NextFunctio
     const storeId = req.storeId!;
     const prisma = getPrisma();
 
+    await assertCustomerInStore(prisma, storeId, body.customerId);
     // Ensure orderId is valid (or pick a placeholder by linking to a recent order)
     let orderId = body.orderId;
-    if (!orderId) {
+    if (orderId) {
+      await assertOrderInStore(prisma, storeId, orderId, body.customerId);
+    } else {
       const recent = await prisma.order.findFirst({
         where: { storeId, customerId: body.customerId },
         orderBy: { createdAt: 'desc' },
@@ -167,7 +171,7 @@ savRouter.patch('/tickets/:id', async (req: Request, res: Response, next: NextFu
       data.resolvedAt = new Date();
     }
 
-    const updated = await prisma.savRequest.update({ where: { id }, data });
+    const updated = await prisma.savRequest.update({ where: { id: existing.id }, data });
     res.json({ ticket: updated });
   } catch (err) {
     next(err);

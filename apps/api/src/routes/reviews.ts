@@ -51,6 +51,12 @@ const publishSchema = z.object({
 
 export const reviewsRouter = Router();
 
+/** Le jeton ouvre la page d'avis publique au nom du client : il ne sort jamais par l'API marchand. */
+function withoutToken<T extends { token?: unknown }>(row: T): Omit<T, 'token'> {
+  const { token: _token, ...rest } = row;
+  return rest;
+}
+
 // POST /api/reviews/request — Create a review request (triggers questionnaire)
 reviewsRouter.post('/request', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -59,7 +65,8 @@ reviewsRouter.post('/request', async (req: Request, res: Response, next: NextFun
       storeId: req.storeId!,
       ...body,
     });
-    res.json(request);
+    if (!request) { res.status(404).json({ error: 'Order not found for this customer' }); return; }
+    res.json(withoutToken(request));
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Validation error', details: err.errors });
@@ -74,8 +81,9 @@ reviewsRouter.post('/request/:id/send', async (req: Request, res: Response, next
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
-    const request = await sendReviewRequest(id);
-    res.json(request);
+    const request = await sendReviewRequest(id, req.storeId!);
+    if (!request) { res.status(404).json({ error: 'Review request not found' }); return; }
+    res.json(withoutToken(request));
   } catch (err) {
     next(err);
   }
@@ -179,9 +187,13 @@ reviewsRouter.post('/:id/publish', async (req: Request, res: Response, next: Nex
     const id = parseInt(req.params.id);
     if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
     const body = publishSchema.parse(req.body);
-    const results = await publishReview(id, body.targets);
+    const results = await publishReview(id, body.targets, req.storeId!);
     res.json({ reviewId: id, publications: results });
   } catch (err) {
+    if (err instanceof Error && err.message === 'Review not found') {
+      res.status(404).json({ error: 'Review not found' });
+      return;
+    }
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Validation error', details: err.errors });
       return;
@@ -242,7 +254,7 @@ reviewsRouter.get('/requests', async (req: Request, res: Response, next: NextFun
       prisma.reviewRequest.count({ where }),
     ]);
 
-    res.json({ requests, total, limit, offset });
+    res.json({ requests: requests.map(withoutToken), total, limit, offset });
   } catch (err) {
     next(err);
   }

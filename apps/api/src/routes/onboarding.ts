@@ -27,7 +27,7 @@ import { z } from 'zod';
 import { getPrisma, getClaude, logger, ShimmerError } from '@shimmer/core';
 import { handleSalesMessage } from '@shimmer/chatbot';
 import { scrubPII } from '../lib/scrub-pii.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, widgetAuth } from '../middleware/auth.js';
 import { createScopedRateLimiter } from '../middleware/rate-limiter.js';
 
 export const onboardingRouter = Router();
@@ -173,17 +173,13 @@ const logQuerySchema = z.object({
 // flooding observed_queries for arbitrary stores.
 const observationLimiter = createScopedRateLimiter('observation-log', 60_000, 30);
 
-observationRouter.post('/log', observationLimiter, async (req: Request, res: Response, next: NextFunction) => {
+// Clé du widget obligatoire (pk_ + store) : sans elle, n'importe qui
+// remplissait la fenêtre d'observation d'une boutique et franchissait la porte
+// « 20/50 requêtes observées ».
+observationRouter.post('/log', observationLimiter, widgetAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const body = logQuerySchema.parse({ ...req.body, store: req.body.store });
+    const body = logQuerySchema.parse({ ...req.body, store: req.storeId });
     const prisma = getPrisma();
-    // Refuse logs for stores that don't exist (otherwise anyone can grow the
-    // table with arbitrary storeIds).
-    const exists = await prisma.store.count({ where: { id: body.store } });
-    if (exists === 0) {
-      res.status(404).json({ error: 'Unknown store' });
-      return;
-    }
     // Pre-scrub everything that enters the log. We don't know the store roster
     // here cheaply, but emails/phones/IBAN/dates are domain-independent.
     const scrubbed = scrubPII(body.query);

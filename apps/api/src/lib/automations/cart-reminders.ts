@@ -168,7 +168,7 @@ async function sendOne(cart: CartRow, step: 1 | 2, result: SweepResult): Promise
 
   let recipient: string | null = cart.customerEmail;
   if (!recipient && cart.customerId) {
-    const customer = await prisma.customer.findUnique({ where: { id: cart.customerId } });
+    const customer = await prisma.customer.findFirst({ where: { id: cart.customerId, storeId: cart.storeId } });
     recipient = customer?.email ?? null;
   }
   if (!recipient) {

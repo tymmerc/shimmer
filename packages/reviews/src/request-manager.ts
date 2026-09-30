@@ -19,9 +19,15 @@ export async function createReviewRequest(params: CreateRequestParams) {
   const { storeId, orderId, customerId, delayHours = 48 } = params;
   const prisma = getPrisma();
 
+  // La commande et le client doivent appartenir à la boutique qui demande :
+  // sinon une clé secrète créait des demandes sur les clients d'une autre
+  // boutique et récupérait leur jeton (audit du 30/09).
+  const order = await prisma.order.findFirst({ where: { id: orderId, storeId, customerId }, select: { id: true } });
+  if (!order) return null;
+
   // Check if request already exists for this order
   const existing = await prisma.reviewRequest.findFirst({
-    where: { orderId, customerId },
+    where: { storeId, orderId, customerId },
   });
 
   if (existing) {
@@ -52,19 +58,20 @@ export async function createReviewRequest(params: CreateRequestParams) {
 /**
  * Mark a review request as sent (called when email is actually sent).
  */
-export async function sendReviewRequest(requestId: number) {
+export async function sendReviewRequest(requestId: number, storeId: number) {
   const prisma = getPrisma();
 
-  const request = await prisma.reviewRequest.update({
-    where: { id: requestId },
+  const { count } = await prisma.reviewRequest.updateMany({
+    where: { id: requestId, storeId },
     data: {
       status: 'SENT',
       sentAt: new Date(),
     },
   });
+  if (count === 0) return null;
 
   logger.info({ requestId }, 'review.request.sent');
-  return request;
+  return prisma.reviewRequest.findFirst({ where: { id: requestId, storeId } });
 }
 
 /**

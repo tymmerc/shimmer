@@ -15,8 +15,12 @@ pipelineRouter.post('/enrich/:productId', async (req: Request, res: Response, ne
     const productId = Number(req.params.productId);
     const prisma = getPrisma();
 
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
+    if (!Number.isInteger(productId) || productId <= 0) {
+      res.status(400).json({ error: 'Invalid product id' });
+      return;
+    }
+    const product = await prisma.product.findFirst({
+      where: { id: productId, storeId: req.storeId! },
       include: { usages: { include: { usage: true } } },
     });
 
@@ -105,7 +109,7 @@ pipelineRouter.post('/score', async (req: Request, res: Response, next: NextFunc
     const prisma = getPrisma();
 
     const products = await prisma.product.findMany({
-      where: { id: { in: body.productIds } },
+      where: { id: { in: body.productIds }, storeId: req.storeId! },
       include: {
         usages: {
           where: { usage: { code: { in: body.usageCodes } } },
@@ -133,12 +137,13 @@ pipelineRouter.post('/score', async (req: Request, res: Response, next: NextFunc
 });
 
 // GET /api/pipeline/status
-pipelineRouter.get('/status', async (_req: Request, res: Response, next: NextFunction) => {
+pipelineRouter.get('/status', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const prisma = getPrisma();
+    const storeId = req.storeId!;
     const [productCount, usageCount, taxonomyCount] = await Promise.all([
-      prisma.product.count({ where: { isActive: true } }),
-      prisma.productUsage.count(),
+      prisma.product.count({ where: { isActive: true, storeId } }),
+      prisma.productUsage.count({ where: { product: { storeId } } }),
       prisma.usageTaxonomy.count(),
     ]);
 

@@ -9,6 +9,7 @@ import { getPrisma, logger, ShimmerError } from '@shimmer/core';
 import { sendEmail } from '@shimmer/email-connector';
 import { enqueueCartReminders } from '../lib/automations/queue.js';
 import { isControlCart, resolveHoldoutConfig } from '../lib/holdout/bucket.js';
+import { assertCustomerInStore } from '../lib/tenant.js';
 
 export const cartRecoveryRouter = Router();
 
@@ -56,6 +57,7 @@ cartRecoveryRouter.post('/abandon', async (req: Request, res: Response, next: Ne
       throw new ShimmerError('customerId or customerEmail is required', 'BAD_REQUEST', 400);
     }
     const prisma = getPrisma();
+    if (body.customerId) await assertCustomerInStore(prisma, storeId, body.customerId);
     const cart = await prisma.abandonedCart.create({
       data: {
         storeId,
@@ -143,7 +145,7 @@ cartRecoveryRouter.post('/:id/send-reminder', async (req: Request, res: Response
     // Resolve recipient email
     let recipient: string | null = cart.customerEmail;
     if (!recipient && cart.customerId) {
-      const customer = await prisma.customer.findUnique({ where: { id: cart.customerId } });
+      const customer = await prisma.customer.findFirst({ where: { id: cart.customerId, storeId } });
       recipient = customer?.email ?? null;
     }
     let emailResult: { id: number; status: string } | null = null;

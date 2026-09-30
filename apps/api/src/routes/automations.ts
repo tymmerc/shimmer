@@ -12,6 +12,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { getPrisma } from '@shimmer/core';
 import { runAutomationTick, getLastReport, setLastReport } from '../lib/automations/tick.js';
+import { isOperator, operatorOnly } from '../middleware/operator.js';
 
 export const automationsRouter = Router();
 
@@ -60,14 +61,16 @@ automationsRouter.get('/status', async (req: Request, res: Response, next: NextF
         savToEscalate: openSav,
         outboundToPublish: scheduledOutbound,
       },
-      lastReport: getLastReport(),
+      // Le rapport couvre toutes les boutiques : opérateur seulement.
+      lastReport: isOperator(req.storeId) ? getLastReport() : null,
     });
   } catch (err) {
     next(err);
   }
 });
 
-automationsRouter.post('/run', async (_req: Request, res: Response, next: NextFunction) => {
+// Balaye TOUTES les boutiques (relances, avis, publications) : opérateur seulement.
+automationsRouter.post('/run', operatorOnly, async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const report = await runAutomationTick();
     setLastReport(report);

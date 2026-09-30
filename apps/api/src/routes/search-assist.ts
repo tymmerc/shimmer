@@ -13,6 +13,7 @@ import { ClaudeClient, getPrisma, logger } from '@shimmer/core';
 import type { ClaudeMessage, ScoredProduct } from '@shimmer/core';
 import { search, applyDeductions, detectBudget } from '@shimmer/smart-search';
 import { loadStoreUniverses } from './universe-gen.js';
+import { isSafeCriterionId } from '../lib/criterion-id.js';
 
 // ── Per-store tone ─────────────────────────────────
 
@@ -752,13 +753,13 @@ export function applyStoreOverrides(
     let criteria = [...u.criteria];
 
     if (Array.isArray(ov.criteria_replace)) {
-      const replaceMap = new Map(ov.criteria_replace.map(c => [c.id, c]));
+      const replaceMap = new Map(ov.criteria_replace.filter(c => isSafeCriterionId(c?.id)).map(c => [c.id, c]));
       criteria = criteria.map(c => replaceMap.get(c.id) || c);
     }
     if (Array.isArray(ov.criteria_add)) {
       const existingIds = new Set(criteria.map(c => c.id));
       for (const c of ov.criteria_add) {
-        if (c?.id && !existingIds.has(c.id)) criteria.push(c);
+        if (isSafeCriterionId(c?.id) && !existingIds.has(c.id)) criteria.push(c);
       }
     }
     if (Array.isArray(ov.criteria_remove)) {
@@ -775,7 +776,7 @@ export function applyStoreOverrides(
       : u.keywords;
 
     const deductions = Array.isArray(ov.deductions_add)
-      ? [...u.deductions, ...ov.deductions_add]
+      ? [...u.deductions, ...ov.deductions_add.filter(d => isSafeCriterionId(d?.criterion))]
       : u.deductions;
 
     return { ...u, criteria, keywords, deductions };
@@ -1147,7 +1148,7 @@ function filterByKnownCriteria(
 
 // ── Direct DB product fetch for recommendation ──────────────
 
-async function fetchMatchingProducts(
+export async function fetchMatchingProducts(
   known: Record<string, string>,
   universe: UniverseConfig,
   storeId: number,
@@ -1156,13 +1157,20 @@ async function fetchMatchingProducts(
   const { getPrisma } = await import('@shimmer/core');
   const prisma = getPrisma();
 
-  // Use universe label as DB category (matches exactly)
-  const dbCategory = universe.label;
+  // Toute valeur (catégorie, id de critère, réponse du client) passe en
+  // paramètre $n, jamais dans le texte SQL. Les ids de critère viennent du
+  // config de la boutique (universe_overrides), donc d'un tenant : un id
+  // concaténé ici permettait de lire toute la base (audit du 30/09).
+  // $1..$3 : boutique, termes du client et premier mot (servent au score).
+  const userTerms = [originalQuery || '', ...Object.values(known).filter(v => !v.startsWith('_'))].join(' ').toLowerCase();
+  const firstWord = (originalQuery || '').toLowerCase().split(/\s+/)[0] || '';
+  const params: unknown[] = [storeId, userTerms, firstWord];
+  const p = (v: unknown) => { params.push(v); return `$${params.length}`; };
 
   const conditions: string[] = [
-    `store_id = ${storeId}`,
+    `store_id = $1`,
     `is_active = true`,
-    `category = '${dbCategory}'`,
+    `category = ${p(universe.label)}`,
   ];
 
   // Apply universal criteria as SOFT filters (only if the spec field exists in the catalog)
@@ -1190,23 +1198,20 @@ async function fetchMatchingProducts(
   const isPremium = budgetLow === 'premium' || budgetLow.includes('haut de gamme') || budgetLow.includes('luxe') || budgetLow.includes('top') || budgetLow.includes('meilleur');
   const isCheap = budgetLow === 'cheap' || budgetLow.includes('pas cher') || budgetLow.includes('entrée de gamme') || budgetLow.includes('entree de gamme') || budgetLow.includes('petit budget') || budgetLow.includes('économique') || budgetLow.includes('economique');
 
-  // Escapes a value for inclusion inside a single-quoted SQL string literal.
-  // Doubles quotes (standard_conforming_strings is on by default in Postgres,
-  // so backslash is not an escape char) and strips ILIKE wildcards so a client
-  // value can never widen a pattern.
-  const sqlEsc = (s: string) => s.replace(/'/g, "''");
-  const likeEsc = (s: string) => sqlEsc(s).replace(/[%_]/g, '\\$&');
+  // Les jokers ILIKE d'une valeur client sont neutralisés : elle ne peut
+  // jamais élargir le motif.
+  const likeParam = (s: string) => p(`%${s.replace(/[\\%_]/g, '\\$&')}%`);
 
-  // Genre filter — soft (only if field exists). Client-controlled value: escape.
+  // Genre filter — soft (only if field exists).
   const genre = known['GENRE'];
   if (genre) {
-    conditions.push(`(NOT specs ? 'genre' OR specs->>'genre' ILIKE '%${likeEsc(genre)}%')`);
+    conditions.push(`(NOT specs ? 'genre' OR specs->>'genre' ILIKE ${likeParam(genre)})`);
   }
 
-  // Brand filter (from hybrid TYPE 1+2 detection). Client-controlled: escape.
+  // Brand filter (from hybrid TYPE 1+2 detection).
   const brandFilter = known['_BRAND'];
   if (brandFilter) {
-    conditions.push(`LOWER(brand) = '${sqlEsc(brandFilter.toLowerCase())}'`);
+    conditions.push(`LOWER(brand) = ${p(brandFilter.toLowerCase())}`);
   }
 
   // Universe-driven filters: for each closed criterion that has a known value,
@@ -1217,26 +1222,21 @@ async function fetchMatchingProducts(
   for (const c of universe.criteria) {
     if (SKIP_FILTER_IDS.has(c.id) || ALREADY_HANDLED.has(c.id)) continue;
     if (c.type === 'open' || c.type === 'deduced') continue;
-    const val = known[c.id];
+    if (!isSafeCriterionId(c.id)) continue;
+    const val = Object.hasOwn(known, c.id) ? known[c.id] : undefined;
     if (!val) continue;
-    const specKey = c.id.toLowerCase();
-    const escVal = sqlEsc(val);
-    // JSON-encode first so quotes/backslashes inside val cannot break the
-    // ::jsonb literal, then SQL-escape the encoded form.
-    const jsonArrayLit = sqlEsc(JSON.stringify([val]));
+    const key = `${p(c.id.toLowerCase())}::text`;
     // Match: (no spec at all) OR (spec equals val) OR (string spec contains val) OR (array spec contains val)
     conditions.push(
-      `(NOT specs ? '${specKey}' OR ` +
-      `specs->>'${specKey}' = '${escVal}' OR ` +
-      `specs->>'${specKey}' ILIKE '%${likeEsc(val)}%' OR ` +
-      `(jsonb_typeof(specs->'${specKey}') = 'array' AND specs->'${specKey}' @> '${jsonArrayLit}'::jsonb))`
+      `(NOT specs ? ${key} OR ` +
+      `specs->>${key} = ${p(val)} OR ` +
+      `specs->>${key} ILIKE ${likeParam(val)} OR ` +
+      `(jsonb_typeof(specs->${key}) = 'array' AND specs->${key} @> ${p(JSON.stringify([val]))}::jsonb))`
     );
   }
 
   try {
     // Score products by usage + name match (higher score = better fit for client's need)
-    const userTerms = [originalQuery || '', ...Object.values(known).filter(v => !v.startsWith('_'))].join(' ').toLowerCase();
-
     const products = await prisma.$queryRawUnsafe<any[]>(
       `SELECT *,
         COALESCE((
@@ -1253,7 +1253,7 @@ async function fetchMatchingProducts(
        WHERE ${conditions.join(' AND ')}
        ORDER BY usage_score DESC, ${isPremium ? 'price DESC' : isCheap ? 'price ASC' : 'price ASC'}
        LIMIT 5`,
-      storeId, userTerms, (originalQuery || '').toLowerCase().split(/\s+/)[0] || '',
+      ...params,
     );
 
     return products.map((p: any) => ({
@@ -2106,7 +2106,8 @@ searchAssistRouter.post('/stream', async (req: Request, res: Response, next: Nex
       }
       next(err);
     } else {
-      res.write(`event: error\ndata: ${JSON.stringify({ error: (err as Error).message })}\n\n`);
+      logger.warn({ err }, 'search.assist.stream.failed');
+      res.write(`event: error\ndata: ${JSON.stringify({ error: 'Le vendeur est indisponible pour le moment.' })}\n\n`);
       res.end();
     }
   }

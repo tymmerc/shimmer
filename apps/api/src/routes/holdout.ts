@@ -1,9 +1,14 @@
 /**
  * Holdout experiment endpoints.
  *
- *  Public (SDK, no auth, store resolved by ?store= or public key):
+ *  SDK :
  *    GET  /api/holdout/decision  — is this visitor control? + holdout pct
+ *         (publique : calcul pur, rien n'est écrit ; limiteur par IP)
  *    POST /api/holdout/track     — record a visitor as seen / exposed
+ *         (clé publique pk_ + store, vérifiées par widgetAuth). Avant le
+ *         30/09 elle était ouverte : n'importe qui écrivait des visiteurs
+ *         inventés pour n'importe quelle boutique et déplaçait le chiffre
+ *         prouvé (base de la part variable facturée).
  *
  *  Auth (merchant dashboard + billing):
  *    GET  /api/holdout/report    — incremental lift, credible interval,
@@ -16,7 +21,8 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { getPrisma, logger } from '@shimmer/core';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, widgetAuth } from '../middleware/auth.js';
+import { createScopedRateLimiter } from '../middleware/rate-limiter.js';
 import { bucketFor, isControl, resolveHoldoutConfig } from '../lib/holdout/bucket.js';
 import { estimateLift } from '../lib/holdout/lift.js';
 import { billingSummary, cartRecoveryProof, vendorProof, type ProofVisitorRow } from '../lib/holdout/proof.js';
@@ -36,7 +42,13 @@ const decisionSchema = z.object({
   store: z.coerce.number().int().positive(),
 });
 
-holdoutRouter.get('/decision', async (req: Request, res: Response, next: NextFunction) => {
+// Un visiteur réel fait une décision par page vue et un enrôlement par
+// session : ces plafonds par IP ne gênent personne et rendent coûteux le
+// remplissage d'un groupe avec des visiteurs inventés.
+const decisionLimiter = createScopedRateLimiter('holdout-decision', 60_000, 60);
+const trackLimiter = createScopedRateLimiter('holdout-track', 10 * 60_000, 20);
+
+holdoutRouter.get('/decision', decisionLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { visitorId, store } = decisionSchema.parse({ visitorId: req.query.visitorId, store: req.query.store });
     const cfg = resolveHoldoutConfig((await getStoreConfig(store)).holdout);
@@ -66,9 +78,9 @@ const trackSchema = z.object({
   trigger: z.enum(['search']).optional(),
 });
 
-holdoutRouter.post('/track', async (req: Request, res: Response, next: NextFunction) => {
+holdoutRouter.post('/track', trackLimiter, widgetAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const body = trackSchema.parse({ ...req.body, store: req.body.store ?? req.query.store });
+    const body = trackSchema.parse({ ...req.body, store: req.storeId });
     const prisma = getPrisma();
     const cfg = resolveHoldoutConfig((await getStoreConfig(body.store)).holdout);
     const bucket = bucketFor(body.visitorId, body.store);

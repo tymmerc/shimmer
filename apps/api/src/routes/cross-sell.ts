@@ -921,8 +921,8 @@ crossSellRouter.get('/analytics', async (req: Request, res: Response) => {
                 COUNT(*) FILTER (WHERE e.event_type = 'click')      AS clicks,
                 COUNT(*) FILTER (WHERE e.event_type = 'add')        AS adds
          FROM cross_sell_events e
-         LEFT JOIN products pr ON pr.id = e.product_id
-         LEFT JOIN products tg ON tg.id = e.target_id
+         LEFT JOIN products pr ON pr.id = e.product_id AND pr.store_id = e.store_id
+         LEFT JOIN products tg ON tg.id = e.target_id AND tg.store_id = e.store_id
          WHERE e.store_id = $1 AND e.created_at >= $2
          GROUP BY e.product_id, e.target_id, e.role, pr.name, tg.name
          HAVING COUNT(*) FILTER (WHERE e.event_type = 'impression') > 0
@@ -961,7 +961,7 @@ crossSellRouter.get('/analytics', async (req: Request, res: Response) => {
         `SELECT COALESCE(SUM(p.price), 0)::text AS revenue,
                 COUNT(*) AS events
          FROM cross_sell_events e
-         JOIN products p ON p.id = e.target_id
+         JOIN products p ON p.id = e.target_id AND p.store_id = e.store_id
          WHERE e.store_id = $1 AND e.created_at >= $2 AND e.event_type = 'purchase'`,
         storeId, since,
       ),

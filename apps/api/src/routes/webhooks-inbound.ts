@@ -9,11 +9,16 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import express from 'express';
 import { z } from 'zod';
-import { getPrisma, logger, ShimmerError } from '@shimmer/core';
+import { getPrisma, getRedis, logger, ShimmerError } from '@shimmer/core';
 import { processEmail } from '@shimmer/mail-engine';
 import { enqueueMailToSav } from '../lib/automations/queue.js';
+import { verifyInboundSecret, verifyMailgunSignature, MAILGUN_MAX_SKEW_S } from '../lib/inbound-auth.js';
+import { createScopedRateLimiter } from '../middleware/rate-limiter.js';
 
 export const webhooksInboundRouter = Router();
+
+// Chaque e-mail fait tourner l'IA (classement + brouillon) : plafond par IP.
+const inboundLimiter = createScopedRateLimiter('inbound-mail', 60_000, 60);
 
 // Mailgun sends form-encoded data; mount with the form parser as fallback to JSON.
 const formParser = express.urlencoded({ extended: true, limit: '5mb' });
@@ -70,18 +75,22 @@ async function handleIncoming(
       }
     }
     logger.info({ storeId, mailId: result.id, category: result.category }, 'inbound.webhook.processed');
-    res.json({ accepted: true, storeId, mail: result });
+    res.json({ accepted: true });
   } catch (err) {
     logger.warn({ err, storeId }, 'inbound.webhook.processing_failed');
-    res.status(500).json({ accepted: false, error: (err as Error).message });
+    res.status(500).json({ accepted: false });
   }
 }
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/webhooks/inbound — generic JSON ingest (testable from curl)
 // ─────────────────────────────────────────────────────────────
-webhooksInboundRouter.post('/inbound', async (req: Request, res: Response, next: NextFunction) => {
+webhooksInboundRouter.post('/inbound', inboundLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (!verifyInboundSecret(process.env.INBOUND_WEBHOOK_SECRET, req.headers['x-shimmer-inbound-secret'])) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
     const body = genericSchema.parse(req.body);
     await handleIncoming(body.from, body.to, body.subject, body.body, body.messageId, res);
   } catch (err) {
@@ -94,9 +103,14 @@ webhooksInboundRouter.post('/inbound', async (req: Request, res: Response, next:
 // ─────────────────────────────────────────────────────────────
 webhooksInboundRouter.post(
   '/mailgun/inbound',
+  inboundLimiter,
   formParser,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!verifyMailgunSignature(process.env.MAILGUN_WEBHOOK_SIGNING_KEY, req.body ?? {})) {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
       const from = (req.body.sender ?? req.body.From ?? req.body.from) as string | undefined;
       const to = (req.body.recipient ?? req.body.To ?? req.body.to) as string | undefined;
       const subject = (req.body.subject ?? req.body.Subject) as string | undefined;
@@ -108,6 +122,12 @@ webhooksInboundRouter.post(
 
       if (!from || !to || !subject || !body) {
         throw new ShimmerError('Missing mailgun fields', 'BAD_REQUEST', 400);
+      }
+      // Jeton à usage unique : une requête signée rejouée est refusée.
+      const fresh = await getRedis().set(`mailgun:token:${String(req.body.token)}`, '1', 'EX', MAILGUN_MAX_SKEW_S * 2, 'NX');
+      if (fresh !== 'OK') {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
       }
       await handleIncoming(from, to, subject, body, messageId, res);
     } catch (err) {

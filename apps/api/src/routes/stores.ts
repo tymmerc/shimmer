@@ -14,50 +14,70 @@ import { authMiddleware } from '../middleware/auth.js';
 import { createScopedRateLimiter } from '../middleware/rate-limiter.js';
 import { derivePublishableKey } from '../lib/publishable-key.js';
 import { publicStoreProfile } from '../lib/public-store.js';
+import { CRITERION_ID_RE } from '../lib/criterion-id.js';
+import { patchStoreConfig } from '../lib/knowledge-ingest.js';
 
 export const storesRouter = Router();
 
 // Store creation costs DB rows and grants an API key: 5 per hour per IP is
 // plenty for a legitimate signup flow and kills bulk-creation abuse.
 const signupLimiter = createScopedRateLimiter('store-create', 60 * 60_000, 5);
+// Plafond global : une vague de créations (IPv6 tournantes, proxys) ne peut
+// pas dépasser SIGNUPS_PER_DAY boutiques par jour, toutes IP confondues.
+const SIGNUPS_PER_DAY = Number(process.env.SHIMMER_SIGNUPS_PER_DAY) || 20;
+// Seules les créations réussies comptent : des requêtes invalides ne peuvent
+// pas épuiser le plafond et bloquer les vraies inscriptions.
+const signupDailyCap = createScopedRateLimiter('store-create-day', 24 * 60 * 60_000, SIGNUPS_PER_DAY, () => 'all', { skipFailedRequests: true });
 
+// L'inscription ne pose que ce que le formulaire du site envoie. Avant le
+// 30/09, le config était libre : un inconnu pouvait se mettre en phase 'live',
+// fixer son propre tarif (billing), couper le témoin (holdout) ou planter un
+// critère piégé (universe_overrides).
 const createStoreSchema = z.object({
-  name: z.string().min(1).max(100),
-  config: z.record(z.unknown()).optional(),
-});
+  name: z.string().trim().min(1).max(100),
+  config: z.object({
+    ownerEmail: z.string().trim().email().max(254),
+    vertical: z.enum(['wines', 'lighting', 'fashion', 'cosmetic', 'hifi', 'bricolage', 'other']).optional(),
+    platform: z.enum(['shopify', 'woocommerce', 'prestashop', 'custom', 'unknown']).optional(),
+    createdVia: z.string().max(40).optional(),
+  }).strict(),
+}).strict();
+
+const criterionId = z.string().regex(CRITERION_ID_RE);
+const shortText = z.string().max(500);
 
 // One QualCriterion override entry: keep loose typing to accept whatever the
 // search-assist runtime understands (validated at use-time by applyStoreOverrides).
 const criterionShape = z.object({
-  id: z.string().min(1),
-  label: z.string().optional(),
-  weight: z.number().optional(),
+  id: criterionId,
+  label: shortText.optional(),
+  weight: z.number().min(0).max(100).optional(),
   required: z.boolean().optional(),
   type: z.enum(['closed', 'open', 'deduced']).optional(),
-  values: z.array(z.string()).optional(),
-  question: z.string().optional(),
-  fallback: z.string().optional(),
-}).passthrough();
+  values: z.array(z.string().max(100)).max(30).optional(),
+  question: shortText.optional(),
+  fallback: z.string().max(200).optional(),
+}).strict();
 
 const deductionShape = z.object({
-  patterns: z.array(z.string()).min(1),
-  criterion: z.string().min(1),
-  value: z.string().min(1),
+  patterns: z.array(z.string().min(1).max(60)).min(1).max(30),
+  criterion: criterionId,
+  value: z.string().min(1).max(200),
 });
 
 const overrideShape = z.object({
-  criteria_replace: z.array(criterionShape).optional(),
-  criteria_add: z.array(criterionShape).optional(),
-  criteria_remove: z.array(z.string()).optional(),
-  criteria_priority: z.array(z.string()).optional(),
-  keywords_add: z.array(z.string()).optional(),
-  deductions_add: z.array(deductionShape).optional(),
+  criteria_replace: z.array(criterionShape).max(30).optional(),
+  criteria_add: z.array(criterionShape).max(30).optional(),
+  criteria_remove: z.array(criterionId).max(30).optional(),
+  criteria_priority: z.array(criterionId).max(30).optional(),
+  keywords_add: z.array(z.string().min(1).max(60)).max(100).optional(),
+  deductions_add: z.array(deductionShape).max(50).optional(),
 });
 
 const voiceShape = z.object({
-  intro_phrases: z.array(z.string()).optional(),
-  signature: z.string().optional(),
-  vocabulary: z.record(z.string()).optional(),
+  intro_phrases: z.array(shortText).max(50).optional(),
+  signature: shortText.optional(),
+  vocabulary: z.record(z.string().max(300)).optional(),
 });
 
 const crossSellRulesShape = z.object({
@@ -79,23 +99,19 @@ const crossSellRulesShape = z.object({
 const configUpdateSchema = z.object({
   tone: z.enum(['tu', 'vous']).optional(),
   voice: voiceShape.nullable().optional(),
-  universe_overrides: z.record(overrideShape).nullable().optional(),
+  universe_overrides: z.record(z.string().max(60), overrideShape).nullable().optional(),
   cross_sell_rules: crossSellRulesShape.nullable().optional(),
 }).strict();
 
 // POST /api/stores — create a new store (admin, no auth required)
-storesRouter.post('/', signupLimiter, async (req: Request, res: Response, next: NextFunction) => {
+storesRouter.post('/', signupLimiter, signupDailyCap, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = createStoreSchema.parse(req.body);
     const prisma = getPrisma();
 
-    // New stores start in 'ingesting' unless the caller passes an explicit
-    // phase. The onboarding gates promote them up to 'live' only after the
-    // knowledge ingestion, observation window and validation are cleared.
-    const baseConfig = body.config || {};
-    const config = 'shimmer_phase' in baseConfig
-      ? baseConfig
-      : { ...baseConfig, shimmer_phase: 'ingesting' };
+    // Toujours en 'ingesting' : seules les portes d'onboarding (ingestion,
+    // observation, validation) font passer une boutique en 'live'.
+    const config = { ...body.config, shimmer_phase: 'ingesting' };
 
     const store = await prisma.store.create({
       data: {
@@ -110,12 +126,11 @@ storesRouter.post('/', signupLimiter, async (req: Request, res: Response, next: 
       name: store.name,
       apiKey: store.apiKey,
       publishableKey: derivePublishableKey(store.id),
-      config: store.config,
       createdAt: store.createdAt,
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation error', details: err.errors });
+      res.status(400).json({ error: 'Validation error', details: err.errors.map((e) => ({ path: e.path, message: e.message })) });
       return;
     }
     next(err);
@@ -146,39 +161,26 @@ storesRouter.patch('/me/config', authMiddleware, async (req: Request, res: Respo
     const body = configUpdateSchema.parse(req.body);
     const prisma = getPrisma();
 
-    const current = await prisma.store.findUnique({
+    // Patch atomique (jsonb) : la relecture SAV de nuit écrit aussi dans le
+    // config, un lire-modifier-réécrire effaçait ses clés.
+    const set: Record<string, unknown> = {};
+    const unset: string[] = [];
+    for (const key of ['tone', 'voice', 'universe_overrides', 'cross_sell_rules'] as const) {
+      const value = body[key];
+      if (value === undefined) continue;
+      if (value === null) unset.push(key);
+      else set[key] = value;
+    }
+    await patchStoreConfig(prisma, req.storeId!, set, unset);
+
+    const updated = await prisma.store.findUnique({
       where: { id: req.storeId! },
-      select: { config: true },
+      select: { id: true, name: true, config: true, updatedAt: true },
     });
-    if (!current) {
+    if (!updated) {
       res.status(404).json({ error: 'Store not found' });
       return;
     }
-
-    const currentConfig = (current.config as Record<string, unknown>) || {};
-    const nextConfig: Record<string, unknown> = { ...currentConfig };
-
-    if (body.tone !== undefined) {
-      nextConfig.tone = body.tone;
-    }
-    if (body.voice !== undefined) {
-      if (body.voice === null) delete nextConfig.voice;
-      else nextConfig.voice = body.voice;
-    }
-    if (body.universe_overrides !== undefined) {
-      if (body.universe_overrides === null) delete nextConfig.universe_overrides;
-      else nextConfig.universe_overrides = body.universe_overrides;
-    }
-    if (body.cross_sell_rules !== undefined) {
-      if (body.cross_sell_rules === null) delete nextConfig.cross_sell_rules;
-      else nextConfig.cross_sell_rules = body.cross_sell_rules;
-    }
-
-    const updated = await prisma.store.update({
-      where: { id: req.storeId! },
-      data: { config: nextConfig },
-      select: { id: true, name: true, config: true, updatedAt: true },
-    });
     res.json(updated);
   } catch (err) {
     if (err instanceof z.ZodError) {

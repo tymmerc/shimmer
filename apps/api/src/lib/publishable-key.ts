@@ -19,8 +19,17 @@
 import crypto from 'crypto';
 
 function pkSecret(): string {
-  // Dev fallback keeps things working locally; prod must set SHIMMER_PK_SECRET.
-  return process.env.SHIMMER_PK_SECRET || 'shimmer-dev-publishable-secret';
+  const secret = process.env.SHIMMER_PK_SECRET;
+  if (secret) return secret;
+  // Le secret de repli est public (il est dans le code) : en prod, il
+  // permettrait de fabriquer la pk_ de n'importe quelle boutique.
+  if (process.env.NODE_ENV === 'production') throw new Error('SHIMMER_PK_SECRET is required in production');
+  return 'shimmer-dev-publishable-secret';
+}
+
+/** À appeler au démarrage : l'API refuse de tourner en prod sans secret. */
+export function assertPublishableSecret(): void {
+  pkSecret();
 }
 
 /** The publishable key for a store. Stable as long as SHIMMER_PK_SECRET is stable. */

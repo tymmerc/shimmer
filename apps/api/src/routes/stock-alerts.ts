@@ -37,7 +37,8 @@ const subscribeSchema = z.object({
   platformVariantId: z.string().trim().min(1).max(200),
   productId: z.number().int().positive().optional(),
   variantLabel: z.string().trim().max(200).optional(),
-  visitorId: z.string().trim().min(4).max(80).optional(),
+  // null quand le visiteur n'a pas (encore) de cookie : mode session, refus, strict.
+  visitorId: z.string().trim().min(4).max(80).nullish(),
 });
 
 stockAlertsRouter.post('/', subscribeLimiter, widgetAuth, async (req: Request, res: Response, next: NextFunction) => {

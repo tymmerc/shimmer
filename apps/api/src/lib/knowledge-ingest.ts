@@ -114,7 +114,12 @@ export function needsReingest(s: { lastAttemptAt: Date | null; latestTicketAt: D
 
 /** Patch atomique du config (jsonb) : aucune autre clé n'est touchée, même en cas d'écriture concurrente. */
 export async function patchStoreConfig(prisma: Prisma, storeId: number, set: Record<string, unknown>, unset: string[] = []): Promise<void> {
-  await prisma.$executeRaw`UPDATE stores SET config = (COALESCE(config, '{}'::jsonb) - ${unset}::text[]) || ${JSON.stringify(set)}::jsonb, updated_at = now() WHERE id = ${storeId}`;
+  await storeConfigPatch(prisma, storeId, set, unset);
+}
+
+/** Même patch, non attendu : à placer dans un $transaction avec d'autres écritures. */
+function storeConfigPatch(prisma: Prisma, storeId: number, set: Record<string, unknown>, unset: string[] = []) {
+  return prisma.$executeRaw`UPDATE stores SET config = (COALESCE(config, '{}'::jsonb) - ${unset}::text[]) || ${JSON.stringify(set)}::jsonb, updated_at = now() WHERE id = ${storeId}`;
 }
 
 /** Coupe la signature et l'historique cité d'un ticket venu d'un e-mail. */
@@ -187,8 +192,10 @@ async function runIngest(prisma: Prisma, llm: Llm, storeId: number, now: Date): 
 
   if (tickets.length === 0) {
     // Plus rien à citer (tickets effacés au titre du RGPD, ou jamais de SAV) : on vide.
-    await prisma.$transaction([prisma.knowledgeChunk.deleteMany({ where: { storeId, sourceType: 'sav_objection' } })]);
-    await patchStoreConfig(prisma, storeId, { knowledge_attempted_at: stamp, knowledge_ingested_at: stamp }, ['common_objections']);
+    await prisma.$transaction([
+      prisma.knowledgeChunk.deleteMany({ where: { storeId, sourceType: 'sav_objection' } }),
+      storeConfigPatch(prisma, storeId, { knowledge_attempted_at: stamp, knowledge_ingested_at: stamp }, ['common_objections']),
+    ]);
     logger.info({ storeId, ...summary }, 'knowledge.ingest.complete');
     return summary;
   }
@@ -223,8 +230,9 @@ async function runIngest(prisma: Prisma, llm: Llm, storeId: number, now: Date): 
     await prisma.$transaction([
       prisma.knowledgeChunk.deleteMany({ where: { storeId, sourceType: 'sav_objection' } }),
       ...questions.map((text) => prisma.knowledgeChunk.create({ data: { storeId, sourceType: 'sav_objection', text, metadata: {} as unknown as Json } })),
+      // Extraits et config changent ensemble : le vendeur ne voit jamais l'un sans l'autre.
+      storeConfigPatch(prisma, storeId, { common_objections: questions, knowledge_attempted_at: stamp, knowledge_ingested_at: stamp }),
     ]);
-    await patchStoreConfig(prisma, storeId, { common_objections: questions, knowledge_attempted_at: stamp, knowledge_ingested_at: stamp });
     summary.savObjectionsExtracted = questions.length;
   } else {
     // Réponse ratée ou maigre : on garde l'existant, mais revalidé (les
@@ -236,8 +244,8 @@ async function runIngest(prisma: Prisma, llm: Llm, storeId: number, now: Date): 
       await prisma.$transaction([
         prisma.knowledgeChunk.deleteMany({ where: { storeId, sourceType: 'sav_objection' } }),
         ...kept.map((text) => prisma.knowledgeChunk.create({ data: { storeId, sourceType: 'sav_objection', text, metadata: {} as unknown as Json } })),
+        storeConfigPatch(prisma, storeId, kept.length > 0 ? { common_objections: kept, knowledge_attempted_at: stamp } : { knowledge_attempted_at: stamp }, kept.length > 0 ? [] : ['common_objections']),
       ]);
-      await patchStoreConfig(prisma, storeId, kept.length > 0 ? { common_objections: kept, knowledge_attempted_at: stamp } : { knowledge_attempted_at: stamp }, kept.length > 0 ? [] : ['common_objections']);
     } else {
       await patchStoreConfig(prisma, storeId, { knowledge_attempted_at: stamp });
     }
