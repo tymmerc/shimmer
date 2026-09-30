@@ -109,7 +109,7 @@
       </section>
     </div>
 
-    <p class="footer-info">Fenêtre : 30 derniers jours · Mise à jour à chaque chargement.</p>
+    <p class="footer-info" id="footerInfo">Fenêtre : 30 derniers jours · Mise à jour à chaque chargement.</p>
   </div>
 
   <script>
@@ -121,6 +121,7 @@
       { slug: 'atelier', name: "L'Atelier Lumière", avgPrice: 380 },
     ];
     let currentStore = STORES[0];
+    const FOOTER_TEXT = 'Fenêtre : 30 derniers jours · Mise à jour à chaque chargement.';
 
     function keySlot(store) { return 'shimmer.cs-dashboard.key.' + store.slug; }
     function forgetKey(store) {
@@ -136,9 +137,13 @@
       return key;
     }
 
+    // Les rôles et noms viennent d'événements envoyés avec une clé publiable :
+    // tout est échappé avant innerHTML, la classe CSS n'accepte que les rôles connus.
+    function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
     function chipFor(role) {
       const labels = { apero: 'Apéritif', repas: 'Repas', dessert: 'Dessert', decouverte: 'Découverte', cadeau: 'Cadeau', accessoire: 'Accessoire', complement: 'Associé' };
-      return `<span class="chip chip-${role}">${labels[role] || role}</span>`;
+      const known = Object.prototype.hasOwnProperty.call(labels, role);
+      return `<span class="chip ${known ? 'chip-' + role : ''}">${escapeHtml(known ? labels[role] : role)}</span>`;
     }
     function rateClass(r) { return r >= 5 ? 'high' : r >= 1 ? 'mid' : 'low'; }
     function fmt(n) { return new Intl.NumberFormat('fr-FR').format(n); }
@@ -153,8 +158,10 @@
         if (!r.ok) throw new Error('HTTP ' + r.status + ' (recliquez sur la boutique pour saisir la clé)');
         const data = await r.json();
         render(data);
+        document.getElementById('footerInfo').textContent = FOOTER_TEXT;
       } catch (e) {
         console.error(e);
+        document.getElementById('footerInfo').textContent = e.message;
       }
     }
 
@@ -183,7 +190,7 @@
         d.topPairs.forEach(p => {
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td><div class="pair"><b>${p.refName || ('#' + p.productId)}</b><span>→ ${p.targetName || ('#' + p.targetId)}</span></div></td>
+            <td><div class="pair"><b>${escapeHtml(p.refName || ('#' + p.productId))}</b><span>→ ${escapeHtml(p.targetName || ('#' + p.targetId))}</span></div></td>
             <td>${chipFor(p.role)}</td>
             <td style="text-align:right">${fmt(p.impressions)}</td>
             <td style="text-align:right">${fmt(p.adds)}</td>
