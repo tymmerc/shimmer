@@ -26,6 +26,8 @@ export interface SendEmailInput {
   relatedEntity?: 'cart' | 'order' | 'review_request' | 'sav' | 'campaign' | 'stock_alert' | 'other';
   relatedId?: number;
   fromAddr?: string;
+  /** Version gardée en base à la place de bodyText (lien à usage unique masqué, par exemple). */
+  storedBodyText?: string;
 }
 
 export interface SendEmailResult {
@@ -191,7 +193,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
       toAddr: input.to,
       fromAddr,
       subject: input.subject,
-      bodyText: input.bodyText ?? null,
+      bodyText: input.storedBodyText ?? input.bodyText ?? null,
       bodyHtml: input.bodyHtml ?? null,
       tag: input.tag ?? null,
       relatedEntity: input.relatedEntity ?? null,

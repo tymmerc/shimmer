@@ -20,6 +20,8 @@ export async function attributeOrderToChat(
   orderId: number,
   customerEmail: string,
   visitorId?: string | null,
+  /** Date de la commande : seule une conversation des 7 jours AVANT l'achat compte. */
+  orderedAt?: Date,
 ): Promise<{ attributed: boolean; sessionId?: number }> {
   // Avant le 30/09, seul l'e-mail reliait une commande au vendeur : il n'est
   // connu que d'un client connecté, donc presque jamais. L'identifiant du
@@ -35,14 +37,15 @@ export async function attributeOrderToChat(
   // commande n'est rattachée qu'à une conversation.
   const already = await prisma.chatSession.findFirst({ where: { storeId, attributedOrderId: orderId }, select: { id: true } });
   if (already) return { attributed: true, sessionId: already.id };
-  const since = new Date(Date.now() - ATTRIBUTION_WINDOW_DAYS * 24 * 3600 * 1000);
+  const until = orderedAt ?? new Date();
+  const since = new Date(until.getTime() - ATTRIBUTION_WINDOW_DAYS * 24 * 3600 * 1000);
 
   const session = await prisma.chatSession.findFirst({
     where: {
       storeId,
       OR: match,
       mode: 'sales',
-      createdAt: { gte: since },
+      createdAt: { gte: since, lte: until },
       attributedOrderId: null,
     },
     orderBy: { createdAt: 'desc' },

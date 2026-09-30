@@ -54,6 +54,10 @@ export function createRateLimiter() {
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: byClient,
+    // Webhooks des plateformes (signés, vérifiés par HMAC) : leur propre
+    // plafond, plus large. Un import de 110 produits ou une vente flash
+    // dépassaient 100/min, et Woo désactive un webhook après 5 échecs.
+    skip: (req) => /^\/api\/webhooks\/(shopify|woocommerce)\//.test(req.path),
     store: new RedisStore({
       sendCommand: (...args: string[]) => getRedis().call(...args) as any,
     }),

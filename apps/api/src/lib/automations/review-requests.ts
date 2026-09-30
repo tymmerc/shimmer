@@ -24,13 +24,13 @@ type DueRequest = {
   storeId: number;
   token: string;
   customer: { email: string | null; firstName: string | null } | null;
-  order: { orderNumber: string };
+  order: { orderNumber: string; status: string };
   store: { id: number; name: string };
 };
 
 const INCLUDE = {
   customer: { select: { email: true, firstName: true } },
-  order: { select: { orderNumber: true } },
+  order: { select: { orderNumber: true, status: true } },
   store: { select: { id: true, name: true } },
 } as const;
 
@@ -43,6 +43,11 @@ const INCLUDE = {
 async function sendRequest(rr: DueRequest): Promise<'sent' | 'skipped' | 'failed'> {
   const prisma = getPrisma();
   if (!rr.customer?.email) return 'skipped';
+  // Annulée ou remboursée entre-temps : on ne demande pas si « tout s'est bien passé ».
+  if (rr.order.status === 'cancelled' || rr.order.status === 'returned') {
+    await prisma.reviewRequest.updateMany({ where: { id: rr.id, status: 'SCHEDULED' }, data: { status: 'EXPIRED' } });
+    return 'skipped';
+  }
   const claim = await prisma.reviewRequest.updateMany({
     where: { id: rr.id, status: 'SCHEDULED', sentAt: null },
     data: { status: 'SENT', sentAt: new Date() },

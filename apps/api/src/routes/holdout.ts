@@ -276,9 +276,30 @@ export async function recordOrderForVisitor(
   // Order-level log so /proof can window the lift on a billing period. Écrit
   // EN PREMIER : l'index unique (store_id, order_ref) arrête un doublon avant
   // qu'il n'ajoute son montant au visiteur.
+  // Ligne de commande et visiteur ensemble : sinon un échec entre les deux
+  // laissait /proof (fenêtré) et /report (cumulé) diverger pour de bon.
   try {
-    await prisma.holdoutOrder.create({
-      data: { storeId, visitorId, isControl: control, amount: orderTotal, orderRef: orderRef ?? null },
+    await prisma.$transaction(async (tx) => {
+      await tx.holdoutOrder.create({
+        data: { storeId, visitorId, isControl: control, amount: orderTotal, orderRef: orderRef ?? null },
+      });
+      await tx.holdoutVisitor.upsert({
+        where: { storeId_visitorId: { storeId, visitorId } },
+        create: {
+          storeId,
+          visitorId,
+          bucket,
+          isControl: control,
+          exposed: !control,
+          orderCount: 1,
+          revenue: orderTotal,
+        },
+        update: {
+          orderCount: { increment: 1 },
+          revenue: { increment: orderTotal },
+          lastSeenAt: new Date(),
+        },
+      });
     });
   } catch (err) {
     if ((err as { code?: string }).code === 'P2002') {
@@ -287,23 +308,6 @@ export async function recordOrderForVisitor(
     }
     throw err;
   }
-  await prisma.holdoutVisitor.upsert({
-    where: { storeId_visitorId: { storeId, visitorId } },
-    create: {
-      storeId,
-      visitorId,
-      bucket,
-      isControl: control,
-      exposed: !control,
-      orderCount: 1,
-      revenue: orderTotal,
-    },
-    update: {
-      orderCount: { increment: 1 },
-      revenue: { increment: orderTotal },
-      lastSeenAt: new Date(),
-    },
-  });
   logger.info({ storeId, orderTotal }, 'holdout.order.recorded');
   return true;
 }

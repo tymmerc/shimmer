@@ -727,7 +727,9 @@ crossSellWidgetRouter.get('/product/:id', widgetAuth, async (req: Request, res: 
     const limit = Math.min(Math.max(Number(req.query.limit) || 4, 1), 12);
     const prisma = getPrisma();
 
-    const reference = await prisma.product.findFirst({ where: { id, storeId } });
+    // Produit publié seulement : un brouillon synchronisé depuis la plateforme
+    // ne se lit pas avec la clé publique en balayant les identifiants.
+    const reference = await prisma.product.findFirst({ where: { id, storeId, isActive: true } });
     if (!reference) {
       res.status(404).json({ error: 'Product not found' });
       return;

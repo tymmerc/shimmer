@@ -200,21 +200,34 @@ export async function confirmStockAlert(token: string): Promise<{ confirmed: boo
   const prisma = getPrisma();
   const alert = await prisma.stockAlert.findFirst({
     where: { confirmToken: token, status: 'pending' },
-    select: { id: true, variantLabel: true, store: { select: { name: true } } },
+    select: { id: true, store: { select: { name: true } }, product: { select: { name: true } } },
   });
   if (!alert) return { confirmed: false };
   await prisma.stockAlert.update({
     where: { id: alert.id },
     data: { status: 'waiting', confirmedAt: new Date(), confirmToken: null },
   });
-  return { confirmed: true, storeName: alert.store.name, label: alert.variantLabel };
+  // Nom du produit tiré du catalogue, jamais le libellé envoyé par le navigateur.
+  return { confirmed: true, storeName: alert.store.name, label: alert.product?.name ?? null };
+}
+
+/** Une alerte en attente dont l'e-mail de confirmation n'a pas pu partir : retirée. */
+export async function dropPendingStockAlert(id: number): Promise<void> {
+  await getPrisma().stockAlert.deleteMany({ where: { id, status: 'pending' } });
 }
 
 /** Inscriptions jamais confirmées : effacées au bout de 7 jours (RGPD). */
 export async function purgeUnconfirmedStockAlerts(now: Date = new Date()): Promise<number> {
-  const r = await getPrisma().stockAlert.deleteMany({
+  const prisma = getPrisma();
+  const stale = await prisma.stockAlert.findMany({
     where: { status: 'pending', createdAt: { lt: new Date(now.getTime() - 7 * 86_400_000) } },
+    select: { id: true },
   });
+  if (stale.length === 0) return 0;
+  const ids = stale.map((a) => a.id);
+  // L'e-mail de confirmation envoyé part avec (il contient l'adresse).
+  await prisma.sentEmail.deleteMany({ where: { relatedEntity: 'stock_alert', relatedId: { in: ids }, tag: 'stock-alert-confirm' } });
+  const r = await prisma.stockAlert.deleteMany({ where: { id: { in: ids }, status: 'pending' } });
   return r.count;
 }
 

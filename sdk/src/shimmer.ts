@@ -1547,6 +1547,18 @@ function detectAndWatchCmp(onSignal: (granted: boolean) => void): boolean {
     });
   }
 
+  // WordPress : WP Consent API, que parlent Complianz, CookieYes, Cookie Notice…
+  // (la plupart des boutiques WooCommerce). Mesure = catégorie statistiques.
+  const wpHasConsent = w.wp_has_consent as ((category: string) => boolean) | undefined;
+  if (typeof wpHasConsent === 'function') {
+    found = true;
+    const read = () => {
+      try { onSignal(!!(wpHasConsent('statistics') || wpHasConsent('statistics-anonymous'))); } catch { /* ignore */ }
+    };
+    read();
+    document.addEventListener('wp_listen_for_consent_change', read);
+  }
+
   // tarteaucitron : état lisible dans son cookie ("shimmer=true" si le service
   // est déclaré, sinon on regarde si au moins un service est accepté).
   if (w.tarteaucitron) {

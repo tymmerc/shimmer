@@ -29,9 +29,15 @@ export function stripPrivateProductFields(value: unknown, depth = 0): unknown {
   return out;
 }
 
+export function toPlain(body: unknown): unknown {
+  return body === undefined ? undefined : JSON.parse(JSON.stringify(body));
+}
+
 /** À monter devant les routeurs du widget : filtre au moment de répondre (l'auth a tourné). */
 export function publicProductFields(req: Request, res: Response, next: NextFunction): void {
   const json = res.json.bind(res);
-  res.json = ((body: unknown) => json(req.authScope === 'publishable' ? stripPrivateProductFields(body) : body)) as Response['json'];
+  // Passage par JSON d'abord : un Decimal (prix) ou une Date deviennent la
+  // chaîne que le client aurait reçue, au lieu d'un objet vidé de son sens.
+  res.json = ((body: unknown) => json(req.authScope === 'publishable' ? stripPrivateProductFields(toPlain(body)) : body)) as Response['json'];
   next();
 }

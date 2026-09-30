@@ -20,7 +20,8 @@ import { linkOrderItems } from '../lib/order-items.js';
 import { scheduleReviewAfterShipping } from '../lib/review-on-delivery.js';
 import { recordOrderForVisitor } from './holdout.js';
 import { recordStockAlertConversions, detectRestock, notifyRestock } from '../lib/stock-alerts.js';
-import { syncCatalogFields, deactivateCatalogProduct } from '../lib/shopify-products.js';
+import { syncCatalogFields, deactivateCatalogProduct, refreshProductStock } from '../lib/shopify-products.js';
+import { reverseOrderEffects } from '../lib/order-reversal.js';
 import { catalogFieldsFromWoo, type WooCatalogProduct } from '../lib/woo-products.js';
 
 export const webhooksWooCommerceRouter = Router();
@@ -57,6 +58,8 @@ interface WCOrder {
   customer_id?: number;
   line_items?: WCLineItem[];
   date_created?: string;
+  /** Heure UTC (date_created est en heure du site, sans décalage). */
+  date_created_gmt?: string;
   date_completed?: string | null;
   /** Le plugin Shimmer y pose shimmer_vid (cookie du visiteur) au paiement. */
   meta_data?: Array<{ key?: string; value?: unknown }>;
@@ -64,6 +67,37 @@ interface WCOrder {
 
 /** Statuts WooCommerce d'une commande payée. */
 const PAID_STATUSES = new Set(['processing', 'completed']);
+/** Statuts WooCommerce qui défont une vente déjà comptée. */
+const UNDONE_STATUSES = new Set(['cancelled', 'refunded', 'failed']);
+/** Statuts Shimmer d'une commande qui a été payée. */
+const PAID_ORDER_STATUSES = new Set(['confirmed', 'shipped', 'delivered']);
+/** Au-delà, une commande passée « terminée » ne déclenche plus de demande d'avis (terminées en masse, vieil arriéré). */
+const REVIEW_MAX_ORDER_AGE_MS = 30 * 86_400_000;
+
+// Un statut n'avance que vers l'avant : un webhook ancien (pending) arrivé
+// en retard ne fait pas reculer une commande expédiée.
+const STATUS_RANK: Record<string, number> = { pending: 0, confirmed: 1, shipped: 2, delivered: 3 };
+export function nextOrderStatus(current: string, incoming: string): string {
+  if (incoming === 'cancelled' || incoming === 'returned') return incoming;
+  if (current === 'cancelled' || current === 'returned') return incoming;
+  return (STATUS_RANK[incoming] ?? 0) >= (STATUS_RANK[current] ?? 0) ? incoming : current;
+}
+
+/** Heure UTC de la commande : date_created_gmt, sinon date_created lue comme UTC. */
+export function wooOrderedAt(order: { date_created?: string; date_created_gmt?: string }): Date {
+  const raw = order.date_created_gmt ? `${order.date_created_gmt.replace(/Z$/, '')}Z` : order.date_created;
+  const d = raw ? new Date(raw) : new Date();
+  return Number.isNaN(d.getTime()) ? new Date() : d;
+}
+
+/**
+ * Woo refuse de garder un webhook qui échoue 5 fois : tout ce qui n'est pas
+ * à retraiter répond 200. Le « ping » de création (formulaire, non signé)
+ * aussi, sinon Woo affiche une erreur à la création de chaque webhook.
+ */
+function isWooPing(req: Request): boolean {
+  return !req.is('application/json');
+}
 
 /** Identifiant visiteur posé par le plugin Shimmer (voir integrations/woocommerce). */
 export function wooVisitorId(order: { meta_data?: Array<{ key?: string; value?: unknown }> }): string | null {
@@ -149,13 +183,21 @@ function mapStatus(wc: string | undefined): string {
 // POST /api/webhooks/woocommerce/order_updated
 // ─────────────────────────────────────────────────────────────
 async function handleOrder(req: Request, res: Response): Promise<void> {
+  if (isWooPing(req)) {
+    res.json({ accepted: false, reason: 'ping' });
+    return;
+  }
   const { id: storeId, wcConfig } = await resolveStore(req);
   if (!verifyHmac(req as Request & { rawBody?: Buffer }, wcConfig?.webhookSecret)) {
     throw new ShimmerError('Invalid HMAC', 'INVALID_SIGNATURE', 401);
   }
   const payload = req.body as WCOrder;
   const email = payload.billing?.email;
-  if (!email) throw new ShimmerError('Missing billing.email', 'BAD_REQUEST', 400);
+  if (!email) {
+    // Commande manuelle ou caisse sans e-mail : rien à suivre, mais pas d'échec (Woo désactiverait le webhook).
+    res.json({ accepted: false, reason: 'no-email' });
+    return;
+  }
 
   const prisma = getPrisma();
   let customer = await prisma.customer.findFirst({ where: { storeId, email } });
@@ -172,46 +214,59 @@ async function handleOrder(req: Request, res: Response): Promise<void> {
   }
 
   const orderNumber = payload.number ? `WC-${payload.number}` : `WC-${payload.id ?? Date.now()}`;
-  const status = mapStatus(payload.status);
+  const incoming = mapStatus(payload.status);
   const total = Number(payload.total ?? 0);
+  const orderedAt = wooOrderedAt(payload);
 
-  const existing = await prisma.order.findFirst({ where: { storeId, orderNumber } });
-  const order = existing
-    ? await prisma.order.update({
-        where: { id: existing.id },
-        data: { status, ...(status === 'delivered' ? { deliveredAt: new Date() } : {}) },
-      })
-    : await prisma.order.create({
+  let existing = await prisma.order.findFirst({ where: { storeId, orderNumber } });
+  if (!existing) {
+    try {
+      await prisma.order.create({
         data: {
           storeId,
           customerId: customer.id,
           orderNumber,
-          status,
+          status: incoming,
           totalAmount: total,
           shippingCost: Number(payload.shipping_total ?? 0),
-          orderedAt: payload.date_created ? new Date(payload.date_created) : new Date(),
-          ...(status === 'delivered' && payload.date_completed
-            ? { deliveredAt: new Date(payload.date_completed) }
-            : {}),
+          orderedAt,
         },
       });
+    } catch (err) {
+      // order.created et order.updated arrivés ensemble : l'autre l'a créée.
+      if ((err as { code?: string }).code !== 'P2002') throw err;
+      existing = await prisma.order.findFirst({ where: { storeId, orderNumber } });
+      if (!existing) throw err;
+    }
+  }
+  const wasPaid = !!existing && PAID_ORDER_STATUSES.has(existing.status);
+  const status = existing ? nextOrderStatus(existing.status, incoming) : incoming;
+  const order = existing
+    ? await prisma.order.update({ where: { id: existing.id }, data: { status } })
+    : (await prisma.order.findFirst({ where: { storeId, orderNumber } }))!;
 
-  // Lignes de commande (une seule fois : linkOrderItems ne double pas).
+  // Lignes de commande (une seule fois, sous verrou : linkOrderItems ne double pas).
   await linkOrderItems(storeId, order.id, (payload.line_items ?? []).map((li) => ({
     platformProductId: typeof li.product_id === 'number' ? String(li.product_id) : null,
     quantity: li.quantity ?? 1,
     unitPrice: Number(li.price ?? 0),
   }))).catch((err) => logger.warn({ err, orderId: order.id }, 'woo.order.items-failed'));
 
-  // Payée (processing ou completed) : ce qui compte une vente. Woo renvoie un
-  // webhook à chaque changement de statut ; chaque étape ci-dessous est
-  // idempotente (référence de commande unique, rattachement unique).
-  if (payload.status && PAID_STATUSES.has(payload.status)) {
-    await afterPaid(storeId, order.id, order.orderedAt ?? new Date(), email, total, payload);
+  const orderRef = `woo:${payload.id ?? orderNumber}`;
+  // Payée : ce qui compte une vente, UNE fois, au passage en payée (Woo
+  // renvoie un webhook à chaque changement de statut).
+  if (payload.status && PAID_STATUSES.has(payload.status) && !wasPaid) {
+    await afterPaid(storeId, order.id, orderedAt, email, total, payload, orderRef);
+  }
+  // Annulée, remboursée ou échouée après paiement : on défait ce qu'elle comptait.
+  if (payload.status && UNDONE_STATUSES.has(payload.status) && wasPaid) {
+    await reverseOrderEffects(storeId, order.id, orderRef)
+      .catch((err) => logger.warn({ err, orderId: order.id }, 'woo.order.reversal-failed'));
   }
 
-  // Terminée = expédiée : la demande d'avis part quelques jours après.
-  if (status === 'shipped') {
+  // Terminée = expédiée : la demande d'avis part quelques jours après (pas
+  // pour une vieille commande passée « terminée » en masse).
+  if (status === 'shipped' && Date.now() - orderedAt.getTime() < REVIEW_MAX_ORDER_AGE_MS) {
     await scheduleReviewAfterShipping(storeId, order.id)
       .catch((err) => logger.warn({ err, orderId: order.id }, 'woo.order.review-schedule-failed'));
   }
@@ -220,23 +275,27 @@ async function handleOrder(req: Request, res: Response): Promise<void> {
   res.json({ accepted: true, orderId: order.id, customerId: customer.id, action: existing ? 'updated' : 'created' });
 }
 
-async function afterPaid(storeId: number, orderId: number, orderedAt: Date, email: string, total: number, payload: WCOrder): Promise<void> {
+async function afterPaid(storeId: number, orderId: number, orderedAt: Date, email: string, total: number, payload: WCOrder, orderRef: string): Promise<void> {
   const prisma = getPrisma();
-  // Panier abandonné du même client : récupéré.
-  await prisma.abandonedCart.updateMany({
-    where: { storeId, customerEmail: email, recoveredAt: null },
-    data: { status: 'recovered', recoveredAt: new Date(), recoveredAmount: total },
-  });
+  // Panier abandonné AVANT cette commande, par le même client : récupéré.
+  try {
+    await prisma.abandonedCart.updateMany({
+      where: { storeId, customerEmail: email, recoveredAt: null, abandonedAt: { lte: orderedAt } },
+      data: { status: 'recovered', recoveredAt: new Date(), recoveredAmount: total },
+    });
+  } catch (err) {
+    logger.warn({ err, orderId }, 'woo.order.cart-recovery-failed');
+  }
 
   const vid = wooVisitorId(payload);
   try {
-    await attributeOrderToChat(storeId, orderId, email, vid);
+    await attributeOrderToChat(storeId, orderId, email, vid, orderedAt);
   } catch (err) {
     logger.warn({ err, orderId }, 'woo.order.attribution-failed');
   }
   if (vid) {
     try {
-      await recordOrderForVisitor(storeId, vid, total, `woo:${payload.id ?? orderId}`);
+      await recordOrderForVisitor(storeId, vid, total, orderRef);
     } catch (err) {
       logger.warn({ err, orderId }, 'woo.order.holdout-link-failed');
     }
@@ -264,11 +323,35 @@ async function afterPaid(storeId: number, orderId: number, orderedAt: Date, emai
 // Le catalogue suit Woo ; un retour en stock prévient les inscrits.
 // ─────────────────────────────────────────────────────────────
 async function handleProduct(req: Request, res: Response): Promise<void> {
+  if (isWooPing(req)) {
+    res.json({ accepted: false, reason: 'ping' });
+    return;
+  }
   const { id: storeId, wcConfig } = await resolveStore(req);
   if (!verifyHmac(req as Request & { rawBody?: Buffer }, wcConfig?.webhookSecret)) {
     throw new ShimmerError('Invalid HMAC', 'INVALID_SIGNATURE', 401);
   }
   const p = req.body as WooCatalogProduct;
+  // Une variation n'est pas une fiche : son stock est gardé et la fiche du
+  // produit parent recalculée (Woo envoie aussi le parent, pour le reste).
+  if (p.type === 'variation' || (p.parent_id ?? 0) > 0) {
+    if (p.id && p.parent_id) {
+      const available = p.manage_stock === true && typeof p.stock_quantity === 'number' ? p.stock_quantity : null;
+      await getPrisma().platformVariantStock.upsert({
+        where: { storeId_platformVariantId: { storeId, platformVariantId: String(p.id) } },
+        create: { storeId, platformVariantId: String(p.id), platformProductId: String(p.parent_id), label: p.name ?? null, available },
+        update: { platformProductId: String(p.parent_id), label: p.name ?? null, available, updatedAt: new Date() },
+      });
+      await refreshProductStock(storeId, String(p.parent_id));
+    }
+    res.json({ accepted: true, catalog: 'variation' });
+    return;
+  }
+  // Produits groupés (sans prix propre) et externes (vendus ailleurs) : hors du vendeur.
+  if (p.type === 'grouped' || p.type === 'external') {
+    res.json({ accepted: true, catalog: 'skipped' });
+    return;
+  }
   const fields = catalogFieldsFromWoo(p);
   if (!fields) {
     res.json({ accepted: true, catalog: 'skipped' });
@@ -298,6 +381,10 @@ webhooksWooCommerceRouter.post('/product_created', rawJson, async (req, res, nex
 });
 webhooksWooCommerceRouter.post('/product_deleted', rawJson, async (req, res, next) => {
   try {
+    if (isWooPing(req)) {
+      res.json({ accepted: false, reason: 'ping' });
+      return;
+    }
     const { id: storeId, wcConfig } = await resolveStore(req);
     if (!verifyHmac(req as Request & { rawBody?: Buffer }, wcConfig?.webhookSecret)) {
       throw new ShimmerError('Invalid HMAC', 'INVALID_SIGNATURE', 401);
@@ -334,13 +421,20 @@ webhooksWooCommerceRouter.post(
   rawJson,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (isWooPing(req)) {
+        res.json({ accepted: false, reason: 'ping' });
+        return;
+      }
       const { id: storeId, wcConfig } = await resolveStore(req);
       if (!verifyHmac(req as Request & { rawBody?: Buffer }, wcConfig?.webhookSecret)) {
         throw new ShimmerError('Invalid HMAC', 'INVALID_SIGNATURE', 401);
       }
       const payload = req.body as WCAbandonedCart;
       const email = payload.customer_email ?? payload.customer?.email;
-      if (!email) throw new ShimmerError('Missing customer_email', 'BAD_REQUEST', 400);
+      if (!email) {
+        res.json({ accepted: false, reason: 'no-email' });
+        return;
+      }
 
       const prisma = getPrisma();
       const cart = await prisma.abandonedCart.create({

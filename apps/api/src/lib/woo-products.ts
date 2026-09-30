@@ -8,6 +8,9 @@ import { stripHtml, UNTRACKED_STOCK, type CatalogFields } from './shopify-produc
 
 export interface WooCatalogProduct {
   id?: number;
+  /** simple, variable, grouped, external, ou variation (payload d'une variante). */
+  type?: string | null;
+  parent_id?: number | null;
   name?: string | null;
   status?: string | null;
   catalog_visibility?: string | null;

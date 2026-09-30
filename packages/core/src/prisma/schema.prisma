@@ -509,7 +509,8 @@ model Customer {
 model Order {
   id            Int       @id @default(autoincrement())
   storeId       Int       @map("store_id")
-  orderNumber   String    @unique @map("order_number") @db.VarChar(20)
+  /// Unique par boutique (@@unique plus bas) : deux boutiques peuvent avoir la commande n° 1001.
+  orderNumber   String    @map("order_number") @db.VarChar(40)
   customerId    Int       @map("customer_id")
   status        String    @default("pending") @db.VarChar(30)
   totalAmount   Decimal   @map("total_amount") @db.Decimal(10, 2)
@@ -529,6 +530,7 @@ model Order {
   reviews        Review[]
   stockAlerts    StockAlert[]
 
+  @@unique([storeId, orderNumber])
   @@index([storeId])
   @@index([customerId])
   @@index([status])

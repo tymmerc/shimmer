@@ -96,7 +96,7 @@ function shimmer_settings_page() {
 		</form>
 		<?php if ($store) : ?>
 			<h2>Webhooks à créer</h2>
-			<p>WooCommerce → Réglages → Avancé → Webhooks. Format JSON, avec le secret indiqué dans l'admin Shimmer.</p>
+			<p>WooCommerce → Réglages → Avancé → Webhooks. Version d'API « WP REST API Intégration v3 », avec le secret indiqué dans l'admin Shimmer.</p>
 			<table class="widefat striped" style="max-width:60rem">
 				<thead><tr><th>Sujet</th><th>URL de livraison</th></tr></thead>
 				<tbody>

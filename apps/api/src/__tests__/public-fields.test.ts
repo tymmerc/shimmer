@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { stripPrivateProductFields } from '../middleware/public-fields.js';
+import { stripPrivateProductFields, toPlain } from '../middleware/public-fields.js';
+
+// Comme un Prisma.Decimal : des champs internes (s, e, d) et un toJSON.
+class FakeDecimal {
+  s = 1; e = 1; d = [15, 5000000];
+  constructor(private readonly v: string) {}
+  toJSON() { return this.v; }
+}
 
 // La clé publique est lisible dans la vitrine : la recherche ne doit plus
 // livrer le stock exact, les identifiants internes ni les scores d'usage.
@@ -21,5 +28,12 @@ describe('stripPrivateProductFields', () => {
   it('ne touche pas aux objets qui ne sont pas des produits', () => {
     const body = { session: { createdAt: '2026-09-30', stock: 3 }, message: 'ok' };
     expect(stripPrivateProductFields(body)).toEqual(body);
+  });
+  it('un prix Decimal et une date gardent leur forme JSON', () => {
+    const body = { products: [{ product: { id: 1, name: 'Brouilly', sku: 'B', price: new FakeDecimal('15.5'), stock: 3 } }], session: { createdAt: new Date('2026-09-30T10:00:00Z') } };
+    const out = stripPrivateProductFields(toPlain(body)) as { products: Array<{ product: Record<string, unknown> }>; session: { createdAt: unknown } };
+    expect(out.products[0]!.product.price).toBe('15.5');
+    expect(out.products[0]!.product).not.toHaveProperty('stock');
+    expect(out.session.createdAt).toBe('2026-09-30T10:00:00.000Z');
   });
 });

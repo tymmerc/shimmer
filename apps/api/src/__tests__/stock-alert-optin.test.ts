@@ -8,6 +8,7 @@ let nextId = 1;
 const matches = (r: Record<string, unknown>, where: Record<string, unknown>) => Object.entries(where).every(([k, v]) => {
   if (v && typeof v === 'object' && 'in' in (v as object)) return (v as { in: unknown[] }).in.includes(r[k]);
   if (v && typeof v === 'object' && 'lt' in (v as object)) return (r[k] as Date) < (v as { lt: Date }).lt;
+  if (v && typeof v === 'object' && 'in' in (v as object)) return (v as { in: unknown[] }).in.includes(r[k]);
   return r[k] === v;
 });
 vi.mock('@shimmer/core', () => ({
@@ -15,16 +16,18 @@ vi.mock('@shimmer/core', () => ({
     stockAlert: {
       findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
         const r = rows.find((x) => matches(x, where));
-        return r ? { ...r, store: { name: 'Caves Forty-Two' } } : null;
+        return r ? { ...r, store: { name: 'Caves Forty-Two' }, product: { name: 'Brouilly 2022' } } : null;
       }),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { const r = { id: nextId++, createdAt: new Date(), ...data }; rows.push(r); return r; }),
       update: vi.fn(async ({ where, data }: { where: { id: number }; data: Record<string, unknown> }) => { Object.assign(rows.find((x) => x.id === where.id)!, data); return {}; }),
+      findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) => rows.filter((x) => matches(x, where)).map((x) => ({ id: x.id }))),
       deleteMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
         const before = rows.length;
         for (let i = rows.length - 1; i >= 0; i--) if (matches(rows[i]!, where)) rows.splice(i, 1);
         return { count: before - rows.length };
       }),
     },
+    sentEmail: { deleteMany: vi.fn(async () => ({ count: 1 })) },
   }),
   logger: { info: vi.fn(), warn: vi.fn() },
 }));

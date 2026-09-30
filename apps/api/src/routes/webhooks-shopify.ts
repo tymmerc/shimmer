@@ -241,13 +241,11 @@ webhooksShopifyRouter.post(
       // Create the order. Shopify renvoie un webhook qui n'a pas eu sa réponse
       // à temps : une commande déjà connue n'est ni recréée ni recomptée.
       const orderNumber = payload.name ?? (payload.order_number ? `#${payload.order_number}` : `SH-${payload.id ?? Date.now()}`);
-      const known = await prisma.order.findFirst({ where: { storeId, orderNumber }, select: { id: true } });
-      if (known) {
-        logger.info({ storeId, orderId: known.id, source: 'shopify' }, 'shopify.order.paid.duplicate');
-        res.json({ accepted: true, orderId: known.id, duplicate: true });
-        return;
-      }
-      const order = await prisma.order.create({
+      // Déjà connue : on ne la recrée pas, mais on reprend la suite (chaque
+      // étape est idempotente), au cas où le premier passage aurait planté.
+      const known = await prisma.order.findFirst({ where: { storeId, orderNumber } });
+      if (known) logger.info({ storeId, orderId: known.id, source: 'shopify' }, 'shopify.order.paid.replayed');
+      const order = known ?? await prisma.order.create({
         data: {
           storeId,
           customerId: customer.id,
@@ -265,9 +263,9 @@ webhooksShopifyRouter.post(
         unitPrice: Number(li.price ?? 0),
       }))).catch((err) => logger.warn({ err, orderId: order.id }, 'shopify.order.items-failed'));
 
-      // Mark any matching abandoned cart as recovered
+      // Mark any matching abandoned cart as recovered (abandonné avant la commande)
       await prisma.abandonedCart.updateMany({
-        where: { storeId, customerEmail: email, recoveredAt: null },
+        where: { storeId, customerEmail: email, recoveredAt: null, abandonedAt: { lte: order.orderedAt ?? new Date() } },
         data: {
           status: 'recovered',
           recoveredAt: new Date(),
@@ -279,7 +277,7 @@ webhooksShopifyRouter.post(
       const vid = shimmerVisitorId(payload);
 
       try {
-        await attributeOrderToChat(storeId, order.id, email, vid);
+        await attributeOrderToChat(storeId, order.id, email, vid, order.orderedAt ?? undefined);
       } catch (err) {
         logger.warn({ err, orderId: order.id }, 'shopify.order.attribution-failed');
       }

@@ -13,38 +13,55 @@ const state = {
   order: { id: 400, customerId: 40, status: 'shipped', store: { config: { reviews: { daysAfterShipped: 5 } } } } as Record<string, unknown>,
   reviewCreates: [] as Array<Record<string, unknown>>,
 };
-vi.mock('@shimmer/core', () => ({
-  getPrisma: () => ({
+const reversal = { alerts: [] as unknown[], holdoutDeleted: [] as unknown[], visitorUpdates: [] as unknown[], chats: [] as unknown[] };
+vi.mock('@shimmer/core', () => {
+  const client: Record<string, unknown> = {
+    $queryRaw: vi.fn(async () => [{ count: 1 }]),
+    stockAlert: { updateMany: vi.fn(async (a: unknown) => { reversal.alerts.push(a); return { count: 1 }; }) },
+    $transaction: vi.fn(async (arg: unknown) => (typeof arg === 'function' ? (arg as (tx: unknown) => unknown)(client) : Promise.all(arg as unknown[]))),
     store: { findUnique: vi.fn(async () => ({ id: 4, config: {} })) },
     holdoutOrder: {
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         if (state.holdoutOrders.some((o) => o.orderRef === data.orderRef)) throw Object.assign(new Error('dup'), { code: 'P2002' });
         state.holdoutOrders.push(data); return data;
       }),
+      findFirst: vi.fn(async ({ where }: { where: { orderRef: string } }) => {
+        const i = state.holdoutOrders.findIndex((o) => o.orderRef === where.orderRef);
+        return i >= 0 ? { id: i + 1, ...state.holdoutOrders[i] } : null;
+      }),
+      delete: vi.fn(async (a: unknown) => { reversal.holdoutDeleted.push(a); return {}; }),
     },
-    holdoutVisitor: { upsert: vi.fn(async () => { state.visitorUpserts += 1; return {}; }) },
+    holdoutVisitor: {
+      upsert: vi.fn(async () => { state.visitorUpserts += 1; return {}; }),
+      updateMany: vi.fn(async (a: unknown) => { reversal.visitorUpdates.push(a); return { count: 1 }; }),
+    },
     orderItem: {
       count: vi.fn(async () => state.itemCount),
       createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => { state.orderItems.push(...data); state.itemCount += data.length; return { count: data.length }; }),
     },
     product: { findMany: vi.fn(async ({ where }: { where: { storeId: number; platformProductId: { in: string[] } } }) => state.products.filter((p) => p.storeId === where.storeId && where.platformProductId.in.includes(p.platformProductId))) },
-    chatSession: { findFirst: vi.fn(async () => state.attributedSession), update: vi.fn() },
+    chatSession: {
+      findFirst: vi.fn(async () => state.attributedSession),
+      update: vi.fn(),
+      updateMany: vi.fn(async (a: unknown) => { reversal.chats.push(a); return { count: 1 }; }),
+    },
     searchSession: { updateMany: vi.fn() },
     order: { findFirst: vi.fn(async () => state.order) },
     reviewRequest: {
       findFirst: vi.fn(async () => null),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { state.reviewCreates.push(data); return { id: 91, ...data }; }),
     },
-  }),
-  logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-}));
+  };
+  return { getPrisma: () => client, logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn() } };
+});
 vi.mock('../lib/automations/queue.js', () => ({ enqueueReviewRequest: vi.fn(async () => undefined), enqueueCartReminders: vi.fn(async () => undefined) }));
 vi.mock('../middleware/rate-limiter.js', () => ({
   createScopedRateLimiter: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
 const { catalogFieldsFromWoo } = await import('../lib/woo-products.js');
-const { wooVisitorId } = await import('../routes/webhooks-woocommerce.js');
+const { wooVisitorId, nextOrderStatus, wooOrderedAt } = await import('../routes/webhooks-woocommerce.js');
+const { reverseOrderEffects } = await import('../lib/order-reversal.js');
 const { recordOrderForVisitor } = await import('../routes/holdout.js');
 const { linkOrderItems } = await import('../lib/order-items.js');
 const { attributeOrderToChat } = await import('../lib/attribution.js');
@@ -111,5 +128,28 @@ describe('avis après expédition (Woo)', () => {
     const now = new Date('2026-10-01T10:00:00Z');
     expect(await scheduleReviewAfterShipping(4, 400, now)).toBe(91);
     expect((state.reviewCreates[0]!.scheduledAt as Date).getTime()).toBe(now.getTime() + 5 * 86_400_000);
+  });
+});
+
+describe('statut d\'une commande Woo', () => {
+  it('n\'avance que vers l\'avant, sauf annulation', () => {
+    expect(nextOrderStatus('shipped', 'pending')).toBe('shipped');
+    expect(nextOrderStatus('confirmed', 'shipped')).toBe('shipped');
+    expect(nextOrderStatus('shipped', 'cancelled')).toBe('cancelled');
+    expect(nextOrderStatus('returned', 'confirmed')).toBe('confirmed');
+  });
+  it('heure UTC : date_created_gmt, pas l\'heure du site', () => {
+    expect(wooOrderedAt({ date_created: '2026-09-30T18:43:04', date_created_gmt: '2026-09-30T16:43:04' }).toISOString()).toBe('2026-09-30T16:43:04.000Z');
+  });
+});
+
+describe('commande annulée après paiement', () => {
+  it('défait preuve, conversion retour de stock et rattachement', async () => {
+    await recordOrderForVisitor(4, 'vid_abc123', 42, 'woo:88');
+    await reverseOrderEffects(4, 400, 'woo:88');
+    expect(reversal.alerts[0]).toMatchObject({ where: { storeId: 4, orderId: 400, status: 'converted' }, data: { status: 'notified' } });
+    expect(reversal.holdoutDeleted).toHaveLength(1);
+    expect(reversal.visitorUpdates[0]).toMatchObject({ data: { orderCount: { decrement: 1 }, revenue: { decrement: 42 } } });
+    expect(reversal.chats[0]).toMatchObject({ where: { storeId: 4, attributedOrderId: 400 }, data: { attributedOrderId: null } });
   });
 });

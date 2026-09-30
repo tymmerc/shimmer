@@ -10,7 +10,7 @@ import { logger, closePrisma, closeRedis, getPrisma, getRedis } from '@shimmer/c
 import { initializeIndexes } from '@shimmer/smart-search';
 import { authMiddleware, widgetAuth } from './middleware/auth.js';
 import { errorHandler } from './middleware/error-handler.js';
-import { createRateLimiter, trustProxy } from './middleware/rate-limiter.js';
+import { createRateLimiter, createScopedRateLimiter, trustProxy } from './middleware/rate-limiter.js';
 import { assertPublishableSecret } from './lib/publishable-key.js';
 import { publicProductFields } from './middleware/public-fields.js';
 import { searchRouter } from './routes/search.js';
@@ -71,6 +71,8 @@ app.use(cors({ origin: '*', credentials: false, maxAge: 600 }));
 // Le limiteur passe AVANT la lecture des corps : un inconnu ne fait plus lire
 // 50 Mo à l'API avant d'être compté (audit du 30/09).
 app.use(createRateLimiter());
+// Webhooks Shopify et WooCommerce : plafond propre, large (voir createRateLimiter).
+const platformWebhookLimiter = createScopedRateLimiter('platform-webhooks', 60_000, 1_000);
 // We capture rawBody so downstream HMAC checks (Shopify, WooCommerce, etc.)
 // can verify signatures against the exact bytes Shopify sent. Without this,
 // JSON.parse/re-stringify would invalidate the HMAC.
@@ -190,8 +192,8 @@ app.use('/api/cart-recovery', authMiddleware, cartRecoveryRouter);
 app.use('/api/emails', authMiddleware, emailsRouter);
 app.use('/api/webhooks', webhooksInboundRouter);
 app.use('/api/admin-stats', authMiddleware, adminStatsRouter);
-app.use('/api/webhooks/shopify', webhooksShopifyRouter);
-app.use('/api/webhooks/woocommerce', webhooksWooCommerceRouter);
+app.use('/api/webhooks/shopify', platformWebhookLimiter, webhooksShopifyRouter);
+app.use('/api/webhooks/woocommerce', platformWebhookLimiter, webhooksWooCommerceRouter);
 app.use('/api/integration', authMiddleware, integrationRouter);
 app.use('/api/automations', authMiddleware, automationsRouter);
 
