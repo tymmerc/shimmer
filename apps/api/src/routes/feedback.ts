@@ -24,7 +24,7 @@ feedbackRouter.post('/', async (req: Request, res: Response, next: NextFunction)
     const body = feedbackSchema.parse(req.body);
 
     // Queue feedback processing
-    await feedbackQueue.add('process', body, {
+    await feedbackQueue.add('process', { ...body, storeId: req.storeId! }, {
       removeOnComplete: 100,
       removeOnFail: 50,
     });

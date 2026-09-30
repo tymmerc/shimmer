@@ -13,6 +13,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { getPrisma, logger, ShimmerError } from '@shimmer/core';
+import { patchStoreConfig } from '../lib/knowledge-ingest.js';
 
 export const erasureRouter = Router();
 
@@ -88,6 +89,15 @@ erasureRouter.post('/', async (req: Request, res: Response, next: NextFunction) 
     // 4. SAV requests
     const r4 = await prisma.savRequest.deleteMany({ where: { storeId, customerId: customer.id } });
     counts.savRequests = r4.count;
+
+    // Le vendeur cite des questions tirées des tickets et des avis (relecture de
+    // nuit, lib/knowledge-ingest.ts) : on force leur reconstruction sans ce client.
+    if (counts.savRequests > 0 || counts.reviews > 0) {
+      // Retrait immédiat des questions tirées du SAV (le vendeur ne les cite
+      // plus dès maintenant) ; la relecture de nuit les reconstruit sans ce client.
+      await prisma.knowledgeChunk.deleteMany({ where: { storeId, sourceType: 'sav_objection' } });
+      await patchStoreConfig(prisma, storeId, {}, ['common_objections', 'knowledge_attempted_at', 'knowledge_ingested_at']);
+    }
 
     // 5. Abandoned carts
     const r5 = await prisma.abandonedCart.deleteMany({

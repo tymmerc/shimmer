@@ -8,11 +8,20 @@ import { getPrisma, logger } from '@shimmer/core';
 
 export interface FeedbackJob {
   searchSessionId: number;
+  /** Boutique qui envoie le retour (route /api/feedback) : doit posséder la recherche. */
+  storeId?: number;
   type: 'click' | 'purchase' | 'return' | 'validation';
   productId?: number;
   usageCode?: string;
   validated?: boolean;
   correction?: string;
+}
+
+/** Un retour ne compte que s'il vient de la boutique à qui appartient la recherche. */
+export function feedbackAllowed(jobStoreId: number | undefined, sessionStoreId: number, productStoreId?: number | null): boolean {
+  if (jobStoreId === undefined || jobStoreId !== sessionStoreId) return false;
+  // productStoreId : undefined = pas de produit dans le retour ; null = produit introuvable.
+  return productStoreId === undefined || productStoreId === sessionStoreId;
 }
 
 export function createFeedbackWorker(connection: { host: string; port: number }) {
@@ -29,6 +38,14 @@ export function createFeedbackWorker(connection: { host: string; port: number })
 
       if (!session) {
         logger.warn({ searchSessionId }, 'feedback.session_not_found');
+        return;
+      }
+
+      const productStoreId = productId
+        ? ((await prisma.product.findUnique({ where: { id: productId }, select: { storeId: true } }))?.storeId ?? null)
+        : undefined;
+      if (!feedbackAllowed(job.data.storeId, session.storeId, productStoreId)) {
+        logger.warn({ searchSessionId, storeId: job.data.storeId }, 'feedback.foreign_session_rejected');
         return;
       }
 

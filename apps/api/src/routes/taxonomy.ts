@@ -26,6 +26,14 @@ const enrichSchema = z.object({
 
 taxonomyRouter.post('/:id/enrich', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Fermée le 30/09/2026 : la taxonomie est commune à toutes les boutiques et
+    // n'importe quelle clé de boutique pouvait y ajouter des mots-clés sans
+    // filtre (empoisonnement de la recherche des autres). Aucun appelant. À
+    // rouvrir derrière une clé d'administration distincte si besoin.
+    if (process.env.SHIMMER_TAXONOMY_ENRICH !== 'open') {
+      res.status(403).json({ error: 'Taxonomy enrichment is disabled' });
+      return;
+    }
     const body = enrichSchema.parse(req.body);
     const id = Number(req.params.id);
 

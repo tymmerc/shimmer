@@ -18,12 +18,23 @@ export interface TaxonomyEntry {
 
 let taxonomyCache: TaxonomyEntry[] | null = null;
 let taxonomyIndex: BM25Index | null = null;
+let taxonomyLoadedAt = 0;
+
+/**
+ * Durée de vie du cache : le réindexage enrichit les mots-clés depuis un autre
+ * process (workers), ce process-ci doit donc relire la base de temps en temps.
+ */
+export const TAXONOMY_TTL_MS = 10 * 60 * 1000;
+
+export function isTaxonomyCacheFresh(loadedAt: number, now: number, ttlMs: number = TAXONOMY_TTL_MS): boolean {
+  return loadedAt > 0 && now - loadedAt < ttlMs;
+}
 
 /**
  * Load all taxonomy entries from DB. Cached in memory.
  */
 export async function loadTaxonomy(): Promise<TaxonomyEntry[]> {
-  if (taxonomyCache) return taxonomyCache;
+  if (taxonomyCache && isTaxonomyCacheFresh(taxonomyLoadedAt, Date.now())) return taxonomyCache;
 
   const prisma = getPrisma();
   const entries = await prisma.usageTaxonomy.findMany({
@@ -42,6 +53,7 @@ export async function loadTaxonomy(): Promise<TaxonomyEntry[]> {
   }));
 
   // Build BM25 index over taxonomy for fast matching
+  taxonomyLoadedAt = Date.now();
   taxonomyIndex = new BM25Index();
   taxonomyIndex.build(
     taxonomyCache.map((e) => ({
@@ -93,4 +105,5 @@ export async function getChildren(parentCode: string): Promise<TaxonomyEntry[]> 
 export function invalidateTaxonomyCache(): void {
   taxonomyCache = null;
   taxonomyIndex = null;
+  taxonomyLoadedAt = 0;
 }

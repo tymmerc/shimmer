@@ -2,7 +2,7 @@ export { BM25Index, type BM25Hit } from './bm25.js';
 export { embed, healthCheck, fetchEmbeddings, SIDECAR_MAX_BATCH } from './embeddings.js';
 export { VectorIndex, computeChecksum } from './vector-index.js';
 export { detectSearchType, fuzzyScore } from './search-types.js';
-export { loadTaxonomy, matchUsages, getByCode, getChildren, invalidateTaxonomyCache } from './taxonomy.js';
+export { loadTaxonomy, matchUsages, getByCode, getChildren, invalidateTaxonomyCache, isTaxonomyCacheFresh, TAXONOMY_TTL_MS } from './taxonomy.js';
 export { detectBudget, isInBudget, resolveQualitativeBudget } from './budget.js';
 export { applyDeductions, selectQuestions, computeQualificationScore } from './qualification.js';
 export { scoreProducts } from './scoring.js';
