@@ -7,7 +7,10 @@ import { Line, useTextWidth } from "./type";
 import { camAt, toWin } from "./camera";
 
 /** Bas du dock dans l’état du récap (confirmation), px viewport. */
-const DOCK_BOTTOM_D5 = 484; // état final : dock à sa hauteur max (80 + 403,8)
+// Bas réel du dock pendant le récap (confirmation + 2 lignes + réponse sur 3
+// lignes), mesuré sur l’image rendue le 30/09 : 429,7 px. Avant : 484 (hauteur
+// max du dock), le cadre descendait 54 px sous le dock (retour de Tym).
+const DOCK_BOTTOM_D5 = 430;
 
 const BIG = 110;
 

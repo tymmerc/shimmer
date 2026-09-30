@@ -19,7 +19,10 @@ import { curtainY, EZ, keyed, lerp, seg, storyAt, toxinVeil } from "./timeline";
  * 4. Bande (sous-titres, surtitres, touche Entrée) + transition de S01
  * 5. Marque (mot « Shimmer. », révélation, carton final)
  */
-export const ShimmerPOV: React.FC = () => {
+/** subtitles=false : version voix off (composition ShimmerPOV-VO). */
+export const ShimmerPOV: React.FC<{ subtitles?: boolean }> = ({
+  subtitles = true,
+}) => {
   const F = useCurrentFrame();
   const f = storyAt(F);
   const { fps } = useVideoConfig();
@@ -105,8 +108,8 @@ export const ShimmerPOV: React.FC = () => {
       )}
 
       {/* 4. Bande */}
-      <S01Line2 f={f} />
-      <Band f={f} />
+      <S01Line2 f={f} subtitles={subtitles} />
+      <Band f={f} subtitles={subtitles} />
 
       {/* 5. Marque */}
       <EndCard f={f} />
@@ -148,10 +151,23 @@ function glowAt(f: number): [number, number] {
 }
 
 /** Grain léger sur la toxine : casse les aplats en bandes à l'encodage h264. */
-const Grain: React.FC<{ seed: number; opacity: number }> = ({ seed, opacity }) => (
-  <svg width={1920} height={1080} style={{ position: "absolute", inset: 0, opacity, mixBlendMode: "overlay" }}>
+const Grain: React.FC<{ seed: number; opacity: number }> = ({
+  seed,
+  opacity,
+}) => (
+  <svg
+    width={1920}
+    height={1080}
+    style={{ position: "absolute", inset: 0, opacity, mixBlendMode: "overlay" }}
+  >
     <filter id={`grain-${seed}`}>
-      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed={seed} stitchTiles="stitch" />
+      <feTurbulence
+        type="fractalNoise"
+        baseFrequency="0.9"
+        numOctaves="2"
+        seed={seed}
+        stitchTiles="stitch"
+      />
       <feColorMatrix type="saturate" values="0" />
     </filter>
     <rect width="100%" height="100%" filter={`url(#grain-${seed})`} />

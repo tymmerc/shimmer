@@ -78,9 +78,44 @@ export const S01: React.FC<{ f: number; fps: number }> = ({ f, fps }) => (
   <PhoneChat f={f} fps={fps} />
 );
 
-/** Ligne 2 de S01, qui devient le premier sous-titre (crossfade à deux copies). */
-export const S01Line2: React.FC<{ f: number }> = ({ f }) => {
+/**
+ * Ligne 2 de S01, qui devient le premier sous-titre (crossfade à deux copies).
+ * Sans sous-titres (version voix off), elle ne descend pas dans la bande :
+ * elle monte un peu et s'efface avant que la boutique ne recouvre l'écran.
+ */
+export const S01Line2: React.FC<{ f: number; subtitles?: boolean }> = ({
+  f,
+  subtitles = true,
+}) => {
   if (f > 140) return null;
+  if (!subtitles) {
+    const units = FILM.s01b.map((w, i) => ({
+      w: w.replace(/\*/g, ""),
+      at: PHONE_T.thought + i * 3,
+      em: w.startsWith("*"),
+    }));
+    const out = seg(f, 104, 124, EZ.INOUT);
+    return (
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          opacity: 1 - out,
+          transform: `translateY(${-24 * out}px)`,
+        }}
+      >
+        <Line
+          f={f}
+          x={120}
+          baseline={682}
+          size={120}
+          units={units}
+          settle={18}
+        />
+      </div>
+    );
+  }
   const t = seg(f, 120, 138, EZ.INOUT);
   const fade = seg(f, 126, 132);
   // Trajet : (x120, ligne de base 682) → (x80, ligne de base 1012)

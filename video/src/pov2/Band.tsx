@@ -16,9 +16,13 @@ const LINES: Array<[string, number, number]> = [
   [FILM.band.L8, 1312, 1415],
 ];
 
-export const Band: React.FC<{ f: number }> = ({ f }) => {
+/** subtitles=false : version voix off, sans les pensées (surtitre et touche Entrée restent). */
+export const Band: React.FC<{ f: number; subtitles?: boolean }> = ({
+  f,
+  subtitles = true,
+}) => {
   // L1 : après le crossfade (géré par S01Line2), tenu puis sorti 160-166.
-  const l1 = f >= 138 && f < 167;
+  const l1 = subtitles && f >= 138 && f < 167;
   const l1out = seg(f, 160, 166, EZ.IN);
   // L0 : surtitre marchand dans les 2 premières secondes.
   const k0in = seg(f, 6, 16);
@@ -59,9 +63,10 @@ export const Band: React.FC<{ f: number }> = ({ f }) => {
           {FILM.band.L1}
         </div>
       )}
-      {LINES.map(([t, a, b]) => (
-        <Subtitle key={t} f={f} text={t} inAt={a} outAt={b} />
-      ))}
+      {subtitles &&
+        LINES.map(([t, a, b]) => (
+          <Subtitle key={t} f={f} text={t} inAt={a} outAt={b} />
+        ))}
       {f >= 140 && f < 252 && (
         <MonoLabel
           text={FILM.kicker}
@@ -118,7 +123,17 @@ const Keycap: React.FC<{
       }}
     >
       <span>Entrée</span>
-      <svg width="26" height="22" viewBox="0 0 26 22" style={{ marginLeft: 12 }} fill="none" stroke="rgba(251,249,244,0.85)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="26"
+        height="22"
+        viewBox="0 0 26 22"
+        style={{ marginLeft: 12 }}
+        fill="none"
+        stroke="rgba(251,249,244,0.85)"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M22 3v7a3 3 0 0 1-3 3H5" />
         <path d="M9 8l-5 5 5 5" />
       </svg>
