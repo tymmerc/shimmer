@@ -2,6 +2,16 @@ import React, { useLayoutEffect, useRef, useState } from "react";
 import { FONT, S } from "../pov/brand";
 import { EZ, lerp, seg } from "./timeline";
 
+/**
+ * Bord bas du masque d'un mot qui monte : calé juste sous la ligne de base
+ * pendant 80 % de la montée (le mot sort de sa propre ligne, pas de points
+ * isolés dessous), puis il descend pour libérer les jambages (p, q, j, y).
+ */
+function maskEdge(p: number): string {
+  const edge = p < 0.8 ? 0.95 : lerp(0.95, 1.55, (p - 0.8) / 0.2);
+  return `linear-gradient(to bottom, #000 0, #000 ${edge - 0.07}em, transparent ${edge + 0.07}em)`;
+}
+
 /** Unité de texte qui monte derrière un masque (mot ou groupe de mots). */
 export interface Unit {
   w: string;
@@ -76,6 +86,15 @@ export const Line: React.FC<{
             overflow: "hidden",
             padding: `0 ${size * 0.06}px ${size * 0.2}px`,
             margin: `0 ${-size * 0.06}px ${-size * 0.2}px`,
+            // Bord bas du masque FONDU pendant la montée : le haut des lettres
+            // n'apparaît plus en points isolés sous la ligne ; le fondu glisse
+            // vers le bas avec la montée, les jambages sont entiers à l'arrivée.
+            ...(p < 1
+              ? {
+                  maskImage: maskEdge(p),
+                  WebkitMaskImage: maskEdge(p),
+                }
+              : {}),
           }}
         >
           <span
