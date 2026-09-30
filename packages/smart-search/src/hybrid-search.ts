@@ -71,28 +71,35 @@ export async function initializeIndexes(): Promise<void> {
   );
   logger.info({ count: bm25Index.size }, 'bm25.index.built');
 
-  if (!vectorLoaded) {
-    // Build vector index
-    logger.info('Building vector index from embeddings...');
-    const texts = products.map(
-      (p) => `${p.name} ${p.description || ''} ${p.category || ''} ${p.brand || ''}`,
-    );
-
-    try {
-      const embeddings = await embed(texts, 'passage: ');
-      const items = products.map((p, i) => ({
-        id: p.id,
-        embedding: embeddings[i]!,
-      }));
-      vectorIndex.build(items);
-      vectorIndex.save(checksum);
-    } catch (err) {
-      logger.error({ err }, 'vector.index.build.failed — will use BM25 only');
-    }
-  }
-
+  // La recherche est utilisable dès que BM25 est prêt : la partie vectorielle
+  // renvoie [] tant que son index est vide (vectorSearch). On NE bloque PAS le
+  // démarrage de l'API sur les embeddings : 1 185 produits = ~20 lots au
+  // sidecar ONNX, plusieurs minutes quand la machine est chargée, pendant
+  // lesquelles l'API restait fermée (panne du 30/09, 00:36).
   indexReady = true;
-  logger.info('Indexes ready');
+  if (!vectorLoaded) {
+    logger.info({ count: products.length }, 'vector.index.building (in background, search uses BM25 until ready)');
+    const target = vectorIndex;
+    void buildVectorIndex(target, products, checksum);
+  }
+  logger.info({ vector: vectorLoaded ? 'loaded' : 'building' }, 'Indexes ready');
+}
+
+async function buildVectorIndex(
+  target: VectorIndex,
+  products: Array<{ id: number; name: string; description: string | null; category: string | null; brand: string | null }>,
+  checksum: string,
+): Promise<void> {
+  const t0 = Date.now();
+  const texts = products.map((p) => `${p.name} ${p.description || ''} ${p.category || ''} ${p.brand || ''}`);
+  try {
+    const embeddings = await embed(texts, 'passage: ');
+    target.build(products.map((p, i) => ({ id: p.id, embedding: embeddings[i]! })));
+    target.save(checksum);
+    logger.info({ count: products.length, ms: Date.now() - t0 }, 'vector.index.built');
+  } catch (err) {
+    logger.error({ err }, 'vector.index.build.failed — will use BM25 only');
+  }
 }
 
 /**
