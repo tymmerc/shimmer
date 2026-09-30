@@ -7,6 +7,9 @@ describe('isBlockedRecipient', () => {
   it('bloque les domaines d\'exemple et de test', () => {
     for (const a of ['a@example.com', 'b@cave.example.com', 'c@example.org', 'd@test.com', 'e@shop.test', 'f@x.invalid', ' g@EXAMPLE.COM ']) expect(isBlockedRecipient(a)).toBe(true);
   });
+  it('bloque les formats détournés', () => {
+    for (const a of ['Jean <a@test.com>', 'a@test.com.', 'a@test.com, b@gmail.com', 'a@localhost', 'a@test']) expect(isBlockedRecipient(a)).toBe(true);
+  });
   it('laisse passer les vraies adresses', () => {
     for (const a of ['tym@gmail.com', 'contact@brouillon.store', 'x@latest.com', 'y@contest.fr', 'z@example.fr']) expect(isBlockedRecipient(a)).toBe(false);
   });

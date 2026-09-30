@@ -58,7 +58,9 @@ export class ClaudeClient {
       ? { apiKey: apiKeyOrOptions }
       : (apiKeyOrOptions || {});
 
-    this.provider = opts.provider || LLM_PROVIDER;
+    // Mistral ne se choisit que par appel (le vendeur) : LLM_PROVIDER=mistral
+    // en variable d'env enverrait aussi le SAV, qui voit des données clients.
+    this.provider = opts.provider || (LLM_PROVIDER === 'mistral' ? 'ollama' : LLM_PROVIDER);
     this.apiKey = resolveClaudeApiKey(opts.apiKey);
 
     if (this.provider === 'claude') {

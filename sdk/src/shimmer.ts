@@ -314,7 +314,7 @@ class ShimmerClient {
   vendeur(message: string, sessionToken?: string): Promise<VendeurResponse> {
     // Cookie posé seulement avec consentement (mode session : aucun) : il
     // relie une commande payée à la conversation (attribution, apprentissage).
-    const visitorId = readCookie(VID_COOKIE) ?? undefined;
+    const visitorId = measurementAllowed ? readCookie(VID_COOKIE) ?? undefined : undefined;
     return this.request('POST', '/api/chat/message', { message, sessionToken, visitorId });
   }
 
@@ -1022,7 +1022,7 @@ class SearchWidget {
           platformVariantId: it.platformProductId ? `p:${it.platformProductId}` : `local:${it.id}`,
           productId: it.id,
           variantLabel: it.name,
-          visitorId: readCookie(VID_COOKIE),
+          visitorId: measurementAllowed ? readCookie(VID_COOKIE) : null,
         });
         box.innerHTML = `<div class="shimmer-restock-done">C'est noté. Vous serez prévenu dès le retour de ${esc(it.name)}.</div>`;
       } catch {
@@ -1475,6 +1475,7 @@ const CROSS_SELL_KEYS = ['shimmer_xs_sid', 'shimmer_xs_intent'];
 
 function clearMeasurementStorage(): void {
   try { for (const k of CROSS_SELL_KEYS) localStorage.removeItem(k); } catch { /* ignore */ }
+  try { sessionStorage.removeItem('shimmer_enrolled'); } catch { /* ignore */ }
 }
 
 function deleteCookie(name: string): void {
@@ -1624,7 +1625,7 @@ function isShopifyStorefront(): boolean {
  * holdout bucket. Called on init and re-applied if the cart is updated.
  */
 async function setupShopifyCartAttribution(visitorId: string, bucket: number): Promise<void> {
-  if (!isShopifyStorefront()) return;
+  if (!measurementAllowed || !isShopifyStorefront()) return;
   const payload = {
     attributes: {
       shimmer_vid: visitorId,
@@ -1761,6 +1762,10 @@ class CrossSellWidget {
   /** Queue an event for batched ingestion. Flushed every 1.5 s, on widget
    *  unmount, and on page unload (fetch keepalive). */
   private trackEvent(ev: Omit<CrossSellEvent, 'session_id'>): void {
+    // Mesure : seulement avec consentement. L'identifiant est relu à chaque
+    // événement (en mémoire avant l'accord, stocké après).
+    if (!measurementAllowed) return;
+    this.sessionId = getOrCreateSessionId();
     this.eventQueue.push({ ...ev, session_id: this.sessionId });
     if (this.flushTimer === null && typeof window !== 'undefined') {
       this.flushTimer = window.setTimeout(() => this.flushEvents(), 1500);
@@ -1969,6 +1974,8 @@ export class Shimmer {
   private theme: ShimmerTheme;
   private labels: typeof LABELS['fr'];
   private consent: ConsentState = 'unknown';
+  /** Identifiant du boot mesuré, reposé tel quel après un retrait puis un ré-accord. */
+  private visitorId: string | null = null;
   /** Client connecté, en mémoire seulement (voir ShimmerConfig.customer). */
   private customer: ShimmerCustomer | null = null;
   /** Vrai une fois le plein mode (cookie + holdout) démarré : idempotent. */
@@ -2023,8 +2030,21 @@ export class Shimmer {
       this.applyConsent(granted);
     });
 
+    // Refus reçu avant le démarrage : il prime, quel que soit le mode.
+    if (Shimmer.pendingConsent === false) {
+      Shimmer.pendingConsent = null;
+      await this.sessionBoot();
+      this.applyConsent(false);
+      return;
+    }
     if (mode === 'granted') { this.applyConsent(true); return; }
-    if (mode === 'denied') { await this.sessionBoot(); return; }
+    if (mode === 'denied') {
+      // Un cookie d'une visite antérieure ne doit pas rester.
+      deleteCookie(VID_COOKIE);
+      clearMeasurementStorage();
+      await this.sessionBoot();
+      return;
+    }
 
     // Signal reçu avant le démarrage : il prime sur la détection de CMP.
     if (Shimmer.pendingConsent !== null) {
@@ -2060,8 +2080,10 @@ export class Shimmer {
       void this.measuredBoot().catch(e => console.warn('[shimmer] measured boot', e));
     } else if (granted) {
       // Refus puis ré-accord dans la même page : le boot a déjà tourné, on
-      // repose juste le cookie (même id → même bucket, l'expérience reprend).
-      getOrCreateVisitorId();
+      // repose le cookie avec le MÊME identifiant (même groupe du témoin, et
+      // les fermetures d'enrôlement et du panier le gardent déjà).
+      if (this.visitorId) writeCookie(VID_COOKIE, this.visitorId, VID_MAX_AGE_DAYS);
+      else getOrCreateVisitorId();
     }
     if (!granted && prev !== 'denied') {
       // Retrait : on efface le cookie et le stockage du cross-sell, et on
@@ -2069,7 +2091,9 @@ export class Shimmer {
       // (le service continue), mais plus aucune mesure ne part.
       deleteCookie(VID_COOKIE);
       clearMeasurementStorage();
-      if (isShopifyStorefront()) {
+      // Le panier n'est nettoyé que s'il a pu être marqué (accord donné
+      // avant) : un refus d'emblée n'écrit jamais dans le panier.
+      if (prev === 'granted' && isShopifyStorefront()) {
         void fetch('/cart/update.js', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -2094,6 +2118,7 @@ export class Shimmer {
   /** Plein mode : cookie 365 j, décision holdout, attribution, enrôlement. */
   private async measuredBoot(): Promise<void> {
     const visitorId = getOrCreateVisitorId();
+    this.visitorId = visitorId;
     let control = false;
     let bucket = 0;
     // Hoisted: the enrollment closures below need the RESOLVED store id
@@ -2127,6 +2152,9 @@ export class Shimmer {
     // Cart attribution runs for BOTH groups: it's invisible metadata, and
     // without it the control group's orders are never linked, which would
     // leave the experiment with an empty control side (bias, not proof).
+    // Retrait arrivé pendant les attentes ci-dessus : on s'arrête là.
+    if (!measurementAllowed) return;
+
     if (!this.config.disableCartAttribution) {
       void setupShopifyCartAttribution(visitorId, bucket);
     }
@@ -2288,7 +2316,7 @@ export class Shimmer {
      *  cross-sell click/add (intent stored in localStorage, 30 min TTL), fires a
      *  view_target event so the dashboard knows the recommendation worked. */
     trackProductView(productId: number): void {
-      if (!Shimmer.instance || !Number.isFinite(productId) || productId <= 0) return;
+      if (!measurementAllowed || !Shimmer.instance || !Number.isFinite(productId) || productId <= 0) return;
       const intents = popIntentsForProduct(productId);
       if (intents.length === 0) return;
       const sessionId = getOrCreateSessionId();
@@ -2308,7 +2336,7 @@ export class Shimmer {
      *  any open cross-sell intent within the TTL — fires a `purchase` event
      *  on the matching (ref_id, target_id) pairs. */
     trackPurchase(productIds: number[]): void {
-      if (!Shimmer.instance) return;
+      if (!measurementAllowed || !Shimmer.instance) return;
       const sessionId = getOrCreateSessionId();
       const events: CrossSellEvent[] = [];
       for (const pid of productIds) {

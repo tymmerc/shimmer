@@ -143,11 +143,16 @@ export class VectorIndex {
 /**
  * Compute a checksum over product IDs + update timestamps.
  */
+/**
+ * Empreinte de l'index : le texte réellement embeddé, produit par produit.
+ * Avant le 30/09 elle reposait sur updatedAt : le moindre changement de prix
+ * ou de stock (webhooks Shopify) forçait à ré-embedder tout le catalogue.
+ */
 export function computeChecksum(
-  products: { id: number; updatedAt: Date }[],
+  products: { id: number; text: string }[],
 ): string {
   const data = products
-    .map((p) => `${p.id}:${p.updatedAt.getTime()}`)
+    .map((p) => `${p.id}:${createHash('md5').update(p.text).digest('hex')}`)
     .sort()
     .join('|');
   return createHash('md5').update(data).digest('hex');

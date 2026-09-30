@@ -37,7 +37,7 @@ pnpm db:studio            # Prisma Studio
 
 ## Systemd Services
 - `shimmer-api` — API (via start-api.sh)
-- `shimmer-workers` — BullMQ workers (reindex toutes les heures)
+- `shimmer-workers` — ARRÊTÉ et désactivé le 30/09/2026 (doublon exact) : les workers BullMQ tournent dans le process de l'API (apps/api/src/workers/index.ts), avec le balayage des automatisations toutes les 15 min
 - `shimmer-embedding` — FastAPI sidecar (uvicorn)
 
 ## Structure

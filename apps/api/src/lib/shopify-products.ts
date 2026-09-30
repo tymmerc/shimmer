@@ -31,6 +31,7 @@ export interface ShopifyCatalogProduct {
   vendor?: string | null;
   product_type?: string | null;
   status?: string | null;
+  published_at?: string | null;
   image?: { src?: string | null } | null;
   images?: Array<{ src?: string | null }>;
   variants?: ShopifyCatalogVariant[];
@@ -66,16 +67,18 @@ const num = (v: unknown): number | null => {
 
 export function stripHtml(html: string | null | undefined): string | null {
   if (!html) return null;
-  const text = html
+  // Tronqué avant les expressions : un body_html de plusieurs Mo ne les fait pas s'emballer.
+  const text = html.slice(0, 100_000)
     .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<br\s*\/?>|<\/p>|<\/li>/gi, '\n')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;/g, "'")
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
+    // En dernier : « &amp;lt; » doit donner « &lt; », pas « < ».
+    .replace(/&amp;/g, '&')
     .replace(/[ \t]+/g, ' ')
     .replace(/\s*\n\s*/g, '\n')
     .trim();
@@ -120,63 +123,129 @@ export function catalogFieldsFromShopify(p: ShopifyCatalogProduct): CatalogField
     stock,
     stockStatus: stock === null ? null : stock > 0 ? 'in_stock' : 'out_of_stock',
     imageUrl: image && /^https:\/\//i.test(image) ? image.slice(0, 1000) : null,
-    // Brouillon ou archivé côté Shopify : le vendeur ne le propose plus.
-    isActive: !p.status || p.status === 'active',
+    // Brouillon, archivé ou non publié en ligne : le vendeur ne le propose plus.
+    isActive: (!p.status || p.status === 'active') && !('published_at' in p && p.published_at === null),
   };
 }
 
-export type CatalogSyncResult = 'created' | 'updated' | 'skipped';
+export type CatalogSyncResult = 'created' | 'updated' | 'unchanged' | 'skipped';
+
+type ExistingProduct = {
+  id: number;
+  platformProductId: string | null;
+  name: string;
+  price: unknown;
+  compareAtPrice: unknown;
+  stock: number;
+  stockStatus: string;
+  isActive: boolean;
+  imageUrl: string | null;
+  brand: string | null;
+  description: string | null;
+};
+
+const sameNum = (a: unknown, b: number | null) => (a === null || a === undefined ? b === null : b !== null && Number(a) === b);
+
+/** Champs à écrire : seulement ce qui change (un webhook sans changement n'écrit rien). */
+export function catalogChanges(existing: ExistingProduct, f: CatalogFields): Record<string, unknown> {
+  const data: Record<string, unknown> = {};
+  if (existing.platformProductId !== f.platformProductId) data.platformProductId = f.platformProductId;
+  if (existing.name !== f.name) data.name = f.name;
+  if (f.price !== null && !sameNum(existing.price, f.price)) data.price = f.price;
+  if (!sameNum(existing.compareAtPrice, f.compareAtPrice)) data.compareAtPrice = f.compareAtPrice;
+  if (f.stock !== null && f.stockStatus && (existing.stock !== f.stock || existing.stockStatus !== f.stockStatus)) {
+    data.stock = f.stock;
+    data.stockStatus = f.stockStatus;
+  }
+  if (existing.isActive !== f.isActive) data.isActive = f.isActive;
+  if (f.imageUrl && existing.imageUrl !== f.imageUrl) data.imageUrl = f.imageUrl;
+  if (f.brand && existing.brand !== f.brand) data.brand = f.brand;
+  if (!existing.description && f.description) data.description = f.description;
+  return data;
+}
+
+async function findExisting(storeId: number, f: CatalogFields): Promise<ExistingProduct | null> {
+  const prisma = getPrisma();
+  const linked = await prisma.product.findFirst({ where: { storeId, platformProductId: f.platformProductId } });
+  if (linked) return linked as ExistingProduct;
+  // Fiche importée pas encore reliée : même SKU, sinon même nom (candidat
+  // unique). Jamais une fiche déjà reliée à un autre produit Shopify.
+  const bySku = await prisma.product.findFirst({ where: { storeId, sku: f.sku, platformProductId: null } });
+  if (bySku) return bySku as ExistingProduct;
+  const byName = await prisma.$queryRaw<Array<{ id: number }>>`
+    SELECT id FROM products
+    WHERE store_id = ${storeId} AND platform_product_id IS NULL AND lower(name) = lower(${f.name})
+    LIMIT 2`;
+  if (byName.length !== 1) return null;
+  return (await prisma.product.findFirst({ where: { id: byName[0]!.id, storeId } })) as ExistingProduct | null;
+}
 
 /** Crée ou met à jour la fiche. Ne touche ni à la catégorie (liée aux univers du vendeur) ni à une description déjà présente (souvent enrichie). */
 export async function syncCatalogProduct(storeId: number, p: ShopifyCatalogProduct): Promise<CatalogSyncResult> {
   const f = catalogFieldsFromShopify(p);
   if (!f) return 'skipped';
   const prisma = getPrisma();
-  const existing =
-    (await prisma.product.findFirst({ where: { storeId, platformProductId: f.platformProductId } })) ??
-    (await prisma.product.findFirst({ where: { storeId, sku: f.sku } })) ??
-    (await prisma.product.findFirst({ where: { storeId, platformProductId: null, name: { equals: f.name, mode: 'insensitive' } } }));
 
-  const now = new Date();
+  const existing = await findExisting(storeId, f);
   if (existing) {
-    await prisma.product.update({
-      where: { id: existing.id },
-      data: {
-        platformProductId: f.platformProductId,
-        name: f.name,
-        ...(f.price !== null ? { price: f.price } : {}),
-        compareAtPrice: f.compareAtPrice,
-        ...(f.stock !== null && f.stockStatus ? { stock: f.stock, stockStatus: f.stockStatus } : {}),
-        isActive: f.isActive,
-        ...(f.imageUrl ? { imageUrl: f.imageUrl } : {}),
-        ...(f.brand ? { brand: f.brand } : {}),
-        ...(!existing.description && f.description ? { description: f.description } : {}),
-        lastSync: now,
-      },
-    });
+    const data = catalogChanges(existing, f);
+    if (Object.keys(data).length === 0) return 'unchanged';
+    await prisma.product.update({ where: { id: existing.id }, data: { ...data, lastSync: new Date() } });
     return 'updated';
   }
-  await prisma.product.create({
-    data: {
-      storeId,
-      sku: f.sku,
-      platformProductId: f.platformProductId,
-      name: f.name,
-      description: f.description,
-      brand: f.brand,
-      category: f.category,
-      price: f.price,
-      compareAtPrice: f.compareAtPrice,
-      // Nouveau produit sans info de stock : disponible (le marchand vient de le créer).
-      stock: f.stock ?? UNTRACKED_STOCK,
-      stockStatus: f.stockStatus ?? 'in_stock',
-      imageUrl: f.imageUrl,
-      isActive: f.isActive,
-      lastSync: now,
-    },
-  });
+  try {
+    await prisma.product.create({
+      data: {
+        storeId,
+        sku: f.sku,
+        platformProductId: f.platformProductId,
+        name: f.name,
+        description: f.description,
+        brand: f.brand,
+        category: f.category,
+        price: f.price,
+        compareAtPrice: f.compareAtPrice,
+        // Nouveau produit sans info de stock : disponible (le marchand vient de le créer).
+        stock: f.stock ?? UNTRACKED_STOCK,
+        stockStatus: f.stockStatus ?? 'in_stock',
+        imageUrl: f.imageUrl,
+        isActive: f.isActive,
+        lastSync: new Date(),
+      },
+    });
+  } catch (err) {
+    // products/create et products/update arrivent souvent ensemble : l'autre
+    // a créé la fiche entre-temps (index unique sku + boutique), on la met à jour.
+    if ((err as { code?: string }).code !== 'P2002') throw err;
+    const again = await findExisting(storeId, f);
+    if (!again) throw err;
+    const data = catalogChanges(again, f);
+    if (Object.keys(data).length > 0) await prisma.product.update({ where: { id: again.id }, data: { ...data, lastSync: new Date() } });
+    return 'updated';
+  }
   logger.info({ storeId, platformProductId: f.platformProductId }, 'catalog.shopify.created');
   return 'created';
+}
+
+/**
+ * inventory_levels/update ne porte qu'une variante : on recalcule le stock de
+ * la fiche à partir des variantes connues (platform_variant_stock). Si une
+ * variante a un stock inconnu, on ne touche à rien.
+ */
+export async function refreshProductStock(storeId: number, platformProductId: string): Promise<boolean> {
+  const prisma = getPrisma();
+  const variants = await prisma.platformVariantStock.findMany({
+    where: { storeId, platformProductId },
+    select: { available: true },
+  });
+  if (variants.length === 0 || variants.some((v) => v.available === null)) return false;
+  const stock = variants.reduce((sum, v) => sum + Math.max(0, v.available ?? 0), 0);
+  const stockStatus = stock > 0 ? 'in_stock' : 'out_of_stock';
+  const r = await prisma.product.updateMany({
+    where: { storeId, platformProductId, OR: [{ stock: { not: stock } }, { stockStatus: { not: stockStatus } }] },
+    data: { stock, stockStatus, lastSync: new Date() },
+  });
+  return r.count > 0;
 }
 
 /** products/delete : la fiche reste (historique des commandes), mais sort du vendeur. */

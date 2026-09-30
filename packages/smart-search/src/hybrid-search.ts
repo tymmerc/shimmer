@@ -46,7 +46,7 @@ export async function initializeIndexes(): Promise<void> {
   const prisma = getPrisma();
   const products = await prisma.product.findMany({
     where: { isActive: true },
-    select: { id: true, name: true, description: true, category: true, brand: true, updatedAt: true },
+    select: { id: true, name: true, description: true, category: true, brand: true },
   });
 
   if (products.length === 0) {
@@ -55,18 +55,20 @@ export async function initializeIndexes(): Promise<void> {
     return;
   }
 
-  const checksum = computeChecksum(products.map((p) => ({ id: p.id, updatedAt: p.updatedAt })));
+  const checksum = computeChecksum(products.map((p) => ({ id: p.id, text: indexText(p) })));
 
-  // Try loading from disk
-  vectorIndex = new VectorIndex();
-  const vectorLoaded = vectorIndex.load(checksum);
+  // Try loading from disk. Pendant une reconstruction, l'index précédent
+  // continue de servir : on ne bascule qu'une fois le nouveau prêt.
+  const next = new VectorIndex();
+  const vectorLoaded = next.load(checksum);
+  if (vectorLoaded || !vectorIndex) vectorIndex = next;
 
   bm25Index = new BM25Index();
   // BM25 always rebuilds (fast enough)
   bm25Index.build(
     products.map((p) => ({
       id: p.id,
-      text: `${p.name} ${p.description || ''} ${p.category || ''} ${p.brand || ''}`,
+      text: indexText(p),
     })),
   );
   logger.info({ count: bm25Index.size }, 'bm25.index.built');
@@ -78,9 +80,10 @@ export async function initializeIndexes(): Promise<void> {
   // lesquelles l'API restait fermée (panne du 30/09, 00:36).
   indexReady = true;
   if (!vectorLoaded) {
-    logger.info({ count: products.length }, 'vector.index.building (in background, search uses BM25 until ready)');
-    const target = vectorIndex;
-    void buildVectorIndex(target, products, checksum);
+    logger.info({ count: products.length }, 'vector.index.building (in background, previous index or BM25 until ready)');
+    void buildVectorIndex(next, products, checksum).then((ok) => {
+      if (ok) vectorIndex = next;
+    });
   }
   logger.info({ vector: vectorLoaded ? 'loaded' : 'building' }, 'Indexes ready');
 }
@@ -89,17 +92,24 @@ async function buildVectorIndex(
   target: VectorIndex,
   products: Array<{ id: number; name: string; description: string | null; category: string | null; brand: string | null }>,
   checksum: string,
-): Promise<void> {
+): Promise<boolean> {
   const t0 = Date.now();
-  const texts = products.map((p) => `${p.name} ${p.description || ''} ${p.category || ''} ${p.brand || ''}`);
+  const texts = products.map(indexText);
   try {
     const embeddings = await embed(texts, 'passage: ');
     target.build(products.map((p, i) => ({ id: p.id, embedding: embeddings[i]! })));
     target.save(checksum);
     logger.info({ count: products.length, ms: Date.now() - t0 }, 'vector.index.built');
+    return true;
   } catch (err) {
-    logger.error({ err }, 'vector.index.build.failed — will use BM25 only');
+    logger.error({ err }, 'vector.index.build.failed — keeping the previous index (or BM25 only)');
+    return false;
   }
+}
+
+/** Texte indexé d'un produit (BM25, embeddings et empreinte de l'index). */
+function indexText(p: { name: string; description: string | null; category: string | null; brand: string | null }): string {
+  return `${p.name} ${p.description || ''} ${p.category || ''} ${p.brand || ''}`;
 }
 
 /**

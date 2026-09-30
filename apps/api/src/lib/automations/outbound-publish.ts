@@ -25,6 +25,47 @@ interface SweepResult {
 const FANOUT_LIMIT = 500;
 
 /**
+ * Publie une campagne. Elle est réservée (scheduled → publishing) AVANT tout
+ * envoi : le job et le balayage de 15 min ne peuvent pas envoyer la même
+ * newsletter deux fois (l'envoi dure plusieurs minutes). Un échec la laisse en
+ * 'failed', jamais renvoyée d'office (une partie de l'audience l'a peut-être reçue).
+ */
+async function publishCampaign(
+  campaign: { id: number; storeId: number; format: string; content: unknown; audience: string | null },
+  now: Date,
+): Promise<{ published: boolean; queued: number; reason?: string }> {
+  const prisma = getPrisma();
+  const claim = await prisma.outboundCampaign.updateMany({
+    where: { id: campaign.id, status: 'scheduled' },
+    data: { status: 'publishing' },
+  });
+  if (claim.count === 0) return { published: false, queued: 0, reason: 'already-claimed' };
+
+  try {
+    if (campaign.format !== 'newsletter') {
+      await prisma.outboundCampaign.update({
+        where: { id: campaign.id },
+        data: { status: 'published', publishedAt: now },
+      });
+      return { published: true, queued: 0 };
+    }
+    const queued = await fanOutNewsletter(campaign.id, campaign.storeId, campaign.content, campaign.audience);
+    await prisma.outboundCampaign.update({
+      where: { id: campaign.id },
+      data: {
+        status: 'published',
+        publishedAt: now,
+        metrics: { audienceReached: queued } as unknown as Parameters<typeof prisma.outboundCampaign.update>[0]['data']['metrics'],
+      },
+    });
+    return { published: true, queued };
+  } catch (err) {
+    await prisma.outboundCampaign.update({ where: { id: campaign.id }, data: { status: 'failed' } }).catch(() => undefined);
+    throw err;
+  }
+}
+
+/**
  * Per-campaign processor invoked at OutboundCampaign.scheduledAt.
  */
 export async function processOutboundPublishJob({ campaignId }: { campaignId: number }): Promise<{ published: boolean; queued: number; reason?: string }> {
@@ -32,26 +73,7 @@ export async function processOutboundPublishJob({ campaignId }: { campaignId: nu
   const campaign = await prisma.outboundCampaign.findUnique({ where: { id: campaignId } });
   if (!campaign) return { published: false, queued: 0, reason: 'not-found' };
   if (campaign.status !== 'scheduled') return { published: false, queued: 0, reason: `status-${campaign.status}` };
-
-  const now = new Date();
-  if (campaign.format !== 'newsletter') {
-    await prisma.outboundCampaign.update({
-      where: { id: campaignId },
-      data: { status: 'published', publishedAt: now },
-    });
-    return { published: true, queued: 0 };
-  }
-
-  const queued = await fanOutNewsletter(campaign.id, campaign.storeId, campaign.content, campaign.audience);
-  await prisma.outboundCampaign.update({
-    where: { id: campaignId },
-    data: {
-      status: 'published',
-      publishedAt: now,
-      metrics: { audienceReached: queued } as unknown as Parameters<typeof prisma.outboundCampaign.update>[0]['data']['metrics'],
-    },
-  });
-  return { published: true, queued };
+  return publishCampaign(campaign, new Date());
 }
 
 export async function sweepOutboundPublish(now: Date = new Date()): Promise<SweepResult> {
@@ -75,26 +97,14 @@ export async function sweepOutboundPublish(now: Date = new Date()): Promise<Swee
 
   for (const campaign of due) {
     try {
-      if (campaign.format !== 'newsletter') {
-        await prisma.outboundCampaign.update({
-          where: { id: campaign.id },
-          data: { status: 'published', publishedAt: now },
-        });
+      const r = await publishCampaign(campaign, now);
+      if (!r.published) continue;
+      if (campaign.format === 'newsletter') {
+        result.publishedWithFanout += 1;
+        result.totalEmailsQueued += r.queued;
+      } else {
         result.publishedNoFanout += 1;
-        continue;
       }
-
-      const queued = await fanOutNewsletter(campaign.id, campaign.storeId, campaign.content, campaign.audience);
-      await prisma.outboundCampaign.update({
-        where: { id: campaign.id },
-        data: {
-          status: 'published',
-          publishedAt: now,
-          metrics: { audienceReached: queued } as unknown as Parameters<typeof prisma.outboundCampaign.update>[0]['data']['metrics'],
-        },
-      });
-      result.publishedWithFanout += 1;
-      result.totalEmailsQueued += queued;
     } catch (err) {
       logger.warn({ err, campaignId: campaign.id }, 'automation.outbound-publish.failed');
       result.errors += 1;

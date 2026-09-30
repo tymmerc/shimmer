@@ -8,7 +8,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=== 1/4 Création du store ==="
 STORE_JSON=$(curl -s -X POST -H "Content-Type: application/json" \
-  -d '{"name":"L'Atelier Lumière","config":{"ownerEmail":"test@atelier.example.com","createdVia":"onboarding-test"}}' \
+  -d "{\"name\":\"L'Atelier Lumière\",\"config\":{\"ownerEmail\":\"test@atelier.example.com\",\"createdVia\":\"onboarding-test\"}}" \
   "$API/api/stores")
 echo "$STORE_JSON" | jq
 STORE_ID=$(echo "$STORE_JSON" | jq -r '.id')

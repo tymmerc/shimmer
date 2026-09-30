@@ -33,6 +33,8 @@ export async function scheduleReviewOnDelivery(storeId: number, orderId: number,
   if (existing) return null;
 
   const scheduledAt = new Date(now.getTime() + REVIEW_DELAY_MS);
+  // Deux webhooks « livrée » simultanés : l'index unique sur order_id en
+  // laisse passer un seul (P2002 pour l'autre).
   const rr = await prisma.reviewRequest.create({
     data: {
       storeId,
@@ -43,7 +45,11 @@ export async function scheduleReviewOnDelivery(storeId: number, orderId: number,
       scheduledAt,
       expiresAt: new Date(now.getTime() + REVIEW_VALID_MS),
     },
+  }).catch((err: { code?: string }) => {
+    if (err.code === 'P2002') return null;
+    throw err;
   });
+  if (!rr) return null;
   try {
     await enqueueReviewRequest(rr.id, scheduledAt);
   } catch (err) {

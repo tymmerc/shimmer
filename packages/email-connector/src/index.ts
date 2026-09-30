@@ -160,7 +160,13 @@ async function sendViaMailgun(
 const BLOCKED_RECIPIENT = /@(?:[^@\s]+\.)?(?:example\.(?:com|net|org)|test\.com|[^@\s]+\.(?:test|example|invalid|localhost))$/i;
 
 export function isBlockedRecipient(to: string): boolean {
-  return BLOCKED_RECIPIENT.test(to.trim());
+  // « Nom <adresse> » : on teste l'adresse. Liste, espaces, format douteux ou
+  // domaine sans point (a@localhost) : bloqué, jamais un envoi réel.
+  const raw = to.trim();
+  const bracketed = raw.match(/<([^<>]+)>\s*$/);
+  const addr = (bracketed ? bracketed[1]! : raw).trim().replace(/\.+$/, '');
+  if (/[\s,;<>]/.test(addr) || !/^[^@]+@[^@]+\.[^@]+$/.test(addr)) return true;
+  return BLOCKED_RECIPIENT.test(addr);
 }
 
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {

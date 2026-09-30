@@ -19,7 +19,7 @@ import { attributeOrderToChat } from '../lib/attribution.js';
 import { recordOrderForVisitor } from './holdout.js';
 import { detectRestock, notifyRestock, recordStockAlertConversions } from '../lib/stock-alerts.js';
 import { scheduleReviewOnDelivery } from '../lib/review-on-delivery.js';
-import { syncCatalogProduct, deactivateCatalogProduct, type CatalogSyncResult, type ShopifyCatalogProduct } from '../lib/shopify-products.js';
+import { syncCatalogProduct, deactivateCatalogProduct, refreshProductStock, type CatalogSyncResult, type ShopifyCatalogProduct } from '../lib/shopify-products.js';
 import {
   shipmentsFromFulfillment,
   orderNameFromFulfillment,
@@ -545,15 +545,10 @@ webhooksShopifyRouter.post(
           notified += r.notified;
         }
       }
-      // La fiche du catalogue suit Shopify (prix, stock, statut, image). Jamais
-      // bloquant : le retour de stock ci-dessus est déjà traité.
-      let catalog: CatalogSyncResult | 'failed' = 'skipped';
-      try {
-        catalog = await syncCatalogProduct(storeId, req.body as ShopifyCatalogProduct);
-      } catch (err) {
-        catalog = 'failed';
-        logger.warn({ err, storeId, productId: p.id }, 'shopify.product.catalog-sync-failed');
-      }
+      // La fiche du catalogue suit Shopify (prix, stock, statut, image). En
+      // cas d'échec on répond 500 : Shopify renverra le webhook, et le retour
+      // de stock ci-dessus ne se redéclenche pas (il compare au stock déjà enregistré).
+      const catalog: CatalogSyncResult = await syncCatalogProduct(storeId, req.body as ShopifyCatalogProduct);
       logger.info({ storeId, productId: p.id, restocked, notified, catalog, source: 'shopify' }, 'shopify.product.update');
       res.json({ accepted: true, restocked, notified, catalog });
     } catch (err) {
@@ -591,6 +586,8 @@ webhooksShopifyRouter.post(
       }
       const shopDomain = typeof req.headers['x-shopify-shop-domain'] === 'string' ? req.headers['x-shopify-shop-domain'] : undefined;
       const { previous } = await upsertVariantStock(storeId, { platformVariantId: known.platformVariantId, available: lvl.available });
+      // La fiche du catalogue suit (épuisé / de retour) sans attendre un products/update.
+      if (known.platformProductId) await refreshProductStock(storeId, known.platformProductId);
       let notified = 0;
       if (detectRestock(previous, lvl.available)) {
         const r = await notifyRestock({ storeId, platformVariantId: known.platformVariantId, available: lvl.available, productUrl: productUrlFor(shopDomain, known.productHandle), platformProductId: known.platformProductId });

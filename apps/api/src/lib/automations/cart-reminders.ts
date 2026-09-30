@@ -3,7 +3,9 @@
  *
  * Rules (kept conservative on purpose — better to under-send than spam):
  *   - Reminder 1: cart abandoned >= 1h AND no reminder1At AND not recovered.
- *   - Reminder 2: cart abandoned >= 24h AND reminder1At set AND no reminder2At AND not recovered.
+ *   - Reminder 2: cart abandoned >= 24h AND reminder1 sent >= 20h ago AND no reminder2At AND not recovered.
+ *   - Each reminder is claimed in the database BEFORE the email goes out: the
+ *     per-cart job and the 15-min sweep can never both send it.
  *   - After reminder 2, we stop. No 3rd reminder.
  *
  * Recipient resolution: customerEmail wins, then customer.email lookup.
@@ -86,10 +88,14 @@ function buildReminder(
   };
 }
 
+/** Écart minimal entre les deux relances : jamais la n°2 (avec le code) juste après la n°1. */
+export const MIN_GAP_BETWEEN_REMINDERS_MS = 20 * 60 * 60 * 1000;
+
 export async function sweepCartReminders(now: Date = new Date()): Promise<SweepResult> {
   const prisma = getPrisma();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
   const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const gapAgo = new Date(now.getTime() - MIN_GAP_BETWEEN_REMINDERS_MS);
 
   const step1Carts = await prisma.abandonedCart.findMany({
     where: {
@@ -103,7 +109,7 @@ export async function sweepCartReminders(now: Date = new Date()): Promise<SweepR
 
   const step2Carts = await prisma.abandonedCart.findMany({
     where: {
-      reminder1At: { not: null },
+      reminder1At: { lte: gapAgo },
       reminder2At: null,
       recoveredAt: null,
       abandonedAt: { lte: oneDayAgo },
@@ -157,6 +163,10 @@ export async function processCartReminderJob({ cartId, step }: { cartId: number;
   if (step === 1 && cart.reminder1At) return { sent: false, reason: 'reminder1-already-sent' };
   if (step === 2 && cart.reminder2At) return { sent: false, reason: 'reminder2-already-sent' };
   if (step === 2 && !cart.reminder1At) return { sent: false, reason: 'reminder1-missing' };
+  // Relance n°1 partie en retard (rattrapage) : la n°2 attendra le balayage.
+  if (step === 2 && cart.reminder1At && Date.now() - cart.reminder1At.getTime() < MIN_GAP_BETWEEN_REMINDERS_MS) {
+    return { sent: false, reason: 'reminder2-too-soon' };
+  }
 
   const result: SweepResult = { scannedStep1: 0, scannedStep2: 0, sent: 0, skipped: 0, heldOut: 0, errors: 0 };
   await sendOne(cart, step, result);
@@ -180,8 +190,23 @@ async function sendOne(cart: CartRow, step: 1 | 2, result: SweepResult): Promise
   const promoCode = step === 2 ? `SHIMMER10-${cart.id}` : undefined;
   const reminder = buildReminder(step, items, Number(cart.totalAmount), promoCode);
 
+  // Réservation atomique avant l'envoi : si un autre passage a déjà pris
+  // cette relance, count vaut 0 et on n'envoie rien.
+  const claim = await prisma.abandonedCart.updateMany({
+    where: step === 1
+      ? { id: cart.id, recoveredAt: null, reminder1At: null }
+      : { id: cart.id, recoveredAt: null, reminder1At: { not: null }, reminder2At: null },
+    data: step === 1
+      ? { reminder1At: new Date(), status: 'reminded_once' }
+      : { reminder2At: new Date(), promoCode, status: 'reminded_twice' },
+  });
+  if (claim.count === 0) {
+    result.skipped += 1;
+    return;
+  }
+
   try {
-    await sendEmail({
+    const r = await sendEmail({
       storeId: cart.storeId,
       to: recipient,
       subject: reminder.subject,
@@ -190,14 +215,13 @@ async function sendOne(cart: CartRow, step: 1 | 2, result: SweepResult): Promise
       relatedEntity: 'cart',
       relatedId: cart.id,
     });
-    await prisma.abandonedCart.update({
-      where: { id: cart.id },
-      data: {
-        ...(step === 1
-          ? { reminder1At: new Date(), status: 'reminded_once' }
-          : { reminder2At: new Date(), promoCode, status: 'reminded_twice' }),
-      },
-    });
+    // Refusé par le fournisseur ou adresse de test : compté comme échec (la
+    // ligne sent_emails le dit), jamais comme une relance réussie.
+    if (r.status === 'failed') {
+      logger.warn({ cartId: cart.id, step, error: r.error }, 'automation.cart-reminders.send-failed');
+      result.errors += 1;
+      return;
+    }
     result.sent += 1;
   } catch (err) {
     logger.warn({ err, cartId: cart.id, step }, 'automation.cart-reminders.send-failed');

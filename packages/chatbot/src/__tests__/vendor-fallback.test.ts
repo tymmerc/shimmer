@@ -21,3 +21,15 @@ describe('fallbackReply', () => {
     expect(VENDOR_LLM_DEADLINE_MS).toBeLessThanOrEqual(20_000);
   });
 });
+
+describe('redactContact (avant un modèle hébergé)', () => {
+  it('masque e-mail, téléphone, IBAN et carte, garde le reste', async () => {
+    const { redactContact } = await import('../sales-assistant.js');
+    expect(redactContact('un rouge pour 15€, écrivez à jean.dupont@mail.fr ou au 06 12 34 56 78'))
+      .toBe('un rouge pour 15€, écrivez à [e-mail] ou au [téléphone]');
+    expect(redactContact('+33 6 12 34 56 78')).toBe('[téléphone]');
+    expect(redactContact('IBAN FR76 3000 6000 0112 3456 7890 189')).toBe('IBAN [iban]');
+    expect(redactContact('carte 4970 1012 3456 7890')).toBe('carte [carte]');
+    expect(redactContact('un Brouilly 2022 à moins de 20 euros')).toBe('un Brouilly 2022 à moins de 20 euros');
+  });
+});

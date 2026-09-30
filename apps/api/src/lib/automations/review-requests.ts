@@ -19,32 +19,38 @@ interface SweepResult {
   errors: number;
 }
 
+type DueRequest = {
+  id: number;
+  storeId: number;
+  token: string;
+  customer: { email: string | null; firstName: string | null } | null;
+  order: { orderNumber: string };
+  store: { id: number; name: string };
+};
+
+const INCLUDE = {
+  customer: { select: { email: true, firstName: true } },
+  order: { select: { orderNumber: true } },
+  store: { select: { id: true, name: true } },
+} as const;
+
 /**
- * Per-request processor invoked by the BullMQ delayed job (fired at
- * ReviewRequest.scheduledAt, +48h after order delivered).
+ * Envoie une demande. Elle est réservée (SCHEDULED → SENT) AVANT l'e-mail :
+ * le job et le balayage de 15 min ne peuvent jamais l'envoyer tous les deux.
+ * Adresse de test bloquée : la demande expire (jamais délivrable). Erreur du
+ * fournisseur : elle repasse en file, le balayage suivant réessaie.
  */
-export async function processReviewRequestJob({ reviewRequestId }: { reviewRequestId: number }): Promise<{ sent: boolean; reason?: string }> {
+async function sendRequest(rr: DueRequest): Promise<'sent' | 'skipped' | 'failed'> {
   const prisma = getPrisma();
-  const rr = await prisma.reviewRequest.findUnique({
-    where: { id: reviewRequestId },
-    include: {
-      customer: { select: { email: true, firstName: true } },
-      order: { select: { orderNumber: true } },
-      store: { select: { id: true, name: true } },
-    },
+  if (!rr.customer?.email) return 'skipped';
+  const claim = await prisma.reviewRequest.updateMany({
+    where: { id: rr.id, status: 'SCHEDULED', sentAt: null },
+    data: { status: 'SENT', sentAt: new Date() },
   });
-  if (!rr) return { sent: false, reason: 'not-found' };
-  if (rr.status !== 'SCHEDULED') return { sent: false, reason: `already-${rr.status.toLowerCase()}` };
-  if (rr.expiresAt.getTime() < Date.now()) {
-    await prisma.reviewRequest.update({ where: { id: rr.id }, data: { status: 'EXPIRED' } });
-    return { sent: false, reason: 'expired' };
-  }
-  if (!rr.customer?.email) {
-    return { sent: false, reason: 'no-customer-email' };
-  }
+  if (claim.count === 0) return 'skipped';
 
   const firstName = rr.customer.firstName ?? '';
-  await sendEmail({
+  const r = await sendEmail({
     storeId: rr.storeId,
     to: rr.customer.email,
     subject: `Comment s'est passé votre achat ?`,
@@ -58,11 +64,36 @@ export async function processReviewRequestJob({ reviewRequestId }: { reviewReque
     relatedEntity: 'review_request',
     relatedId: rr.id,
   });
-  await prisma.reviewRequest.update({
-    where: { id: rr.id },
-    data: { status: 'SENT', sentAt: new Date() },
-  });
-  return { sent: true };
+  if (r.status === 'failed') {
+    const blocked = (r.error ?? '').startsWith('blocked');
+    await prisma.reviewRequest.update({
+      where: { id: rr.id },
+      data: blocked ? { status: 'EXPIRED' } : { status: 'SCHEDULED', sentAt: null },
+    });
+    logger.warn({ reviewRequestId: rr.id, error: r.error }, 'automation.review-requests.send-failed');
+    return 'failed';
+  }
+  return 'sent';
+}
+
+/**
+ * Per-request processor invoked by the BullMQ delayed job (fired at
+ * ReviewRequest.scheduledAt, +48h after order delivered).
+ */
+export async function processReviewRequestJob({ reviewRequestId }: { reviewRequestId: number }): Promise<{ sent: boolean; reason?: string }> {
+  const prisma = getPrisma();
+  const rr = await prisma.reviewRequest.findUnique({ where: { id: reviewRequestId }, include: INCLUDE });
+  if (!rr) return { sent: false, reason: 'not-found' };
+  if (rr.status !== 'SCHEDULED') return { sent: false, reason: `already-${rr.status.toLowerCase()}` };
+  if (rr.expiresAt.getTime() < Date.now()) {
+    await prisma.reviewRequest.update({ where: { id: rr.id }, data: { status: 'EXPIRED' } });
+    return { sent: false, reason: 'expired' };
+  }
+  if (!rr.customer?.email) {
+    return { sent: false, reason: 'no-customer-email' };
+  }
+  const outcome = await sendRequest(rr);
+  return outcome === 'sent' ? { sent: true } : { sent: false, reason: outcome === 'skipped' ? 'already-claimed' : 'send-failed' };
 }
 
 export async function sweepReviewRequests(now: Date = new Date()): Promise<SweepResult> {
@@ -73,43 +104,21 @@ export async function sweepReviewRequests(now: Date = new Date()): Promise<Sweep
       status: 'SCHEDULED',
       scheduledAt: { lte: now },
       sentAt: null,
+      // Lien mort après une longue panne : on ne l'envoie pas.
+      expiresAt: { gt: now },
     },
-    include: {
-      customer: { select: { email: true, firstName: true } },
-      order: { select: { orderNumber: true } },
-      store: { select: { id: true, name: true } },
-    },
+    include: INCLUDE,
     take: 200,
   });
 
   const result: SweepResult = { scanned: due.length, sent: 0, expired: 0, skipped: 0, errors: 0 };
 
   for (const rr of due) {
-    if (!rr.customer?.email) {
-      result.skipped += 1;
-      continue;
-    }
     try {
-      const firstName = rr.customer.firstName ?? '';
-      await sendEmail({
-        storeId: rr.storeId,
-        to: rr.customer.email,
-        subject: `Comment s'est passé votre achat ?`,
-        bodyText:
-          `Bonjour ${firstName},\n\n` +
-          `Votre commande ${rr.order.orderNumber} vous est bien parvenue ? ` +
-          `Un mot, deux étoiles, ça nous aide vraiment.\n\n` +
-          `Lien : https://tymmerc.eu/shimmer/review/?token=${rr.token}\n\n` +
-          `Merci, l'équipe ${rr.store.name}.`,
-        tag: 'review-request',
-        relatedEntity: 'review_request',
-        relatedId: rr.id,
-      });
-      await prisma.reviewRequest.update({
-        where: { id: rr.id },
-        data: { status: 'SENT', sentAt: new Date() },
-      });
-      result.sent += 1;
+      const outcome = await sendRequest(rr);
+      if (outcome === 'sent') result.sent += 1;
+      else if (outcome === 'skipped') result.skipped += 1;
+      else result.errors += 1;
     } catch (err) {
       logger.warn({ err, reviewRequestId: rr.id }, 'automation.review-requests.send-failed');
       result.errors += 1;

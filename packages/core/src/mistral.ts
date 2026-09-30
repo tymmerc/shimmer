@@ -87,15 +87,21 @@ export async function mistralChat(req: MistralRequest): Promise<MistralResult> {
         // Le corps d'erreur peut citer la requête : on ne garde que le code.
         lastError = new Error(`mistral: HTTP ${res.status}`);
         if (!RETRYABLE.has(res.status)) throw lastError;
+        // Petite pause avant de réessayer (limite de débit), dans l'échéance.
+        await new Promise((r) => setTimeout(r, Math.min(400 * (attempt + 1), Math.max(0, deadline - Date.now() - 50))));
         continue;
       }
       const data = (await res.json()) as {
         model?: string;
-        choices?: Array<{ message?: { content?: string } }>;
+        choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
-      const text = data.choices?.[0]?.message?.content;
-      if (typeof text !== 'string') throw new Error('mistral: empty response');
+      const content = data.choices?.[0]?.message?.content;
+      // Certains modèles renvoient des blocs (texte, raisonnement) : on garde le texte.
+      const text = typeof content === 'string'
+        ? content
+        : Array.isArray(content) ? content.filter((b) => b.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('') : undefined;
+      if (!text) throw new Error('mistral: empty response');
       return {
         text,
         model: data.model ?? model,

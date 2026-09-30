@@ -99,7 +99,10 @@ export function fallbackReply(
       ? "Je n'ai rien trouvé de précis pour ça. Dis-m'en un peu plus (occasion, budget, goût) et je cherche."
       : "Je n'ai rien trouvé de précis pour cela. Dites-m'en un peu plus (occasion, budget, goût) et je cherche.";
   }
-  const named = picks.map((c) => `${c.product.name} (${priceText(c.product.price)})`).join(' ou ');
+  const named = picks.map((c) => {
+    const price = c.product.price === null || c.product.price === undefined ? '' : priceText(c.product.price);
+    return price ? `${c.product.name} (${price})` : c.product.name;
+  }).join(' ou ');
   return tone === 'tu'
     ? `Je te propose ${named}. Dis-m'en un peu plus (occasion, budget) et j'affine.`
     : `Je vous propose ${named}. Dites-m'en un peu plus (occasion, budget) et j'affine.`;
@@ -243,6 +246,36 @@ async function categoryProducts(storeId: number, message: string): Promise<Score
 }
 
 /** Stock réel du catalogue local. `stockStatus` fait foi, `stock` en secours. */
+/**
+ * Masque les coordonnées qu'un visiteur taperait dans la barre (e-mail,
+ * téléphone, IBAN, carte) avant un envoi à un modèle hébergé. Le vendeur n'en
+ * a jamais besoin pour conseiller un produit.
+ */
+export function redactContact(text: string): string {
+  return text
+    .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, '[e-mail]')
+    .replace(/\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){3,7}(?:[ ]?[A-Z0-9]{1,4})?\b/gi, '[iban]')
+    .replace(/\b(?:\d[ -]?){13,19}\b/g, '[carte]')
+    .replace(/(?:\+\d{2}[ .-]?|\b0)\d(?:[ .-]?\d{2}){4}\b/g, '[téléphone]');
+}
+
+/** Les produits d'une réponse en cache existent-ils toujours tels quels ? */
+async function cachedProductsStillValid(
+  storeId: number,
+  products: Array<{ id: number; price: string }>,
+): Promise<boolean> {
+  if (products.length === 0) return false;
+  const rows = await getPrisma().product.findMany({
+    where: { storeId, id: { in: products.map((p) => p.id) } },
+    select: { id: true, price: true, stock: true, stockStatus: true, isActive: true },
+  });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return products.every((p) => {
+    const r = byId.get(p.id);
+    return !!r && r.isActive && !isSoldOut(r) && Number(r.price ?? 0) === Number(p.price);
+  });
+}
+
 export function isSoldOut(p: { stock?: number | null; stockStatus?: string | null }): boolean {
   if (p.stockStatus && /out_of_stock|sold_out|epuise|épuisé/i.test(p.stockStatus)) return true;
   if (typeof p.stock === 'number' && p.stock <= 0 && (!p.stockStatus || p.stockStatus === 'in_stock')) {
@@ -277,8 +310,11 @@ export async function handleSalesMessage(
   if (cacheable) {
     try {
       const hit = await getRedis().get(cacheKey);
-      if (hit) {
-        const data = JSON.parse(hit) as { message: string; recommendedProducts: SalesChatResponse['recommendedProducts']; outOfStock?: SalesChatResponse['outOfStock'] };
+      const cached = hit ? JSON.parse(hit) as { message: string; recommendedProducts: SalesChatResponse['recommendedProducts']; outOfStock?: SalesChatResponse['outOfStock'] } : null;
+      // Le catalogue suit Shopify en temps réel : une réponse gardée 12 h ne
+      // sert que si ses produits sont toujours actifs, en stock et au même prix.
+      if (cached && await cachedProductsStillValid(storeId, cached.recommendedProducts)) {
+        const data = cached;
         const now = new Date().toISOString();
         const msgs: ChatMessage[] = [
           { role: 'user', content: message, timestamp: now },
@@ -311,8 +347,10 @@ export async function handleSalesMessage(
   const candidates = await buildCandidatePool(storeId, message, token);
 
   // Load conversation history if session exists
+  // Mode vente seulement : un jeton de conversation SAV ne doit pas faire
+  // relire (et envoyer au modèle) un historique de commande.
   let session = await prisma.chatSession.findFirst({
-    where: { sessionToken: token, storeId },
+    where: { sessionToken: token, storeId, mode: 'sales' },
   });
   const history: ChatMessage[] = session
     ? (session.messages as unknown as ChatMessage[])
@@ -342,14 +380,15 @@ export async function handleSalesMessage(
   // Build system prompt with voice + candidate pool + knowledge from the store
   const systemPrompt = buildSalesPrompt(store?.name ?? 'la boutique', config, candidates, reviewsByProduct);
 
-  const claudeMessages: ClaudeMessage[] = history.map(m => ({
-    role: m.role,
-    content: m.content,
-  }));
-
   // Mistral si une clé est posée (1 à 2 s), sinon l'IA locale. Le SAV, qui
   // voit des données clients, reste en local.
-  const claude = new ClaudeClient({ provider: interactiveProvider() });
+  const provider = interactiveProvider();
+  const claudeMessages: ClaudeMessage[] = history.map(m => ({
+    role: m.role,
+    // Hors du VPS, jamais de coordonnées tapées par le visiteur.
+    content: provider ? redactContact(m.content) : m.content,
+  }));
+  const claude = new ClaudeClient({ provider });
 
   // Graceful degradation: the search already produced relevant candidates
   // without the LLM. If the LLM is fully unavailable (Ollama down AND no Claude
