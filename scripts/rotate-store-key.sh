@@ -14,11 +14,12 @@
 # Aucune clé n'est affichée, ni passée en argument de commande (visible dans ps).
 # L'API relit stores.api_key à chaque requête : effet immédiat, pas de restart.
 #
-# Variables : SHIMMER_ENV_FILE, SHIMMER_SECRETS_FILE, SHIMMER_ROTATION_DIR,
+# Variables : SHIMMER_ROOT (dépôt, défaut = parent du script), SHIMMER_ENV_FILE,
+# SHIMMER_SECRETS_FILE, SHIMMER_ROTATION_DIR,
 # SHIMMER_API_URL, SKIP_VERIFY=1 (pas d'appel API, pour les tests).
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="${SHIMMER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 ENV_FILE="${SHIMMER_ENV_FILE:-$ROOT/.env}"
 SECRETS_FILE="${SHIMMER_SECRETS_FILE:-$ROOT/.secrets.local}"
 BACKUP_DIR="${SHIMMER_ROTATION_DIR:-$HOME/.shimmer-rotation}"
