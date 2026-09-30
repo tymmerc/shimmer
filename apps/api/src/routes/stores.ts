@@ -1,7 +1,7 @@
 /**
  * Store management routes:
  * - POST   /api/stores          (no auth — creates a new store and returns its api key)
- * - GET    /api/stores/:id      (no auth — public profile, never returns the api key)
+ * - GET    /api/stores/:id      (no auth, public profile: id + name only, never the config)
  * - GET    /api/stores/me/config  (auth — current store's config)
  * - PATCH  /api/stores/me/config  (auth — merge update of tone/voice/universe_overrides)
  */
@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { authMiddleware } from '../middleware/auth.js';
 import { createScopedRateLimiter } from '../middleware/rate-limiter.js';
 import { derivePublishableKey } from '../lib/publishable-key.js';
+import { publicStoreProfile } from '../lib/public-store.js';
 
 export const storesRouter = Router();
 
@@ -188,7 +189,9 @@ storesRouter.patch('/me/config', authMiddleware, async (req: Request, res: Respo
   }
 });
 
-// GET /api/stores/:id — keep last (catch-all numeric id, no auth, no api key in response)
+// GET /api/stores/:id — keep last (catch-all numeric id, no auth).
+// Public profile only (id, name): the config holds secrets (Shopify webhook
+// secret, Woo keys, billing). Before 30/09/2026 it returned the whole config.
 storesRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = Number(req.params.id);
@@ -199,13 +202,7 @@ storesRouter.get('/:id', async (req: Request, res: Response, next: NextFunction)
     const prisma = getPrisma();
     const store = await prisma.store.findUnique({
       where: { id },
-      select: {
-        id: true,
-        name: true,
-        config: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: { id: true, name: true },
     });
 
     if (!store) {
@@ -213,7 +210,7 @@ storesRouter.get('/:id', async (req: Request, res: Response, next: NextFunction)
       return;
     }
 
-    res.json(store);
+    res.json(publicStoreProfile(store));
   } catch (err) {
     next(err);
   }
