@@ -112,16 +112,16 @@ export const SCROLL = (f: number) =>
 // des passages calmes étirés (temps de lecture ≥ 3 mots/s une fois le texte
 // lisible) et les attentes du vendeur resserrées. [début, fin, frames ajoutées]
 const STRETCH: Array<[number, number, number]> = [
-  [0, 120, 6], // S01 : le texto se lit
+  [0, 120, 40], // S01 : la conversation se lit (frappe, message, réponse)
   [150, 240, -35], // S02 : défilement plus vif
   [320, 376, 30], // S04 : lire la question du vendeur
   [506, 560, 36], // S05 : lire la réponse 1
   [694, 760, 30], // S06 : lire la réponse 2
   [950, 986, 10], // S07 : lire l'encart épuisé
   [1003, 1024, 12], // S07 : l'email se tape à une vitesse humaine
-  [1068, 1092, 36], // S07 : lire la confirmation
+  [1068, 1092, 39], // S07 : lire la confirmation (+3 : « samedi » tombe sur la mesure 17)
   [1112, 1151, 10], // S08 : les mots montent
-  [1151, 1178, 36], // S08 : samedi, 20 h 15 se tient
+  [1151, 1178, 33], // S08 : samedi, 20 h 15 se tient (−3 : la suite ne bouge pas)
   [1232, 1284, 24], // S09 : l'email est de retour
   [1356, 1415, -25], // S10 : récap plus serré
   [1443, 1455, 20], // S10 : « C'était Shimmer. » se tient

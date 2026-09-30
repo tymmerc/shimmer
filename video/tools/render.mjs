@@ -1,7 +1,8 @@
 // Rendu par tranches (mémoire serrée sur le VPS) : un seul bundle, des tranches
 // de N frames rendues à la suite (reprise : une tranche déjà présente est
 // sautée), puis assemblage sans réencodage.
-// Usage : node tools/render.mjs <compositionId> <sortie.mp4> [tranche=300] [concurrence=1]
+// Usage : heavy node tools/render.mjs <compositionId> <sortie.mp4> [tranche=300] [concurrence=1]
+// (toujours via heavy : une tâche lourde à la fois sur le VPS, plafond mémoire propre)
 // Concurrence 1 : à 2 onglets, le shader WebGL (ANGLE) mélange les images
 // entre onglets et le logo apparaît en double une image sur deux.
 import { bundle } from "@remotion/bundler";
@@ -29,10 +30,12 @@ const serveUrl = await bundle({ entryPoint: path.resolve("src/index.ts") });
 const composition = await selectComposition({ serveUrl, id, chromiumOptions });
 const total = composition.durationInFrames;
 const parts = [];
+const spans = [];
 for (let a = 0; a < total; a += CHUNK) {
   const b = Math.min(total - 1, a + CHUNK - 1);
   const file = path.join(dir, `c${String(a).padStart(5, "0")}.mp4`);
   parts.push(file);
+  spans.push((b - a + 1) / composition.fps);
   if (existsSync(file)) {
     console.log(`skip ${a}-${b}`);
     continue;
@@ -51,6 +54,8 @@ for (let a = 0; a < total; a += CHUNK) {
     imageFormat: "jpeg",
     jpegQuality: 92,
     logLevel: "error",
+    // Pas de piste son muette : elle allonge chaque tranche et décale l'assemblage.
+    muted: true,
     // Machine partagée et parfois en swap : une image peut mettre > 30 s.
     timeoutInMilliseconds: 180000,
   });
@@ -58,7 +63,14 @@ for (let a = 0; a < total; a += CHUNK) {
   console.log(`done ${a}-${b} in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 }
 const list = path.join(dir, "list.txt");
-writeFileSync(list, parts.map((p) => `file '${p}'`).join("\n"));
+// Durée exacte de chaque tranche : sans elle, le concat se cale sur la piste
+// la plus longue et ajoute 48 ms à chaque jonction (image figée, son décalé).
+writeFileSync(
+  list,
+  parts
+    .map((p, i) => `file '${p}'\nduration ${spans[i].toFixed(6)}`)
+    .join("\n"),
+);
 execFileSync("ffmpeg", [
   "-v",
   "error",
@@ -69,6 +81,8 @@ execFileSync("ffmpeg", [
   "0",
   "-i",
   list,
+  "-map",
+  "0:v:0",
   "-c",
   "copy",
   "-movflags",

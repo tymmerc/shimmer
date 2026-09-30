@@ -71,6 +71,18 @@ export const FILM = {
   msgFrom: "Julien",
   msgTime: "18:42",
   msgBody: fr("Barbecue samedi, on sera 8. Tu t'occupes du vin ?"),
+  /** La conversation autour du texto (messagerie générique, S01). */
+  chat: {
+    ydayDay: "Hier",
+    ydayTime: "21:07",
+    out0: fr("Tu me dis pour la date ?"),
+    day: "Aujourd\u2019hui",
+    time: "18:40",
+    in1: fr("Ça y est, on a la date !"),
+    out1: fr("Alors ?"),
+    reply: fr("Je gère !"),
+    delivered: "Distribué",
+  },
   s01b: ["Je", fr("n'y"), "connais", "*rien.*"],
   band: {
     L1: fr("Je n'y connais rien."),
@@ -97,10 +109,8 @@ export const FILM = {
     ["*vend,*", "*répond*", "*et*", "*relance*"],
     ["toute", "seule."],
   ],
-  cta: "Audit gratuit de votre boutique, sur simple demande.",
   /** URL affichée sous l’accroche (vide tant que le domaine n’est pas choisi). */
   url: "",
-  facts: ["VENDEUR IA · SHOPIFY ET WOOCOMMERCE", "IA ET DONNÉES HÉBERGÉES EN EUROPE"],
   disclosure: "Boutique de démo Shopify, séquence reconstituée.",
 };
 

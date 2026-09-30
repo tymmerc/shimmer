@@ -3,7 +3,7 @@ import { spring } from "remotion";
 import { FONT, S } from "../pov/brand";
 import { FILM } from "./script";
 import { EZ, lerp, seg } from "./timeline";
-import { Line, MonoLabel, useTextWidth } from "./type";
+import { Line, useTextWidth } from "./type";
 import { camAt, toWin } from "./camera";
 
 /** Bas du dock dans l’état du récap (confirmation), px viewport. */
@@ -150,14 +150,32 @@ export const Annotation: React.FC<{ f: number }> = ({ f }) => {
   const y1 = lerp(yBar, yDock, grow);
   const rx = lerp(27 * cam.m, 16 * cam.m, grow);
   return (
-    <svg width={1840} height={860} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+    <svg
+      width={1840}
+      height={860}
+      style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}
+    >
       <defs>
         <mask id="spot">
           <rect x={-10} y={-10} width={1860} height={880} fill="white" />
-          <rect x={x0} y={y0} width={x1 - x0} height={y1 - y0} rx={rx} fill="black" />
+          <rect
+            x={x0}
+            y={y0}
+            width={x1 - x0}
+            height={y1 - y0}
+            rx={rx}
+            fill="black"
+          />
         </mask>
       </defs>
-      <rect x={-10} y={-10} width={1860} height={880} fill={`rgba(13,11,20,${0.55 * dim})`} mask="url(#spot)" />
+      <rect
+        x={-10}
+        y={-10}
+        width={1860}
+        height={880}
+        fill={`rgba(13,11,20,${0.55 * dim})`}
+        mask="url(#spot)"
+      />
       <rect
         x={x0}
         y={y0}
@@ -171,27 +189,36 @@ export const Annotation: React.FC<{ f: number }> = ({ f }) => {
         strokeDasharray={1}
         strokeDashoffset={1 - draw}
         opacity={1 - out}
-        style={{ filter: `drop-shadow(0 0 ${14 * glow}px rgba(212,255,58,${0.45 * glow}))` }}
+        style={{
+          filter: `drop-shadow(0 0 ${14 * glow}px rgba(212,255,58,${0.45 * glow}))`,
+        }}
       />
     </svg>
   );
 };
 
-/** Carton final (S11) : accroche du site, offre, faits, mention démo. */
+/**
+ * Carton final (S11) : le logo (déjà en haut à gauche), l'accroche du site,
+ * l'adresse quand le domaine existera, et la mention démo en petit. Rien
+ * d'autre : retour de Tym du 30/09, l'ancien carton était trop chargé.
+ */
 export const EndCard: React.FC<{ f: number }> = ({ f }) => {
   if (f < 1455) return null;
   const grad = seg(f, 1455, 1475, EZ.OUT);
   const tl = FILM.tagline;
   const l1 = tl[0].map((w, i) => ({ w, at: 1486 + i * 3 }));
   const l2at = [1494, 1500, 1506, 1509];
-  const l2 = tl[1].map((w, i) => ({ w: w.replace(/\*/g, ""), at: l2at[i], em: true }));
+  const l2 = tl[1].map((w, i) => ({
+    w: w.replace(/\*/g, ""),
+    at: l2at[i],
+    em: true,
+  }));
   const l3 = tl[2].map((w, i) => ({ w, at: 1516 + i * 3 }));
-  const cta = seg(f, 1526, 1540, EZ.OUT);
   const url = seg(f, 1534, 1548, EZ.OUT);
   const ul = seg(f, 1540, 1558, EZ.SITE);
-  const facts = seg(f, 1540, 1554, EZ.OUT);
-  const disc = seg(f, 1552, 1564);
   const hasUrl = FILM.url.length > 0;
+  // Sans adresse, la mention prend son créneau : lisible près de 3 s avant la fin.
+  const disc = hasUrl ? seg(f, 1546, 1560) : seg(f, 1534, 1548);
   return (
     <>
       <div
@@ -199,7 +226,8 @@ export const EndCard: React.FC<{ f: number }> = ({ f }) => {
           position: "absolute",
           inset: 0,
           opacity: grad,
-          background: "linear-gradient(90deg, #0d0b14 0%, rgba(13,11,20,.85) 46%, rgba(13,11,20,0) 70%)",
+          background:
+            "linear-gradient(90deg, #0d0b14 0%, rgba(13,11,20,.85) 52%, rgba(13,11,20,0) 78%)",
         }}
       />
       <div
@@ -213,31 +241,23 @@ export const EndCard: React.FC<{ f: number }> = ({ f }) => {
           background: "linear-gradient(180deg, rgba(13,11,20,0), #0d0b14 70%)",
         }}
       />
-      <Line f={f} x={120} baseline={420} size={104} units={l1} dur={20} />
-      <Line f={f} x={120} baseline={526} size={104} units={l2} dur={20} skewEm />
-      <Line f={f} x={120} baseline={632} size={104} units={l3} dur={20} />
-      <div
-        style={{
-          position: "absolute",
-          left: 120,
-          top: 760 - 40 * 0.8 + 12 * (1 - cta),
-          opacity: cta,
-          fontFamily: FONT.sans,
-          fontWeight: 500,
-          fontSize: 40,
-          lineHeight: 1,
-          color: S.paper,
-          whiteSpace: "nowrap",
-        }}
-      >
-        {FILM.cta}
-      </div>
+      <Line f={f} x={120} baseline={470} size={104} units={l1} dur={20} />
+      <Line
+        f={f}
+        x={120}
+        baseline={576}
+        size={104}
+        units={l2}
+        dur={20}
+        skewEm
+      />
+      <Line f={f} x={120} baseline={682} size={104} units={l3} dur={20} />
       {hasUrl && (
         <div
           style={{
             position: "absolute",
             left: 120,
-            top: 820 - 38 * 0.8 + 12 * (1 - url),
+            top: 800 - 38 * 0.8 + 12 * (1 - url),
             opacity: url,
             fontFamily: FONT.mono,
             fontWeight: 500,
@@ -248,32 +268,28 @@ export const EndCard: React.FC<{ f: number }> = ({ f }) => {
           }}
         >
           {FILM.url}
-          <div style={{ height: 2, background: S.acid, marginTop: 10, transformOrigin: "0 0", transform: `scaleX(${ul})` }} />
+          <div
+            style={{
+              height: 2,
+              background: S.acid,
+              marginTop: 10,
+              transformOrigin: "0 0",
+              transform: `scaleX(${ul})`,
+            }}
+          />
         </div>
       )}
-      {FILM.facts.map((line, i) => (
-        <MonoLabel
-          key={line}
-          text={line}
-          x={120}
-          baseline={(hasUrl ? 900 : 860) + i * 46}
-          size={32}
-          tracking={0.12}
-          opacity={facts}
-          dy={12 * (1 - facts)}
-        />
-      ))}
       <div
         style={{
           position: "absolute",
           left: 120,
-          top: 1010 - 34 * 0.8,
+          top: 1000 - 30 * 0.8,
           opacity: disc,
           fontFamily: FONT.sans,
           fontWeight: 400,
-          fontSize: 34,
+          fontSize: 30,
           lineHeight: 1,
-          color: "rgba(251,249,244,0.62)",
+          color: "rgba(251,249,244,0.7)",
           whiteSpace: "nowrap",
         }}
       >

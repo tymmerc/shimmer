@@ -7,6 +7,7 @@ import { FILM, RESTOCK_MAIL } from "./script";
 import { EZ, lerp, seg } from "./timeline";
 import { Line, MonoLabel } from "./type";
 import { W } from "./wines";
+import { PHONE_T, PhoneChat } from "./Phone";
 
 const plex = loadPlex("normal", {
   weights: ["400", "600"],
@@ -72,69 +73,10 @@ const DeviceCard: React.FC<{
   </div>
 );
 
-// ── S01 · le texto ──────────────────────────────────────────────────────────
-export const S01: React.FC<{ f: number; fps: number }> = ({ f, fps }) => {
-  const sp = spring({
-    frame: f - 10,
-    fps,
-    config: { damping: 16, stiffness: 140, mass: 0.9 },
-  });
-  const recede = seg(f, 84, 96, EZ.OUT);
-  const gone = seg(f, 116, 124, EZ.IN);
-  const cardY = lerp(-160, 0, sp) - 30 * recede;
-  return (
-    <>
-      <DeviceCard
-        w={1440}
-        h={150}
-        style={{
-          left: 120,
-          top: 200,
-          opacity: seg(f, 10, 16) * lerp(1, 0.45, recede) * (1 - gone),
-          transform: `translateY(${cardY}px) rotate(${lerp(1.5, 0, sp)}deg) scale(${lerp(1, 0.96, recede)})`,
-          transformOrigin: "left center",
-        }}
-      >
-        <div
-          style={{
-            width: 84,
-            height: 84,
-            borderRadius: 42,
-            background: S.ink,
-            color: S.paper,
-            fontFamily: FONT.display,
-            fontWeight: 500,
-            fontSize: 42,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flex: "0 0 auto",
-          }}
-        >
-          J
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "baseline",
-            }}
-          >
-            <span style={{ fontWeight: 600, fontSize: 38 }}>
-              {FILM.msgFrom}
-            </span>
-            <span style={{ fontSize: 30, opacity: 0.5 }}>{FILM.msgTime}</span>
-          </div>
-          <div style={{ fontSize: 54, marginTop: 8, whiteSpace: "nowrap" }}>
-            {FILM.msgBody}
-          </div>
-        </div>
-      </DeviceCard>
-
-    </>
-  );
-};
+// ── S01 · le texto, dans la messagerie du téléphone (Phone.tsx) ─────────────
+export const S01: React.FC<{ f: number; fps: number }> = ({ f, fps }) => (
+  <PhoneChat f={f} fps={fps} />
+);
 
 /** Ligne 2 de S01, qui devient le premier sous-titre (crossfade à deux copies). */
 export const S01Line2: React.FC<{ f: number }> = ({ f }) => {
@@ -147,7 +89,7 @@ export const S01Line2: React.FC<{ f: number }> = ({ f }) => {
   const fr = lerp(1, 0.4, t);
   const units = FILM.s01b.map((w, i) => ({
     w: w.replace(/\*/g, ""),
-    at: 90 + i * 3,
+    at: PHONE_T.thought + i * 3,
     em: w.startsWith("*"),
   }));
   return (
@@ -227,7 +169,16 @@ export const S08: React.FC<{ f: number }> = ({ f }) => {
       <Line f={f} x={120} baseline={530} size={96} units={a} dur={18} />
       <Line f={f} x={120} baseline={628} size={96} units={b} dur={18} />
       {/* horizon + quatre bouteilles (« comptez 4 bouteilles ») */}
-      <div style={{ position: "absolute", left: 1080, width: 800, top: 800, height: 1, background: "rgba(251,249,244,0.10)" }} />
+      <div
+        style={{
+          position: "absolute",
+          left: 1080,
+          width: 800,
+          top: 800,
+          height: 1,
+          background: "rgba(251,249,244,0.10)",
+        }}
+      />
       <div
         style={{
           position: "absolute",
@@ -257,10 +208,20 @@ export const S08: React.FC<{ f: number }> = ({ f }) => {
               top: 800 - b.h,
               opacity: r,
               transform: `translateY(${90 * (1 - r)}px)`,
-              filter: i < 2 ? "brightness(0.72)" : i === 2 ? "brightness(0.86)" : undefined,
+              filter:
+                i < 2
+                  ? "brightness(0.72)"
+                  : i === 2
+                    ? "brightness(0.86)"
+                    : undefined,
             }}
           >
-            <Bottle look={W.vacqueyras.look} size={b.h} id={`s08-${i}`} sweep={i === 3 ? sweep : undefined} />
+            <Bottle
+              look={W.vacqueyras.look}
+              size={b.h}
+              id={`s08-${i}`}
+              sweep={i === 3 ? sweep : undefined}
+            />
           </div>
         );
       })}
@@ -321,7 +282,15 @@ export const S09: React.FC<{ f: number; fps: number }> = ({ f, fps }) => {
           }}
         >
           {/* enveloppe : c'est un email (stock-alerts.ts), pas un SMS */}
-          <svg width="38" height="30" viewBox="0 0 38 30" fill="none" stroke="#f3ede2" strokeWidth="2.4" strokeLinejoin="round">
+          <svg
+            width="38"
+            height="30"
+            viewBox="0 0 38 30"
+            fill="none"
+            stroke="#f3ede2"
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          >
             <rect x="2" y="2" width="34" height="26" rx="4" />
             <path d="M3 4l16 12L35 4" />
           </svg>
