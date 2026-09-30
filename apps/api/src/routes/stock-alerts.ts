@@ -19,6 +19,8 @@ import { z } from 'zod';
 import { getPrisma } from '@shimmer/core';
 import { widgetAuth, authMiddleware } from '../middleware/auth.js';
 import { createScopedRateLimiter } from '../middleware/rate-limiter.js';
+import { isEmailConfigured, sendEmail } from '@shimmer/email-connector';
+import { publicApiBase } from '../lib/public-url.js';
 import {
   subscribeStockAlert,
   aggregateRestockDemand,
@@ -53,6 +55,10 @@ stockAlertsRouter.post('/', subscribeLimiter, widgetAuth, async (req: Request, r
       productId = p?.id ?? null;
     }
 
+    // Double opt-in dès que de vrais e-mails partent : sans lui, n'importe qui
+    // inscrit l'adresse d'un tiers. En mode simulé (démo), l'alerte est active
+    // tout de suite, sinon personne ne recevrait jamais la confirmation.
+    const confirmRequired = isEmailConfigured();
     const r = await subscribeStockAlert({
       storeId,
       platformVariantId: body.platformVariantId,
@@ -60,8 +66,26 @@ stockAlertsRouter.post('/', subscribeLimiter, widgetAuth, async (req: Request, r
       productId,
       variantLabel: body.variantLabel ?? null,
       visitorId: body.visitorId ?? null,
+      confirmRequired,
     });
-    res.status(r.created ? 201 : 200).json({ ok: true, id: r.id, created: r.created });
+    if (r.confirmToken) {
+      const link = `${publicApiBase()}/api/public/stock-alerts/confirm?token=${r.confirmToken}`;
+      const what = body.variantLabel ? `« ${body.variantLabel} »` : 'ce produit';
+      await sendEmail({
+        storeId,
+        to: body.email,
+        subject: `Confirmez votre alerte de retour de stock`,
+        bodyText:
+          `Bonjour,\n\nVous avez demandé à être prévenu du retour de ${what} chez ${req.store?.name ?? 'la boutique'}.\n` +
+          `Pour confirmer, cliquez ici : ${link}\n\n` +
+          `Si ce n'est pas vous, ignorez ce message : sans confirmation, l'adresse est effacée sous 7 jours.`,
+        tag: 'stock-alert-confirm',
+        relatedEntity: 'stock_alert',
+        relatedId: r.id,
+      });
+    }
+    // Même réponse qu'une adresse soit déjà inscrite ou non : pas d'oracle.
+    res.status(200).json({ ok: true, confirm: confirmRequired });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Validation error', details: err.errors });

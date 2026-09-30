@@ -16,10 +16,11 @@ beforeEach(() => { findFirst.mockReset(); update.mockClear(); updateMany.mockCle
 
 describe('attributeOrderToChat', () => {
   it('visiteur anonyme : rattaché par l\'identifiant du panier, recherches converties', async () => {
-    findFirst.mockResolvedValue({ id: 7, sessionToken: 'tok-7', visitorId: 'v_123456' });
+    // 1re lecture : la commande n'est encore rattachée à rien ; 2e : la conversation.
+    findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 7, sessionToken: 'tok-7', visitorId: 'v_123456' });
     const r = await attributeOrderToChat(4, 900, '', 'v_123456');
     expect(r).toEqual({ attributed: true, sessionId: 7 });
-    const where = findFirst.mock.calls[0]![0].where;
+    const where = findFirst.mock.calls[1]![0].where;
     expect(where.storeId).toBe(4);
     expect(where.OR).toEqual([{ visitorId: 'v_123456' }]);
     expect(update).toHaveBeenCalledWith({ where: { id: 7 }, data: { attributedOrderId: 900 } });
@@ -28,7 +29,7 @@ describe('attributeOrderToChat', () => {
   it('e-mail et identifiant : les deux pistes sont cherchées', async () => {
     findFirst.mockResolvedValue(null);
     await attributeOrderToChat(4, 900, 'a@b.fr', 'v_123456');
-    expect(findFirst.mock.calls[0]![0].where.OR).toEqual([{ customerEmail: 'a@b.fr' }, { visitorId: 'v_123456' }]);
+    expect(findFirst.mock.calls[1]![0].where.OR).toEqual([{ customerEmail: 'a@b.fr' }, { visitorId: 'v_123456' }]);
   });
   it('ni e-mail ni identifiant : rien, sans requête', async () => {
     expect(await attributeOrderToChat(4, 900, '', null)).toEqual({ attributed: false });

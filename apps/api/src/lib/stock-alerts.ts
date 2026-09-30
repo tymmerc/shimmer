@@ -11,6 +11,7 @@
  * couche Prisma en bas. Même pattern que lib/holdout/proof.ts.
  */
 
+import { randomBytes } from 'node:crypto';
 import { getPrisma, logger } from '@shimmer/core';
 import { sendEmail } from '@shimmer/email-connector';
 
@@ -22,7 +23,8 @@ import { sendEmail } from '@shimmer/email-connector';
 export const CONVERSION_WINDOW_DAYS = 7;
 const CONVERSION_WINDOW_MS = CONVERSION_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
-export type StockAlertStatus = 'waiting' | 'notified' | 'converted' | 'expired';
+/** pending : en attente du clic de confirmation (double opt-in, seulement si de vrais e-mails partent). */
+export type StockAlertStatus = 'pending' | 'waiting' | 'notified' | 'converted' | 'expired';
 
 export interface StockAlertRow {
   id: number;
@@ -158,20 +160,24 @@ export interface SubscribeInput {
   productId?: number | null;
   variantLabel?: string | null;
   visitorId?: string | null;
+  /** Double opt-in : l'alerte attend le clic sur le lien envoyé par e-mail. */
+  confirmRequired?: boolean;
 }
 
 /**
  * Inscription idempotente : une seule alerte active par (store, variante,
- * email). Ré-inscrire renvoie l'existante sans erreur.
+ * email). Ré-inscrire renvoie l'existante sans erreur (et sans renvoyer
+ * d'e-mail : la route ne doit pas servir à écrire à quelqu'un en boucle).
  */
-export async function subscribeStockAlert(input: SubscribeInput): Promise<{ id: number; created: boolean }> {
+export async function subscribeStockAlert(input: SubscribeInput): Promise<{ id: number; created: boolean; confirmToken: string | null }> {
   const prisma = getPrisma();
   const email = input.email.trim().toLowerCase();
   const existing = await prisma.stockAlert.findFirst({
-    where: { storeId: input.storeId, platformVariantId: input.platformVariantId, email, status: { in: ['waiting', 'notified'] } },
+    where: { storeId: input.storeId, platformVariantId: input.platformVariantId, email, status: { in: ['pending', 'waiting', 'notified'] } },
     select: { id: true },
   });
-  if (existing) return { id: existing.id, created: false };
+  if (existing) return { id: existing.id, created: false, confirmToken: null };
+  const confirmToken = input.confirmRequired ? randomBytes(24).toString('base64url') : null;
   const created = await prisma.stockAlert.create({
     data: {
       storeId: input.storeId,
@@ -180,12 +186,36 @@ export async function subscribeStockAlert(input: SubscribeInput): Promise<{ id: 
       productId: input.productId ?? null,
       variantLabel: input.variantLabel ?? null,
       visitorId: input.visitorId ?? null,
-      status: 'waiting',
+      status: confirmToken ? 'pending' : 'waiting',
+      confirmToken,
     },
     select: { id: true },
   });
-  logger.info({ storeId: input.storeId, variant: input.platformVariantId }, 'stock-alert.subscribed');
-  return { id: created.id, created: true };
+  logger.info({ storeId: input.storeId, variant: input.platformVariantId, pending: !!confirmToken }, 'stock-alert.subscribed');
+  return { id: created.id, created: true, confirmToken };
+}
+
+/** Clic sur le lien de confirmation : l'alerte devient active. Jeton à usage unique. */
+export async function confirmStockAlert(token: string): Promise<{ confirmed: boolean; storeName?: string; label?: string | null }> {
+  const prisma = getPrisma();
+  const alert = await prisma.stockAlert.findFirst({
+    where: { confirmToken: token, status: 'pending' },
+    select: { id: true, variantLabel: true, store: { select: { name: true } } },
+  });
+  if (!alert) return { confirmed: false };
+  await prisma.stockAlert.update({
+    where: { id: alert.id },
+    data: { status: 'waiting', confirmedAt: new Date(), confirmToken: null },
+  });
+  return { confirmed: true, storeName: alert.store.name, label: alert.variantLabel };
+}
+
+/** Inscriptions jamais confirmées : effacées au bout de 7 jours (RGPD). */
+export async function purgeUnconfirmedStockAlerts(now: Date = new Date()): Promise<number> {
+  const r = await getPrisma().stockAlert.deleteMany({
+    where: { status: 'pending', createdAt: { lt: new Date(now.getTime() - 7 * 86_400_000) } },
+  });
+  return r.count;
 }
 
 export interface NotifyInput {

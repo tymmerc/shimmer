@@ -321,7 +321,7 @@ class ShimmerClient {
   }
 
   /** Retour de stock : "prévenez-moi quand ça revient". Idempotent côté serveur. */
-  stockAlert(input: { email: string; platformVariantId: string; productId?: number; variantLabel?: string; visitorId?: string | null }): Promise<{ ok: boolean; created: boolean }> {
+  stockAlert(input: { email: string; platformVariantId: string; productId?: number; variantLabel?: string; visitorId?: string | null }): Promise<{ ok: boolean; confirm?: boolean }> {
     return this.request('POST', '/api/stock-alerts', { ...input, store: this.storeId });
   }
 
@@ -1029,7 +1029,7 @@ class SearchWidget {
       if (!email) return;
       btn.disabled = true;
       try {
-        await this.client.stockAlert({
+        const r = await this.client.stockAlert({
           email,
           // Sans id de variante côté catalogue local, on ancre sur le produit plateforme (ou local).
           platformVariantId: it.platformProductId ? `p:${it.platformProductId}` : `local:${it.id}`,
@@ -1037,7 +1037,11 @@ class SearchWidget {
           variantLabel: it.name,
           visitorId: measurementAllowed ? readCookie(VID_COOKIE) : null,
         });
-        box.innerHTML = `<div class="shimmer-restock-done">C'est noté. Vous serez prévenu dès le retour de ${esc(it.name)}.</div>`;
+        // Double confirmation (quand la boutique envoie de vrais e-mails) : l'alerte
+        // n'est active qu'après le clic sur le lien reçu.
+        box.innerHTML = r.confirm
+          ? `<div class="shimmer-restock-done">Presque fini : confirmez depuis l'e-mail qu'on vient de vous envoyer, et vous serez prévenu dès le retour de ${esc(it.name)}.</div>`
+          : `<div class="shimmer-restock-done">C'est noté. Vous serez prévenu dès le retour de ${esc(it.name)}.</div>`;
       } catch {
         btn.disabled = false;
         input.setCustomValidity("Impossible d'enregistrer, réessayez.");

@@ -19,6 +19,7 @@ import { attributeOrderToChat } from '../lib/attribution.js';
 import { recordOrderForVisitor } from './holdout.js';
 import { detectRestock, notifyRestock, recordStockAlertConversions } from '../lib/stock-alerts.js';
 import { scheduleReviewOnDelivery } from '../lib/review-on-delivery.js';
+import { linkOrderItems } from '../lib/order-items.js';
 import { syncCatalogProduct, deactivateCatalogProduct, refreshProductStock, type CatalogSyncResult, type ShopifyCatalogProduct } from '../lib/shopify-products.js';
 import {
   shipmentsFromFulfillment,
@@ -237,8 +238,15 @@ webhooksShopifyRouter.post(
         });
       }
 
-      // Create the order
+      // Create the order. Shopify renvoie un webhook qui n'a pas eu sa réponse
+      // à temps : une commande déjà connue n'est ni recréée ni recomptée.
       const orderNumber = payload.name ?? (payload.order_number ? `#${payload.order_number}` : `SH-${payload.id ?? Date.now()}`);
+      const known = await prisma.order.findFirst({ where: { storeId, orderNumber }, select: { id: true } });
+      if (known) {
+        logger.info({ storeId, orderId: known.id, source: 'shopify' }, 'shopify.order.paid.duplicate');
+        res.json({ accepted: true, orderId: known.id, duplicate: true });
+        return;
+      }
       const order = await prisma.order.create({
         data: {
           storeId,
@@ -249,6 +257,13 @@ webhooksShopifyRouter.post(
           orderedAt: payload.created_at ? new Date(payload.created_at) : new Date(),
         },
       });
+
+      // Lignes de commande (la page d'avis liste les produits commandés).
+      await linkOrderItems(storeId, order.id, (payload.line_items ?? []).map((li) => ({
+        platformProductId: typeof li.product_id === 'number' ? String(li.product_id) : null,
+        quantity: li.quantity ?? 1,
+        unitPrice: Number(li.price ?? 0),
+      }))).catch((err) => logger.warn({ err, orderId: order.id }, 'shopify.order.items-failed'));
 
       // Mark any matching abandoned cart as recovered
       await prisma.abandonedCart.updateMany({
@@ -271,7 +286,7 @@ webhooksShopifyRouter.post(
 
       if (vid) {
         try {
-          await recordOrderForVisitor(storeId, vid, Number(payload.total_price ?? 0));
+          await recordOrderForVisitor(storeId, vid, Number(payload.total_price ?? 0), `shopify:${payload.id ?? orderNumber}`);
         } catch (err) {
           logger.warn({ err, orderId: order.id }, 'shopify.order.holdout-link-failed');
         }

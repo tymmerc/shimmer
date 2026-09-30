@@ -59,7 +59,10 @@ export function AdminIntegration() {
  const wooUrls = [
  { event: 'Nouvelle commande', topic: 'order.created', path: `${data.base}/shimmer/api/webhooks/woocommerce/order_created?store=${data.store.id}` },
  { event: 'Commande mise à jour', topic: 'order.updated', path: `${data.base}/shimmer/api/webhooks/woocommerce/order_updated?store=${data.store.id}` },
- { event: 'Panier abandonné', topic: 'cart.abandoned', path: `${data.base}/shimmer/api/webhooks/woocommerce/cart_abandoned?store=${data.store.id}` },
+ { event: 'Produit créé (catalogue)', topic: 'product.created', path: `${data.base}/shimmer/api/webhooks/woocommerce/product_created?store=${data.store.id}` },
+ { event: 'Produit mis à jour (catalogue, retour de stock)', topic: 'product.updated', path: `${data.base}/shimmer/api/webhooks/woocommerce/product_updated?store=${data.store.id}` },
+ { event: 'Produit supprimé (retiré du vendeur)', topic: 'product.deleted', path: `${data.base}/shimmer/api/webhooks/woocommerce/product_deleted?store=${data.store.id}` },
+ { event: 'Panier abandonné (extension de paniers abandonnés)', topic: 'cart.abandoned', path: `${data.base}/shimmer/api/webhooks/woocommerce/cart_abandoned?store=${data.store.id}` },
  ];
 
  return (
@@ -115,13 +118,15 @@ export function AdminIntegration() {
  {data.woocommerce.configured
  ? data.woocommerce.secretSet
  ? `HMAC configuré · ${data.woocommerce.siteUrl ?? 'site non renseigné'}`
- : `Configuré sans HMAC (mode démo) · ${data.woocommerce.siteUrl ?? 'site non renseigné'}`
+ : `Configuré sans secret : les webhooks sont refusés · ${data.woocommerce.siteUrl ?? 'site non renseigné'}`
  : 'Non configuré'}
  </span>
  </div>
  <p className="mb-4 text-xs text-neutral-500">
- Dans WooCommerce → Settings → Advanced → Webhooks, créez ces webhooks. La signature secrète doit
- correspondre à <code className="rounded bg-white px-1.5 py-0.5">config.woocommerce.webhookSecret</code> de votre store.
+ Installez l&apos;extension Shimmer (Extensions → Ajouter → Téléverser), renseignez le numéro de boutique et la
+ clé publique dans Réglages → Shimmer : elle ajoute le widget et relie les commandes à la mesure. Puis, dans
+ WooCommerce → Réglages → Avancé → Webhooks, créez ces webhooks avec le secret
+ <code className="rounded bg-white px-1.5 py-0.5">config.woocommerce.webhookSecret</code> de votre boutique.
  </p>
  <div className="space-y-2">
  {wooUrls.map(w => (

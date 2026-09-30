@@ -180,18 +180,28 @@ async function findExisting(storeId: number, f: CatalogFields): Promise<Existing
   return (await prisma.product.findFirst({ where: { id: byName[0]!.id, storeId } })) as ExistingProduct | null;
 }
 
-/** Crée ou met à jour la fiche. Ne touche ni à la catégorie (liée aux univers du vendeur) ni à une description déjà présente (souvent enrichie). */
+/** Crée ou met à jour la fiche d'un produit Shopify. */
 export async function syncCatalogProduct(storeId: number, p: ShopifyCatalogProduct): Promise<CatalogSyncResult> {
   const f = catalogFieldsFromShopify(p);
   if (!f) return 'skipped';
+  return (await syncCatalogFields(storeId, f)).result;
+}
+
+/**
+ * Crée ou met à jour la fiche, quelle que soit la plateforme (Shopify,
+ * WooCommerce). Ne touche ni à la catégorie (liée aux univers du vendeur) ni
+ * à une description déjà présente (souvent enrichie). Renvoie aussi le stock
+ * d'avant, pour détecter un retour en stock.
+ */
+export async function syncCatalogFields(storeId: number, f: CatalogFields): Promise<{ result: CatalogSyncResult; previousStock: number | null }> {
   const prisma = getPrisma();
 
   const existing = await findExisting(storeId, f);
   if (existing) {
     const data = catalogChanges(existing, f);
-    if (Object.keys(data).length === 0) return 'unchanged';
+    if (Object.keys(data).length === 0) return { result: 'unchanged', previousStock: existing.stock };
     await prisma.product.update({ where: { id: existing.id }, data: { ...data, lastSync: new Date() } });
-    return 'updated';
+    return { result: 'updated', previousStock: existing.stock };
   }
   try {
     await prisma.product.create({
@@ -221,10 +231,10 @@ export async function syncCatalogProduct(storeId: number, p: ShopifyCatalogProdu
     if (!again) throw err;
     const data = catalogChanges(again, f);
     if (Object.keys(data).length > 0) await prisma.product.update({ where: { id: again.id }, data: { ...data, lastSync: new Date() } });
-    return 'updated';
+    return { result: 'updated', previousStock: again.stock };
   }
-  logger.info({ storeId, platformProductId: f.platformProductId }, 'catalog.shopify.created');
-  return 'created';
+  logger.info({ storeId, platformProductId: f.platformProductId }, 'catalog.product.created');
+  return { result: 'created', previousStock: null };
 }
 
 /**

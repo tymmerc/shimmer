@@ -148,7 +148,7 @@ describe('src/index.ts mount order', () => {
   it('mounts the widget cross-sell router before /api/catalog + authMiddleware', async () => {
     const { readFileSync } = await import('fs');
     const src = readFileSync(new URL('../index.ts', import.meta.url), 'utf8');
-    const widget = src.indexOf("app.use('/api/catalog/cross-sell', crossSellWidgetRouter)");
+    const widget = src.indexOf("app.use('/api/catalog/cross-sell', publicProductFields, crossSellWidgetRouter)");
     const catalog = src.indexOf("app.use('/api/catalog', authMiddleware");
     expect(widget).toBeGreaterThan(-1);
     expect(catalog).toBeGreaterThan(-1);

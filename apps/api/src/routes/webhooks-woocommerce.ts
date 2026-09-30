@@ -16,6 +16,12 @@ import crypto from 'crypto';
 import { getPrisma, logger, ShimmerError } from '@shimmer/core';
 import { enqueueCartReminders } from '../lib/automations/queue.js';
 import { attributeOrderToChat } from '../lib/attribution.js';
+import { linkOrderItems } from '../lib/order-items.js';
+import { scheduleReviewAfterShipping } from '../lib/review-on-delivery.js';
+import { recordOrderForVisitor } from './holdout.js';
+import { recordStockAlertConversions, detectRestock, notifyRestock } from '../lib/stock-alerts.js';
+import { syncCatalogFields, deactivateCatalogProduct } from '../lib/shopify-products.js';
+import { catalogFieldsFromWoo, type WooCatalogProduct } from '../lib/woo-products.js';
 
 export const webhooksWooCommerceRouter = Router();
 
@@ -35,6 +41,7 @@ interface WCBilling {
 
 interface WCLineItem {
   product_id?: number;
+  variation_id?: number;
   name?: string;
   price?: number | string;
   quantity?: number;
@@ -51,6 +58,17 @@ interface WCOrder {
   line_items?: WCLineItem[];
   date_created?: string;
   date_completed?: string | null;
+  /** Le plugin Shimmer y pose shimmer_vid (cookie du visiteur) au paiement. */
+  meta_data?: Array<{ key?: string; value?: unknown }>;
+}
+
+/** Statuts WooCommerce d'une commande payée. */
+const PAID_STATUSES = new Set(['processing', 'completed']);
+
+/** Identifiant visiteur posé par le plugin Shimmer (voir integrations/woocommerce). */
+export function wooVisitorId(order: { meta_data?: Array<{ key?: string; value?: unknown }> }): string | null {
+  const v = order.meta_data?.find((m) => m.key === 'shimmer_vid')?.value;
+  return typeof v === 'string' && /^[A-Za-z0-9_-]{4,80}$/.test(v) ? v : null;
 }
 
 interface WCAbandonedCart {
@@ -155,51 +173,141 @@ async function handleOrder(req: Request, res: Response): Promise<void> {
 
   const orderNumber = payload.number ? `WC-${payload.number}` : `WC-${payload.id ?? Date.now()}`;
   const status = mapStatus(payload.status);
+  const total = Number(payload.total ?? 0);
 
   const existing = await prisma.order.findFirst({ where: { storeId, orderNumber } });
-  if (existing) {
-    await prisma.order.update({
-      where: { id: existing.id },
-      data: {
-        status,
-        ...(status === 'delivered' ? { deliveredAt: new Date() } : {}),
-      },
-    });
-    logger.info({ storeId, orderId: existing.id, source: 'woocommerce' }, 'woo.order.updated');
-    res.json({ accepted: true, orderId: existing.id, action: 'updated' });
-    return;
+  const order = existing
+    ? await prisma.order.update({
+        where: { id: existing.id },
+        data: { status, ...(status === 'delivered' ? { deliveredAt: new Date() } : {}) },
+      })
+    : await prisma.order.create({
+        data: {
+          storeId,
+          customerId: customer.id,
+          orderNumber,
+          status,
+          totalAmount: total,
+          shippingCost: Number(payload.shipping_total ?? 0),
+          orderedAt: payload.date_created ? new Date(payload.date_created) : new Date(),
+          ...(status === 'delivered' && payload.date_completed
+            ? { deliveredAt: new Date(payload.date_completed) }
+            : {}),
+        },
+      });
+
+  // Lignes de commande (une seule fois : linkOrderItems ne double pas).
+  await linkOrderItems(storeId, order.id, (payload.line_items ?? []).map((li) => ({
+    platformProductId: typeof li.product_id === 'number' ? String(li.product_id) : null,
+    quantity: li.quantity ?? 1,
+    unitPrice: Number(li.price ?? 0),
+  }))).catch((err) => logger.warn({ err, orderId: order.id }, 'woo.order.items-failed'));
+
+  // Payée (processing ou completed) : ce qui compte une vente. Woo renvoie un
+  // webhook à chaque changement de statut ; chaque étape ci-dessous est
+  // idempotente (référence de commande unique, rattachement unique).
+  if (payload.status && PAID_STATUSES.has(payload.status)) {
+    await afterPaid(storeId, order.id, order.orderedAt ?? new Date(), email, total, payload);
   }
 
-  const order = await prisma.order.create({
-    data: {
-      storeId,
-      customerId: customer.id,
-      orderNumber,
-      status,
-      totalAmount: Number(payload.total ?? 0),
-      shippingCost: Number(payload.shipping_total ?? 0),
-      orderedAt: payload.date_created ? new Date(payload.date_created) : new Date(),
-      ...(status === 'delivered' && payload.date_completed
-        ? { deliveredAt: new Date(payload.date_completed) }
-        : {}),
-    },
-  });
+  // Terminée = expédiée : la demande d'avis part quelques jours après.
+  if (status === 'shipped') {
+    await scheduleReviewAfterShipping(storeId, order.id)
+      .catch((err) => logger.warn({ err, orderId: order.id }, 'woo.order.review-schedule-failed'));
+  }
 
-  // Mark matching abandoned cart as recovered
+  logger.info({ storeId, orderId: order.id, status, source: 'woocommerce' }, existing ? 'woo.order.updated' : 'woo.order.created');
+  res.json({ accepted: true, orderId: order.id, customerId: customer.id, action: existing ? 'updated' : 'created' });
+}
+
+async function afterPaid(storeId: number, orderId: number, orderedAt: Date, email: string, total: number, payload: WCOrder): Promise<void> {
+  const prisma = getPrisma();
+  // Panier abandonné du même client : récupéré.
   await prisma.abandonedCart.updateMany({
     where: { storeId, customerEmail: email, recoveredAt: null },
-    data: { status: 'recovered', recoveredAt: new Date(), recoveredAmount: Number(payload.total ?? 0) },
+    data: { status: 'recovered', recoveredAt: new Date(), recoveredAmount: total },
   });
 
+  const vid = wooVisitorId(payload);
   try {
-    await attributeOrderToChat(storeId, order.id, email);
+    await attributeOrderToChat(storeId, orderId, email, vid);
   } catch (err) {
-    logger.warn({ err, orderId: order.id }, 'woo.order.attribution-failed');
+    logger.warn({ err, orderId }, 'woo.order.attribution-failed');
   }
-
-  logger.info({ storeId, orderId: order.id, source: 'woocommerce' }, 'woo.order.created');
-  res.json({ accepted: true, orderId: order.id, customerId: customer.id, action: 'created' });
+  if (vid) {
+    try {
+      await recordOrderForVisitor(storeId, vid, total, `woo:${payload.id ?? orderId}`);
+    } catch (err) {
+      logger.warn({ err, orderId }, 'woo.order.holdout-link-failed');
+    }
+  }
+  try {
+    await recordStockAlertConversions({
+      storeId,
+      orderId,
+      email,
+      orderedAt,
+      totalAmount: total,
+      variantIds: [
+        ...(payload.line_items ?? []).map((li) => li.variation_id).filter((v): v is number => typeof v === 'number' && v > 0).map(String),
+        ...(payload.line_items ?? []).map((li) => li.product_id).filter((v): v is number => typeof v === 'number').map((id) => `p:${id}`),
+      ],
+    });
+  } catch (err) {
+    logger.warn({ err, orderId }, 'woo.order.stock-alert-conversion-failed');
+  }
 }
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/webhooks/woocommerce/product_updated (aussi product.created)
+// POST /api/webhooks/woocommerce/product_deleted
+// Le catalogue suit Woo ; un retour en stock prévient les inscrits.
+// ─────────────────────────────────────────────────────────────
+async function handleProduct(req: Request, res: Response): Promise<void> {
+  const { id: storeId, wcConfig } = await resolveStore(req);
+  if (!verifyHmac(req as Request & { rawBody?: Buffer }, wcConfig?.webhookSecret)) {
+    throw new ShimmerError('Invalid HMAC', 'INVALID_SIGNATURE', 401);
+  }
+  const p = req.body as WooCatalogProduct;
+  const fields = catalogFieldsFromWoo(p);
+  if (!fields) {
+    res.json({ accepted: true, catalog: 'skipped' });
+    return;
+  }
+  const { result, previousStock } = await syncCatalogFields(storeId, fields);
+  let notified = 0;
+  if (fields.stock !== null && previousStock !== null && detectRestock(previousStock, fields.stock)) {
+    const r = await notifyRestock({
+      storeId,
+      platformVariantId: `p:${fields.platformProductId}`,
+      available: fields.stock,
+      productUrl: p.permalink ?? null,
+      platformProductId: fields.platformProductId,
+    });
+    notified = r.notified;
+  }
+  logger.info({ storeId, productId: p.id, catalog: result, notified, source: 'woocommerce' }, 'woo.product.update');
+  res.json({ accepted: true, catalog: result, notified });
+}
+
+webhooksWooCommerceRouter.post('/product_updated', rawJson, async (req, res, next) => {
+  try { await handleProduct(req, res); } catch (err) { next(err); }
+});
+webhooksWooCommerceRouter.post('/product_created', rawJson, async (req, res, next) => {
+  try { await handleProduct(req, res); } catch (err) { next(err); }
+});
+webhooksWooCommerceRouter.post('/product_deleted', rawJson, async (req, res, next) => {
+  try {
+    const { id: storeId, wcConfig } = await resolveStore(req);
+    if (!verifyHmac(req as Request & { rawBody?: Buffer }, wcConfig?.webhookSecret)) {
+      throw new ShimmerError('Invalid HMAC', 'INVALID_SIGNATURE', 401);
+    }
+    const id = (req.body as { id?: number }).id;
+    const deactivated = id ? await deactivateCatalogProduct(storeId, String(id)) : 0;
+    logger.info({ storeId, productId: id, deactivated, source: 'woocommerce' }, 'woo.product.delete');
+    res.json({ accepted: true, deactivated });
+  } catch (err) { next(err); }
+});
 
 webhooksWooCommerceRouter.post(
   '/order_created',

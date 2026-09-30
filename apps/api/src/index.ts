@@ -12,6 +12,7 @@ import { authMiddleware, widgetAuth } from './middleware/auth.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { createRateLimiter, trustProxy } from './middleware/rate-limiter.js';
 import { assertPublishableSecret } from './lib/publishable-key.js';
+import { publicProductFields } from './middleware/public-fields.js';
 import { searchRouter } from './routes/search.js';
 import { taxonomyRouter } from './routes/taxonomy.js';
 import { pipelineRouter } from './routes/pipeline.js';
@@ -41,6 +42,7 @@ import { webhooksWooCommerceRouter } from './routes/webhooks-woocommerce.js';
 import { integrationRouter } from './routes/integration.js';
 import { automationsRouter } from './routes/automations.js';
 import { publicReviewsRouter } from './routes/public-reviews.js';
+import { publicStockAlertsRouter } from './routes/public-stock-alerts.js';
 import { reviewToolRouter } from './routes/review-tool.js';
 import { holdoutRouter } from './routes/holdout.js';
 import { knowledgeRouter } from './routes/knowledge.js';
@@ -147,6 +149,7 @@ app.get('/health/ready', async (_req, res) => {
 // Public demo endpoint (no auth, rate-limited)
 app.use('/api/public/outbound', publicOutboundRouter);
 app.use('/api/public/reviews', publicReviewsRouter);
+app.use('/api/public/stock-alerts', publicStockAlertsRouter);
 app.use('/api/review-tool', reviewToolRouter);
 app.use('/api/holdout', holdoutRouter);
 app.use('/api/knowledge', authMiddleware, knowledgeRouter);
@@ -160,14 +163,14 @@ app.use('/api/stores', storesRouter);
 
 // Widget-facing routes: accept the publishable key (pk_) OR the secret key.
 // Safe to call from a storefront. See widgetAuth.
-app.use('/api/search', widgetAuth, searchRouter);
-app.use('/api/search/assist', widgetAuth, searchAssistRouter);
-app.use('/api/chat', widgetAuth, chatRouter);
+app.use('/api/search', widgetAuth, publicProductFields, searchRouter);
+app.use('/api/search/assist', widgetAuth, publicProductFields, searchAssistRouter);
+app.use('/api/chat', widgetAuth, publicProductFields, chatRouter);
 // Retour de stock : POST public (widgetAuth dans le router), GET admin (auth secrète dans le router).
 app.use('/api/stock-alerts', stockAlertsRouter);
 // Cross-sell du widget (fiche produit + événements), widgetAuth dans le router.
 // Doit rester AVANT `/api/catalog` : son authMiddleware refuserait une pk_.
-app.use('/api/catalog/cross-sell', crossSellWidgetRouter);
+app.use('/api/catalog/cross-sell', publicProductFields, crossSellWidgetRouter);
 
 // Authenticated routes (secret key only)
 app.use('/api/taxonomy', authMiddleware, taxonomyRouter);

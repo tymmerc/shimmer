@@ -31,6 +31,10 @@ export async function attributeOrderToChat(
   ];
   if (match.length === 0) return { attributed: false };
   const prisma = getPrisma();
+  // Webhooks répétés (Woo envoie chaque mise à jour de commande) : une
+  // commande n'est rattachée qu'à une conversation.
+  const already = await prisma.chatSession.findFirst({ where: { storeId, attributedOrderId: orderId }, select: { id: true } });
+  if (already) return { attributed: true, sessionId: already.id };
   const since = new Date(Date.now() - ATTRIBUTION_WINDOW_DAYS * 24 * 3600 * 1000);
 
   const session = await prisma.chatSession.findFirst({

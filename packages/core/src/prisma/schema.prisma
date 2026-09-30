@@ -358,6 +358,9 @@ model HoldoutOrder {
   visitorId String   @map("visitor_id") @db.VarChar(80)
   isControl Boolean  @default(false) @map("is_control")
   amount    Decimal  @db.Decimal(10, 2)
+  /// Référence plateforme (shopify:<id>, woo:<id>) : une commande n'est comptée
+  /// qu'une fois même si le webhook est renvoyé (index unique partiel en base).
+  orderRef  String?  @map("order_ref") @db.VarChar(100)
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([storeId, createdAt])
@@ -548,6 +551,10 @@ model StockAlert {
   email             String    @db.VarChar(255)
   visitorId         String?   @map("visitor_id") @db.VarChar(80)
   status            String    @default("waiting") @db.VarChar(20)
+  /// Double confirmation (RGPD) quand un vrai fournisseur d'e-mails est branché :
+  /// l'alerte reste 'pending' jusqu'au clic sur le lien.
+  confirmToken      String?   @map("confirm_token") @db.VarChar(64)
+  confirmedAt       DateTime? @map("confirmed_at")
   createdAt         DateTime  @default(now()) @map("created_at")
   notifiedAt        DateTime? @map("notified_at")
   convertedAt       DateTime? @map("converted_at")

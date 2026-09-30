@@ -266,11 +266,27 @@ export async function recordOrderForVisitor(
   storeId: number,
   visitorId: string,
   orderTotal: number,
-): Promise<void> {
+  /** shopify:<id>, woo:<id> : une commande n'est comptée qu'une fois, même si le webhook revient. */
+  orderRef?: string,
+): Promise<boolean> {
   const prisma = getPrisma();
   const cfg = resolveHoldoutConfig((await getStoreConfig(storeId)).holdout);
   const bucket = bucketFor(visitorId, storeId);
   const control = bucket < cfg.pct;
+  // Order-level log so /proof can window the lift on a billing period. Écrit
+  // EN PREMIER : l'index unique (store_id, order_ref) arrête un doublon avant
+  // qu'il n'ajoute son montant au visiteur.
+  try {
+    await prisma.holdoutOrder.create({
+      data: { storeId, visitorId, isControl: control, amount: orderTotal, orderRef: orderRef ?? null },
+    });
+  } catch (err) {
+    if ((err as { code?: string }).code === 'P2002') {
+      logger.info({ storeId, orderRef }, 'holdout.order.duplicate-ignored');
+      return false;
+    }
+    throw err;
+  }
   await prisma.holdoutVisitor.upsert({
     where: { storeId_visitorId: { storeId, visitorId } },
     create: {
@@ -288,9 +304,6 @@ export async function recordOrderForVisitor(
       lastSeenAt: new Date(),
     },
   });
-  // Order-level log so /proof can window the lift on a billing period.
-  await prisma.holdoutOrder.create({
-    data: { storeId, visitorId, isControl: control, amount: orderTotal },
-  });
-  logger.info({ storeId, visitorId, orderTotal }, 'holdout.order.recorded');
+  logger.info({ storeId, orderTotal }, 'holdout.order.recorded');
+  return true;
 }

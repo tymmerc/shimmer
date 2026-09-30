@@ -20,19 +20,40 @@ export function autoReviewEnabled(config: unknown): boolean {
   return reviews?.autoRequest !== false;
 }
 
+/**
+ * WooCommerce ne sait rien de la livraison : « terminée » veut dire expédiée.
+ * La demande part alors quelques jours après (config.reviews.daysAfterShipped,
+ * 4 par défaut : 2 à 3 jours de transport, plus une journée pour goûter).
+ */
+export function daysAfterShipped(config: unknown): number {
+  const n = Number((config as { reviews?: { daysAfterShipped?: unknown } } | null)?.reviews?.daysAfterShipped);
+  return Number.isFinite(n) && n >= 1 && n <= 30 ? n : 4;
+}
+
 /** Renvoie l'id de la demande créée, ou null (déjà faite, pas de client, coupé). */
 export async function scheduleReviewOnDelivery(storeId: number, orderId: number, now: Date = new Date()): Promise<number | null> {
+  return scheduleReview(storeId, orderId, now, 'delivered');
+}
+
+/** WooCommerce : commande terminée (expédiée). */
+export async function scheduleReviewAfterShipping(storeId: number, orderId: number, now: Date = new Date()): Promise<number | null> {
+  return scheduleReview(storeId, orderId, now, 'shipped');
+}
+
+async function scheduleReview(storeId: number, orderId: number, now: Date, trigger: 'delivered' | 'shipped'): Promise<number | null> {
   const prisma = getPrisma();
   const order = await prisma.order.findFirst({
     where: { id: orderId, storeId },
     select: { id: true, customerId: true, status: true, store: { select: { config: true } } },
   });
-  if (!order || order.status !== 'delivered' || !order.customerId) return null;
+  const statusOk = trigger === 'delivered' ? order?.status === 'delivered' : order?.status === 'shipped' || order?.status === 'delivered';
+  if (!order || !statusOk || !order.customerId) return null;
   if (!autoReviewEnabled(order.store?.config)) return null;
   const existing = await prisma.reviewRequest.findFirst({ where: { storeId, orderId }, select: { id: true } });
   if (existing) return null;
 
-  const scheduledAt = new Date(now.getTime() + REVIEW_DELAY_MS);
+  const delay = trigger === 'delivered' ? REVIEW_DELAY_MS : daysAfterShipped(order.store?.config) * 86_400_000;
+  const scheduledAt = new Date(now.getTime() + delay);
   // Deux webhooks « livrée » simultanés : l'index unique sur order_id en
   // laisse passer un seul (P2002 pour l'autre).
   const rr = await prisma.reviewRequest.create({
@@ -43,7 +64,7 @@ export async function scheduleReviewOnDelivery(storeId: number, orderId: number,
       // Le jeton est la seule protection de la page d'avis publique : aléatoire fort.
       token: randomUUID(),
       scheduledAt,
-      expiresAt: new Date(now.getTime() + REVIEW_VALID_MS),
+      expiresAt: new Date(scheduledAt.getTime() + REVIEW_VALID_MS),
     },
   }).catch((err: { code?: string }) => {
     if (err.code === 'P2002') return null;
@@ -56,6 +77,6 @@ export async function scheduleReviewOnDelivery(storeId: number, orderId: number,
     // Le filet de rattrapage (automation-sweep) la reprendra à l'échéance.
     logger.warn({ err, reviewRequestId: rr.id }, 'review-request.enqueue-failed');
   }
-  logger.info({ storeId, orderId, reviewRequestId: rr.id }, 'review-request.scheduled-on-delivery');
+  logger.info({ storeId, orderId, reviewRequestId: rr.id, trigger }, 'review-request.scheduled');
   return rr.id;
 }

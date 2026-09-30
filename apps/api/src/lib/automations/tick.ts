@@ -13,6 +13,7 @@ import { sweepCartReminders } from './cart-reminders.js';
 import { sweepReviewRequests } from './review-requests.js';
 import { sweepSavEscalation } from './sav-escalation.js';
 import { sweepOutboundPublish } from './outbound-publish.js';
+import { purgeUnconfirmedStockAlerts } from '../stock-alerts.js';
 
 export interface TickReport {
   startedAt: string;
@@ -22,6 +23,7 @@ export interface TickReport {
   reviewRequests: Awaited<ReturnType<typeof sweepReviewRequests>> | { error: string };
   savEscalation: Awaited<ReturnType<typeof sweepSavEscalation>> | { error: string };
   outboundPublish: Awaited<ReturnType<typeof sweepOutboundPublish>> | { error: string };
+  unconfirmedStockAlertsPurged: number | { error: string };
   /** Un autre passage tenait le verrou : rien n'a tourné. */
   skipped?: boolean;
 }
@@ -70,6 +72,7 @@ async function runSweeps(now: Date): Promise<TickReport> {
   const reviewRequests = await safeRun('review-requests', () => sweepReviewRequests(now));
   const savEscalation = await safeRun('sav-escalation', () => sweepSavEscalation(now));
   const outboundPublish = await safeRun('outbound-publish', () => sweepOutboundPublish(now));
+  const unconfirmedStockAlertsPurged = await safeRun('stock-alerts-purge', () => purgeUnconfirmedStockAlerts(now));
   // Pas de relecture des mails SAV ici : elle ne sait pas qu'un mail a déjà
   // donné un ticket et en recréait un par jour pendant 7 jours. Le job posé à
   // la réception du mail (queue.ts) suffit.
@@ -83,6 +86,7 @@ async function runSweeps(now: Date): Promise<TickReport> {
     reviewRequests,
     savEscalation,
     outboundPublish,
+    unconfirmedStockAlertsPurged,
   };
 
   logger.info({ durationMs: report.durationMs }, 'automation.tick.finished');
