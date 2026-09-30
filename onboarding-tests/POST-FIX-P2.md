@@ -191,7 +191,7 @@ curl -H "Authorization: Bearer $(cat onboarding-tests/caves-forty-two/.api-key)"
   http://localhost:3003/api/search/assist | jq
 
 # Legacy regression check
-curl -H "Authorization: Bearer test-api-key" \
+curl -H "Authorization: Bearer $SHIMMER_API_KEY" \
   -d '{"message":"aspirateur pour mes 2 chats"}' \
   http://localhost:3003/api/search/assist | jq
 ```

@@ -5,7 +5,18 @@ set -e
 # Active via : git config core.hooksPath .githooks
 
 # 1. Bloquer les secrets evidents
-if git diff --cached --name-only | grep -v '^\.githooks/' | xargs -r grep -l -E '(sk-ant-[a-zA-Z0-9_-]{20,}|sk_live_[a-zA-Z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN .* PRIVATE KEY-----)' 2>/dev/null; then
+# sk_ + 32 hex = cle secrete d'un store Shimmer (stores.ts). La pk_ publiable passe.
+# git grep --cached lit l'INDEX (ce qui part vraiment dans le commit), limite aux
+# fichiers ajoutes/modifies ; xargs -0 marche aussi sur macOS. On teste la liste
+# trouvee, pas un code retour (sans fichier stage, rien a scanner).
+SECRET_PATTERN='(sk-ant-[a-zA-Z0-9_-]{20,}|sk_live_[a-zA-Z0-9]{20,}|sk_[0-9a-f]{32}|AKIA[0-9A-Z]{16}|-----BEGIN .* PRIVATE KEY-----)'
+secret_files=""
+if [ -n "$(git diff --cached --name-only --diff-filter=ACMR)" ]; then
+  secret_files=$(git diff --cached --name-only --diff-filter=ACMR -z \
+    | xargs -0 git grep --cached -l -E "$SECRET_PATTERN" -- ':!.githooks' 2>/dev/null || true)
+fi
+if [ -n "$secret_files" ]; then
+  echo "$secret_files"
   echo "Pre-commit: secret pattern detected. Aborting."
   exit 1
 fi

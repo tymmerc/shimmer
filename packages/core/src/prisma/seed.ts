@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -120,23 +121,57 @@ const products: ProductSeed[] = [
 // Main seed function
 // ---------------------------------------------------------------------------
 
+const TEST_STORE_NAME = 'Boutique Test Shimmer';
+
+/**
+ * Store de test, sans clé en dur (le dépôt est public).
+ * - le store « Boutique Test Shimmer » existe : on le réutilise tel quel.
+ *   Si SEED_STORE_API_KEY est défini et ne correspond pas, on s'arrête plutôt
+ *   que de créer un doublon ou de changer sa clé en douce.
+ * - sinon on le crée, avec SEED_STORE_API_KEY ou une clé sk_ aléatoire
+ *   (affichée une seule fois dans le terminal).
+ * Une clé qui appartient déjà à un AUTRE store n'est jamais touchée.
+ */
+async function upsertTestStore() {
+  const config = {
+    locale: 'fr-FR',
+    currency: 'EUR',
+    features: ['search', 'chat', 'mail', 'sav'],
+  };
+  const envKey = process.env.SEED_STORE_API_KEY?.trim() || undefined;
+
+  if (envKey) {
+    const owner = await prisma.store.findUnique({ where: { apiKey: envKey } });
+    if (owner && owner.name !== TEST_STORE_NAME) {
+      throw new Error(`SEED_STORE_API_KEY appartient au store #${owner.id}, pas au store de test`);
+    }
+    if (owner) return owner;
+  }
+
+  const existing = await prisma.store.findFirst({
+    where: { name: TEST_STORE_NAME },
+    orderBy: { id: 'asc' },
+  });
+  if (existing && envKey) {
+    throw new Error(`le store de test #${existing.id} existe déjà avec une autre clé que SEED_STORE_API_KEY`);
+  }
+  if (existing) return existing;
+
+  if (envKey) {
+    return prisma.store.create({ data: { name: TEST_STORE_NAME, apiKey: envKey, config } });
+  }
+
+  const apiKey = `sk_${randomUUID().replace(/-/g, '')}`;
+  const created = await prisma.store.create({ data: { name: TEST_STORE_NAME, apiKey, config } });
+  console.log(`  Clé API générée (à garder hors du dépôt) : ${apiKey}`);
+  return created;
+}
+
 export async function main() {
   console.log('Seeding database...');
 
   // 1. Create test store
-  const store = await prisma.store.upsert({
-    where: { apiKey: 'test-api-key' },
-    update: { name: 'Boutique Test Shimmer' },
-    create: {
-      name: 'Boutique Test Shimmer',
-      apiKey: 'test-api-key',
-      config: {
-        locale: 'fr-FR',
-        currency: 'EUR',
-        features: ['search', 'chat', 'mail', 'sav'],
-      },
-    },
-  });
+  const store = await upsertTestStore();
   console.log(`  Store: ${store.name} (id=${store.id})`);
 
   // 2. Upsert usage taxonomy

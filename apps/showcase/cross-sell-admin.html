@@ -158,10 +158,26 @@
 
   <script>
     const apiUrl = window.location.port === '8080' ? 'http://localhost:3003' : '/shimmer';
+    // Aucune clé en dur : ces routes exigent la clé secrète (sk_) du store. On la
+    // demande à la première requête et on la garde le temps de l'onglet.
     const STORES = {
-      caves:   { name: 'Caves Forty-Two',  key: 'sk_fc215c787b2c48d9808a4638e2d51899' },
-      atelier: { name: "L'Atelier Lumière", key: 'sk_5542d50630c448dfa6a2873e3b5a55bf' },
+      caves:   { name: 'Caves Forty-Two' },
+      atelier: { name: "L'Atelier Lumière" },
     };
+
+    function keySlot(slug) { return 'shimmer.cs-admin.key.' + slug; }
+    function forgetKey(slug) {
+      try { sessionStorage.removeItem(keySlot(slug)); } catch { /* stockage indisponible */ }
+    }
+    function storeKey(slug) {
+      let key = '';
+      try { key = sessionStorage.getItem(keySlot(slug)) || ''; } catch { /* stockage indisponible */ }
+      if (!key) {
+        key = (window.prompt('Clé secrète (sk_…) de ' + STORES[slug].name) || '').trim();
+        try { if (key) sessionStorage.setItem(keySlot(slug), key); } catch { /* stockage indisponible */ }
+      }
+      return key;
+    }
 
     let currentStore = 'caves';
     let products = [];           // full list of store products
@@ -172,14 +188,23 @@
     let cachedPicks = new Map(); // productId → items[]
 
     function api(path, opts = {}) {
+      const store = currentStore;
       return fetch(apiUrl + path, {
         ...opts,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + STORES[currentStore].key,
+          'Authorization': 'Bearer ' + storeKey(store),
           ...(opts.headers || {}),
         },
-      }).then(r => r.ok ? (r.status === 204 ? null : r.json()) : r.json().then(j => { throw new Error(j.error || r.statusText); }));
+      }).then(r => {
+        if (r.status === 401) forgetKey(store);
+        return r.ok ? (r.status === 204 ? null : r.json()) : r.json().then(j => { throw new Error(j.error || r.statusText); });
+      });
+    }
+
+    function showLoadError(err) {
+      document.getElementById('panel').innerHTML =
+        '<p class="panel-empty">' + escapeHtml(err.message) + '. Recliquez sur la boutique pour saisir la clé.</p>';
     }
 
     function dirtyCount() {
@@ -380,14 +405,14 @@
         currentStore = b.dataset.store;
         cachedPicks.clear();
         currentProductId = null;
-        loadProducts();
+        loadProducts().catch(showLoadError);
       });
     });
     document.getElementById('search').addEventListener('input', e => renderProductList(e.target.value));
     document.getElementById('saveBtn').addEventListener('click', save);
     document.getElementById('cancelBtn').addEventListener('click', cancel);
 
-    loadProducts();
+    loadProducts().catch(showLoadError);
   </script>
 </body>
 </html>

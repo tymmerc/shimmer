@@ -6,7 +6,8 @@
 # ═══════════════════════════════════════════════════════════
 
 API="${SHIMMER_API_URL:-http://localhost:3003}"
-KEY="${SHIMMER_API_KEY:-test-api-key}"
+# Clé secrète sk_ du store de test, jamais en dur (dépôt public).
+KEY="${SHIMMER_API_KEY:?SHIMMER_API_KEY manquant, exporter la clé sk_ du store de test}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

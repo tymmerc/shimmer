@@ -45,7 +45,7 @@ UPDATE stores SET config = '{"tone": "vous"}' WHERE id = 5;  -- L'Atelier Lumiè
 
 - Caves : « Quel accord t'intéresse ? », « Le Châteauneuf 2019 ... pour toi »
 - Atelier : « Quel style vous intéresse ? », « La Lampe Bourgie ... pour vous »
-- Legacy (test-api-key, pas de config) : tutoiement par défaut
+- Legacy (store #1, pas de config) : tutoiement par défaut
 
 ---
 
@@ -107,7 +107,7 @@ const NATIVE_UNIVERSE_IDS = new Set([
 Si l'univers est natif, on garde le chemin hardcodé QUESTION_TEMPLATES + suggestions hand-tuned. Sinon, on utilise la question/values du critère DB. Vérification :
 
 ```
-$ curl -H "Authorization: Bearer test-api-key" -d '{"message":"aspirateur pour mes 2 chats"}' .../api/search/assist
+$ curl -H "Authorization: Bearer $SHIMMER_API_KEY" -d '{"message":"aspirateur pour mes 2 chats"}' .../api/search/assist
 → "Parfait ! C'est pour un usage quotidien ou plutôt occasionnel ?"  ✅
 ```
 
@@ -165,7 +165,7 @@ curl -H "Authorization: Bearer $(cat onboarding-tests/atelier-lumiere/.api-key)"
   http://localhost:3003/api/search/assist | jq
 
 # Legacy regression check
-curl -H "Authorization: Bearer test-api-key" \
+curl -H "Authorization: Bearer $SHIMMER_API_KEY" \
   -d '{"message":"aspirateur pour mes 2 chats"}' \
   http://localhost:3003/api/search/assist | jq
 ```

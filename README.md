@@ -120,11 +120,19 @@ Toutes les routes requièrent `Authorization: Bearer <api-key>`.
 | **Mail** | `POST /api/mail/classify` |
 | **Avis** | `POST /api/reviews/submit` |
 
+Deux clés par store :
+
+- **clé secrète `sk_…`** : accès complet (catalogue, config, analytics). Serveur uniquement, jamais dans une page, un dépôt ou un ticket.
+- **clé publiable `pk_…`** : routes du widget seulement (recherche, vendeur, chat, cross-sell, retour de stock), liée à un store. Faite pour être dans la page, toujours envoyée avec `X-Shimmer-Store: <id>`. Elle s'affiche dans l'admin, onglet Intégration.
+
+Les exemples lisent les clés dans l'environnement (`SHIMMER_PK`, `SHIMMER_STORE_ID`).
+
 ### Exemple : recherche conversationnelle
 
 ```bash
 curl -X POST https://tymmerc.eu/shimmer/api/search/assist \
-  -H "Authorization: Bearer test-api-key" \
+  -H "Authorization: Bearer $SHIMMER_PK" \
+  -H "X-Shimmer-Store: $SHIMMER_STORE_ID" \
   -H "Content-Type: application/json" \
   -d '{"message": "aspirateur poils de chat"}'
 ```
@@ -132,8 +140,9 @@ curl -X POST https://tymmerc.eu/shimmer/api/search/assist \
 ### Exemple : cross-sell sur une page produit
 
 ```bash
-curl https://tymmerc.eu/shimmer/api/cross-sell/PRD-123 \
-  -H "Authorization: Bearer test-api-key"
+curl "https://tymmerc.eu/shimmer/api/catalog/cross-sell/product/123?limit=4" \
+  -H "Authorization: Bearer $SHIMMER_PK" \
+  -H "X-Shimmer-Store: $SHIMMER_STORE_ID"
 ```
 
 ## SDK
@@ -143,7 +152,7 @@ curl https://tymmerc.eu/shimmer/api/cross-sell/PRD-123 \
 <script>
   Shimmer.init({
     apiUrl: 'https://tymmerc.eu/shimmer',
-    apiKey: 'sk_...',
+    apiKey: 'pk_...',   // clé PUBLIABLE, jamais la sk_ dans une page
     storeId: 1
   })
 
@@ -158,7 +167,7 @@ curl https://tymmerc.eu/shimmer/api/cross-sell/PRD-123 \
 </script>
 ```
 
-Le SDK tient sous 30kb gzip. Il utilise `IntersectionObserver` pour les impressions et `sendBeacon` pour les events, donc aucun impact perçu sur le LCP.
+Le SDK tient sous 30kb gzip. Il utilise `IntersectionObserver` pour les impressions et `fetch` en `keepalive` pour les events (envoi par lots, qui survit à la fermeture de la page), donc aucun impact perçu sur le LCP.
 
 ## Cross-sell : comment ça marche
 

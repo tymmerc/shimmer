@@ -109,33 +109,59 @@
       </section>
     </div>
 
-    <p class="footer-info">Fenêtre : 30 derniers jours · Mise à jour à chaque chargement.</p>
+    <p class="footer-info" id="footerInfo">Fenêtre : 30 derniers jours · Mise à jour à chaque chargement.</p>
   </div>
 
   <script>
     const apiUrl = window.location.port === '8080' ? 'http://localhost:3003' : '/shimmer';
+    // Aucune clé en dur : /analytics exige la clé secrète (sk_) du store. On la
+    // demande au premier chargement et on la garde le temps de l'onglet.
     const STORES = [
-      { name: 'Caves Forty-Two',  key: 'sk_fc215c787b2c48d9808a4638e2d51899', avgPrice: 28 },
-      { name: "L'Atelier Lumière", key: 'sk_5542d50630c448dfa6a2873e3b5a55bf', avgPrice: 380 },
+      { slug: 'caves',   name: 'Caves Forty-Two',  avgPrice: 28 },
+      { slug: 'atelier', name: "L'Atelier Lumière", avgPrice: 380 },
     ];
     let currentStore = STORES[0];
+    const FOOTER_TEXT = 'Fenêtre : 30 derniers jours · Mise à jour à chaque chargement.';
 
+    function keySlot(store) { return 'shimmer.cs-dashboard.key.' + store.slug; }
+    function forgetKey(store) {
+      try { sessionStorage.removeItem(keySlot(store)); } catch { /* stockage indisponible */ }
+    }
+    function storeKey(store) {
+      let key = '';
+      try { key = sessionStorage.getItem(keySlot(store)) || ''; } catch { /* stockage indisponible */ }
+      if (!key) {
+        key = (window.prompt('Clé secrète (sk_…) de ' + store.name) || '').trim();
+        try { if (key) sessionStorage.setItem(keySlot(store), key); } catch { /* stockage indisponible */ }
+      }
+      return key;
+    }
+
+    // Les rôles et noms viennent d'événements envoyés avec une clé publiable :
+    // tout est échappé avant innerHTML, la classe CSS n'accepte que les rôles connus.
+    function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
     function chipFor(role) {
       const labels = { apero: 'Apéritif', repas: 'Repas', dessert: 'Dessert', decouverte: 'Découverte', cadeau: 'Cadeau', accessoire: 'Accessoire', complement: 'Associé' };
-      return `<span class="chip chip-${role}">${labels[role] || role}</span>`;
+      const known = Object.prototype.hasOwnProperty.call(labels, role);
+      return `<span class="chip ${known ? 'chip-' + role : ''}">${escapeHtml(known ? labels[role] : role)}</span>`;
     }
     function rateClass(r) { return r >= 5 ? 'high' : r >= 1 ? 'mid' : 'low'; }
     function fmt(n) { return new Intl.NumberFormat('fr-FR').format(n); }
 
     async function load() {
+      const store = currentStore;
       try {
         const r = await fetch(`${apiUrl}/api/catalog/cross-sell/analytics?days=30`, {
-          headers: { 'Authorization': 'Bearer ' + currentStore.key },
+          headers: { 'Authorization': 'Bearer ' + storeKey(store) },
         });
+        if (r.status === 401) forgetKey(store);
+        if (!r.ok) throw new Error('HTTP ' + r.status + ' (recliquez sur la boutique pour saisir la clé)');
         const data = await r.json();
         render(data);
+        document.getElementById('footerInfo').textContent = FOOTER_TEXT;
       } catch (e) {
         console.error(e);
+        document.getElementById('footerInfo').textContent = e.message;
       }
     }
 
@@ -164,7 +190,7 @@
         d.topPairs.forEach(p => {
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td><div class="pair"><b>${p.refName || ('#' + p.productId)}</b><span>→ ${p.targetName || ('#' + p.targetId)}</span></div></td>
+            <td><div class="pair"><b>${escapeHtml(p.refName || ('#' + p.productId))}</b><span>→ ${escapeHtml(p.targetName || ('#' + p.targetId))}</span></div></td>
             <td>${chipFor(p.role)}</td>
             <td style="text-align:right">${fmt(p.impressions)}</td>
             <td style="text-align:right">${fmt(p.adds)}</td>
@@ -192,7 +218,7 @@
     STORES.forEach((s, i) => {
       const b = document.createElement('button');
       b.textContent = s.name;
-      if (s.key === currentStore.key) b.classList.add('active');
+      if (s === currentStore) b.classList.add('active');
       b.addEventListener('click', () => {
         currentStore = s;
         sel.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));

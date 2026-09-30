@@ -146,19 +146,25 @@
     document.addEventListener('DOMContentLoaded', () => {
       const apiUrl = window.location.port === '8080' ? 'http://localhost:3003' : '/shimmer';
 
+      // Clés PUBLIABLES (pk_) : faites pour être dans la page, elles n'ouvrent que
+      // les routes du widget d'un seul store (le storeId part en X-Shimmer-Store).
+      // Jamais de clé secrète sk_ ici.
+      const CAVES   = { storeId: 4, key: 'pk_uUrPNXjew9_HENo4ZkS5k2iLu77sKjWCpn7hd8e5' };
+      const ATELIER = { storeId: 5, key: 'pk_7Zo54Ma12J0FGsoM8zkOpJC8K-HuzOg7iVonCAb4' };
+
       // Sample products from Caves + Atelier for the picker
       const SAMPLES = [
-        { id: 2042, store: 'Caves Forty-Two',  key: 'sk_fc215c787b2c48d9808a4638e2d51899', emoji: '🍷', name: 'Châteauneuf-du-Pape 2019', brand: 'Domaine du Vieux Télégraphe', desc: 'Châteauneuf-du-Pape sur galets roulés, grenache dominant. Puissant, épicé, garrigue.', price: '38€', specs: { Région: 'Rhône', Cépage: 'Grenache, Syrah', Profil: 'Puissant' } },
-        { id: 2074, store: 'Caves Forty-Two',  key: 'sk_fc215c787b2c48d9808a4638e2d51899', emoji: '🥂', name: 'Chablis 2022',          brand: 'Domaine William Fèvre',       desc: 'Chablis classique, chardonnay sur Kimméridgien. Tendu, citron, iode. Sur huîtres.', price: '24€', specs: { Région: 'Bourgogne', Cépage: 'Chardonnay', Profil: 'Frais' } },
-        { id: 2110, store: 'Caves Forty-Two',  key: 'sk_fc215c787b2c48d9808a4638e2d51899', emoji: '🍾', name: 'Prosecco Superiore',     brand: 'Bisol Crede',                  desc: 'Prosecco DOCG Valdobbiadene. Fin, frais, idéal apéritif.', price: '18€', specs: { Région: 'Italie', Cépage: 'Glera', Profil: 'Effervescent' } },
-        { id: 2114, store: 'Caves Forty-Two',  key: 'sk_fc215c787b2c48d9808a4638e2d51899', emoji: '🍷', name: 'Maury Tuilé 10 ans',     brand: 'Mas Amiel',                    desc: 'Vin doux naturel, élevé 10 ans en barrique. Notes de pruneau, cacao, garrigue.', price: '22€', specs: { Région: 'Roussillon', Cépage: 'Grenache', Profil: 'Doux' } },
+        { id: 2042, store: 'Caves Forty-Two',  ...CAVES, emoji: '🍷', name: 'Châteauneuf-du-Pape 2019', brand: 'Domaine du Vieux Télégraphe', desc: 'Châteauneuf-du-Pape sur galets roulés, grenache dominant. Puissant, épicé, garrigue.', price: '38€', specs: { Région: 'Rhône', Cépage: 'Grenache, Syrah', Profil: 'Puissant' } },
+        { id: 2074, store: 'Caves Forty-Two',  ...CAVES, emoji: '🥂', name: 'Chablis 2022',          brand: 'Domaine William Fèvre',       desc: 'Chablis classique, chardonnay sur Kimméridgien. Tendu, citron, iode. Sur huîtres.', price: '24€', specs: { Région: 'Bourgogne', Cépage: 'Chardonnay', Profil: 'Frais' } },
+        { id: 2110, store: 'Caves Forty-Two',  ...CAVES, emoji: '🍾', name: 'Prosecco Superiore',     brand: 'Bisol Crede',                  desc: 'Prosecco DOCG Valdobbiadene. Fin, frais, idéal apéritif.', price: '18€', specs: { Région: 'Italie', Cépage: 'Glera', Profil: 'Effervescent' } },
+        { id: 2114, store: 'Caves Forty-Two',  ...CAVES, emoji: '🍷', name: 'Maury Tuilé 10 ans',     brand: 'Mas Amiel',                    desc: 'Vin doux naturel, élevé 10 ans en barrique. Notes de pruneau, cacao, garrigue.', price: '22€', specs: { Région: 'Roussillon', Cépage: 'Grenache', Profil: 'Doux' } },
       ];
 
       // Atelier samples — pick first 2 produits
       // We need actual product ids; we use ones we know exist
       const ATELIER_SAMPLES = [
-        { id: 2115, store: "L'Atelier Lumière", key: 'sk_5542d50630c448dfa6a2873e3b5a55bf', emoji: '💡', name: 'Suspension PH 5',           brand: 'Louis Poulsen', desc: 'Suspension PH 5 design Poul Henningsen. Lumière douce, signature scandinave.', price: '1290€', specs: { Style: 'Scandinave', Pièce: 'Salle à manger', Couleur: 'Blanc' } },
-        { id: 2118, store: "L'Atelier Lumière", key: 'sk_5542d50630c448dfa6a2873e3b5a55bf', emoji: '🪔', name: 'Suspension Artichoke',      brand: 'Louis Poulsen', desc: 'Pièce iconique en feuilles de cuivre. Pour les grands espaces de réception.', price: '4200€', specs: { Style: 'Scandinave premium', Pièce: 'Salon', Couleur: 'Cuivre' } },
+        { id: 2115, store: "L'Atelier Lumière", ...ATELIER, emoji: '💡', name: 'Suspension PH 5',           brand: 'Louis Poulsen', desc: 'Suspension PH 5 design Poul Henningsen. Lumière douce, signature scandinave.', price: '1290€', specs: { Style: 'Scandinave', Pièce: 'Salle à manger', Couleur: 'Blanc' } },
+        { id: 2118, store: "L'Atelier Lumière", ...ATELIER, emoji: '🪔', name: 'Suspension Artichoke',      brand: 'Louis Poulsen', desc: 'Pièce iconique en feuilles de cuivre. Pour les grands espaces de réception.', price: '4200€', specs: { Style: 'Scandinave premium', Pièce: 'Salon', Couleur: 'Cuivre' } },
       ];
 
       const ALL_SAMPLES = [...SAMPLES, ...ATELIER_SAMPLES];
@@ -175,9 +181,9 @@
       });
 
       let currentShimmer = null;
-      function initShimmer(apiKey) {
+      function initShimmer(sample) {
         if (currentShimmer) currentShimmer.destroy();
-        currentShimmer = window.Shimmer.init({ apiUrl, apiKey });
+        currentShimmer = window.Shimmer.init({ apiUrl, apiKey: sample.key, storeId: sample.storeId });
         return currentShimmer;
       }
 
@@ -198,8 +204,8 @@
         document.getElementById('productPrice').textContent = sample.price;
         renderSpecs(sample.specs);
 
-        // Init Shimmer with the right store API key, then render the widget
-        initShimmer(sample.key);
+        // Init Shimmer with the right store's publishable key, then render the widget
+        initShimmer(sample);
 
         // Track the product view — fires view_target events if the visitor
         // arrived here from a recent cross-sell click (attribution loop).

@@ -217,7 +217,7 @@ Pourtant, le Tome 3 §3.6 décrit explicitement le process "construction de taxo
 Pour ne pas être que négatif :
 
 1. **Création store / Import catalogue** : 100% fonctionnel, robuste, rapide.
-2. **Multi-tenant + isolation** : un store nouveau ne casse pas les anciens (vérifié, le store legacy `test-api-key` continue de répondre normalement).
+2. **Multi-tenant + isolation** : un store nouveau ne casse pas les anciens (vérifié, le store legacy #1 continue de répondre normalement).
 3. **Auto-extraction des specs** : les champs spec libres dans le catalogue sont auto-extraits et exposés au moteur. Bien pensé.
 4. **Génération univers : la moitié du chemin** : structurellement, l'algo produit quelque chose d'exploitable (univers, critères, déductions, mots-clés), même si le contenu est imparfait.
 5. **Performance** : 50-200ms par tour de conversation, c'est très bien.
