@@ -12,7 +12,7 @@ import { SiteFooter } from '@/components/v2/SiteFooter';
 export const metadata: Metadata = {
   title: 'Shimmer, l\'outil qui fait gagner du temps et des clients à votre boutique',
   description:
-    'Un vendeur en ligne et un SAV qui répondent à votre place, plus les relances paniers, les avis, les campagnes. Vous gagnez du temps et des ventes. IA locale, données en France.',
+    'Un vendeur en ligne et un SAV qui répondent à votre place, plus les relances paniers, les avis, les campagnes. Vous gagnez du temps et des ventes. IA locale, données hébergées en Europe.',
 };
 
 export default function HomePage() {

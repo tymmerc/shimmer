@@ -108,10 +108,10 @@ export const S01Line2: React.FC<{ f: number; subtitles?: boolean }> = ({
   if (!subtitles) return null;
   const t = seg(f, 120, 138, EZ.INOUT);
   const fade = seg(f, 126, 132);
-  // Trajet : (x120, ligne de base 682) → (x80, ligne de base 1012)
+  // Trajet : (x120, ligne de base 682) → (x80, ligne de base 1030), 120 → 72 px
   const x = lerp(120, 80, t);
-  const b = lerp(682, 1012, t);
-  const fr = lerp(1, 0.4, t);
+  const b = lerp(682, 1030, t);
+  const fr = lerp(1, 0.6, t);
   const units = FILM.s01b.map((w, i) => ({
     w: w.replace(/\*/g, ""),
     at: PHONE_T.thought + i * 3,
@@ -143,13 +143,13 @@ export const S01Line2: React.FC<{ f: number; subtitles?: boolean }> = ({
           style={{
             position: "absolute",
             left: x,
-            top: b - 48 * 0.8,
+            top: b - 72 * 0.8,
             transformOrigin: "0 80%",
-            transform: `scale(${lerp(2.5, 1, t)})`,
+            transform: `scale(${lerp(120 / 72, 1, t)})`,
             opacity: fade,
             fontFamily: FONT.sans,
             fontWeight: 500,
-            fontSize: 48,
+            fontSize: 72,
             lineHeight: 1,
             letterSpacing: "-0.005em",
             color: S.paper,

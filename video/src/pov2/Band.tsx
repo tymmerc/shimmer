@@ -1,20 +1,17 @@
 import React from "react";
 import { FONT, S } from "../pov/brand";
 import { FILM } from "./script";
-import { EZ, lerp, seg } from "./timeline";
+import { EZ, lerp, seg, storyAt } from "./timeline";
 import { MonoLabel, Subtitle } from "./type";
 
 // Bande de pensée (y 900-1080, ink plat) : la seule couche de sous-titres.
-const LINES: Array<[string, number, number]> = [
-  [FILM.band.L2, 166, 250],
-  [FILM.band.L3, 256, 340],
-  [FILM.band.L4, 346, 444],
-  [FILM.band.L5, 520, 639],
-  [FILM.band.L6, 780, 828],
-  [FILM.band.L7, 834, 893],
-  [FILM.band.L7b, 930, 1000],
-  [FILM.band.L8, 1312, 1415],
-];
+// Lisible sur un téléphone (LinkedIn affiche la vidéo en pleine largeur) :
+// 72 px, textes courts, jamais pendant que l'écran demande de lire.
+export const CAPTION_SIZE = 72;
+export const CAPTION_BASELINE = 1030;
+const LINES: Array<[string, number, number]> = FILM.captions.map(
+  ([t, a, b]) => [t, storyAt(a * 30), storyAt(b * 30)],
+);
 
 /** subtitles=false : version voix off, sans les pensées (surtitre et touche Entrée restent). */
 export const Band: React.FC<{ f: number; subtitles?: boolean }> = ({
@@ -48,10 +45,10 @@ export const Band: React.FC<{ f: number; subtitles?: boolean }> = ({
           style={{
             position: "absolute",
             left: 80,
-            top: 1012 - 48 * 0.8,
+            top: CAPTION_BASELINE - CAPTION_SIZE * 0.8,
             fontFamily: FONT.sans,
             fontWeight: 500,
-            fontSize: 48,
+            fontSize: CAPTION_SIZE,
             lineHeight: 1,
             letterSpacing: "-0.005em",
             color: S.paper,
@@ -65,14 +62,22 @@ export const Band: React.FC<{ f: number; subtitles?: boolean }> = ({
       )}
       {subtitles &&
         LINES.map(([t, a, b]) => (
-          <Subtitle key={t} f={f} text={t} inAt={a} outAt={b} />
+          <Subtitle
+            key={t}
+            f={f}
+            text={t}
+            inAt={a}
+            outAt={b}
+            baseline={CAPTION_BASELINE}
+            size={CAPTION_SIZE}
+          />
         ))}
       {f >= 140 && f < 252 && (
         <MonoLabel
           text={FILM.kicker}
           x={80}
-          baseline={950}
-          size={34}
+          baseline={936}
+          size={28}
           tracking={0.16}
           color="rgba(251,249,244,0.85)"
           opacity={seg(f, 140, 150) * (1 - seg(f, 244, 252, EZ.IN))}

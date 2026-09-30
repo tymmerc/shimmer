@@ -102,7 +102,7 @@ export const Line: React.FC<{
               display: "inline-block",
               transform: `translateY(${(1 - p) * 140}%) skewX(${u.em && skewEm ? -6 * (1 - p) : 0}deg)`,
               fontStyle: u.em ? "italic" : "normal",
-                visibility: p <= 0.001 ? "hidden" : "visible",
+              visibility: p <= 0.001 ? "hidden" : "visible",
               color: u.em ? S.acid : color,
               letterSpacing: `${ls}em`,
             }}
@@ -119,14 +119,15 @@ export const Line: React.FC<{
  * Sous-titre de la bande : Inter Tight 500 48 px. La ligne ENTIÈRE monte
  * derrière son masque (10 f) : le mot à mot faisait « sous-titres auto ».
  */
-export const Subtitle: React.FC<{ f: number; text: string; inAt: number; outAt: number; x?: number; baseline?: number }> = ({
-  f,
-  text,
-  inAt,
-  outAt,
-  x = 80,
-  baseline = 1012,
-}) => {
+export const Subtitle: React.FC<{
+  f: number;
+  text: string;
+  inAt: number;
+  outAt: number;
+  x?: number;
+  baseline?: number;
+  size?: number;
+}> = ({ f, text, inAt, outAt, x = 80, baseline = 1012, size = 48 }) => {
   if (f < inAt || f > outAt + 6) return null;
   const out = seg(f, outAt, outAt + 6, EZ.IN);
   const p = seg(f, inAt, inAt + 10, EZ.OUT);
@@ -135,9 +136,9 @@ export const Subtitle: React.FC<{ f: number; text: string; inAt: number; outAt: 
       style={{
         position: "absolute",
         left: x,
-        top: baseline - 48 * 0.8,
+        top: baseline - size * 0.8,
         overflow: "hidden",
-        paddingBottom: 12,
+        paddingBottom: size * 0.25,
         opacity: 1 - out,
         transform: `translateY(${-10 * out}px)`,
       }}
@@ -146,7 +147,7 @@ export const Subtitle: React.FC<{ f: number; text: string; inAt: number; outAt: 
         style={{
           fontFamily: FONT.sans,
           fontWeight: 500,
-          fontSize: 48,
+          fontSize: size,
           lineHeight: 1,
           letterSpacing: "-0.005em",
           color: S.paper,

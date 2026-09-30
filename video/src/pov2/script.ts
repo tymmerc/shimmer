@@ -95,6 +95,20 @@ export const FILM = {
     L7b: fr("Il me prévient, et m'en propose un proche."),
     L8: fr("Ce vendeur IA était dans la barre de recherche."),
   },
+  /**
+   * Sous-titres de la version muette (LinkedIn, réseaux) : textes courts de la
+   * voix off, en SECONDES DU FILM, jamais pendant que l'écran demande de lire
+   * (question, réponses, confirmation). [texte, début, fin]
+   */
+  captions: [
+    [fr("Tous ces rouges… Je tape « rouge »."), 6.96, 10.05],
+    [fr("Comme un caviste."), 13.1, 15.6],
+    [fr("Je réponds dans la barre."), 21.3, 23.8],
+    [fr("Là, je gère."), 29.6, 31.2],
+    [fr("Et le Crozes ?"), 31.5, 33.9],
+    [fr("Il me prévient."), 37.3, 38.9],
+    [fr("Un vendeur IA, dans la barre de recherche."), 51.5, 53.9],
+  ] as Array<[string, number, number]>,
   kicker2: "COULEURS ET POLICE RÉGLÉES À L\u2019INSTALLATION",
   keycap: "Entrée ↵",
   s08label: "SAMEDI, 20\u202FH\u202F15",

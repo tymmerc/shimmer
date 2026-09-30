@@ -96,7 +96,7 @@ export function DarkIntegration() {
           <div className="md:col-span-2">
             <div className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">Souveraineté · RGPD natif</div>
             <h3 className="mt-4 font-display text-3xl leading-tight tracking-editorial text-paper md:text-4xl">
-              Vos données <span className="italic text-acid">restent en France</span>, point.
+              Vos données <span className="italic text-acid">restent en Europe</span>, point.
             </h3>
             <p className="mt-5 max-w-[52ch] text-base leading-relaxed text-paper/65">
               Pas de transfert vers les US par défaut. Le LLM tourne en local sur notre VPS. Les avis et
@@ -105,7 +105,7 @@ export function DarkIntegration() {
             </p>
           </div>
           <Pill label="LLM" value="Local · qwen2.5" />
-          <Pill label="Serveurs" value="France · UE" />
+          <Pill label="Serveurs" value="Union européenne" />
           <Pill label="Article 17" value="Endpoint dédié" />
           <Pill label="Sous-traitants" value="Liste publique" />
           <Pill label="PII" value="Scrubbés avant indexation" />

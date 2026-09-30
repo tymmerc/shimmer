@@ -103,7 +103,7 @@ export function DarkHero() {
           <Stat k="Modules" v="9 connectés" accent />
           <Stat k="Couverture" v="Vendeur, SAV, marketing, mesure" />
           <Stat k="Installation" v="3 lignes, 30 min" />
-          <Stat k="Souveraineté" v="Données en France" />
+          <Stat k="Souveraineté" v="Données en Europe" />
         </motion.div>
       </motion.div>
 

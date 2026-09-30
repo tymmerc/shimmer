@@ -10,7 +10,7 @@ export function SiteFooter() {
             Shimmer<span className="text-acid">.</span>
           </a>
           <p className="mt-3 max-w-[34ch] text-pretty text-sm leading-relaxed text-paper/55">
-            Le cerveau IA de votre boutique. Données et IA en France, RGPD aligné.
+            Le cerveau IA de votre boutique. Données et IA hébergées en Europe, RGPD aligné.
           </p>
         </div>
 
