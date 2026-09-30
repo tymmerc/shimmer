@@ -1,7 +1,9 @@
 // Rendu par tranches (mémoire serrée sur le VPS) : un seul bundle, des tranches
 // de N frames rendues à la suite (reprise : une tranche déjà présente est
 // sautée), puis assemblage sans réencodage.
-// Usage : node tools/render.mjs <compositionId> <sortie.mp4> [tranche=300] [concurrence=2]
+// Usage : node tools/render.mjs <compositionId> <sortie.mp4> [tranche=300] [concurrence=1]
+// Concurrence 1 : à 2 onglets, le shader WebGL (ANGLE) mélange les images
+// entre onglets et le logo apparaît en double une image sur deux.
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { execFileSync } from "node:child_process";
@@ -12,7 +14,7 @@ const [
   id = "ShimmerPOV",
   out = "out/shimmer-pov.mp4",
   chunkArg = "300",
-  concArg = "2",
+  concArg = "1",
 ] = process.argv.slice(2);
 const CHUNK = Number(chunkArg);
 const CONC = Number(concArg);
