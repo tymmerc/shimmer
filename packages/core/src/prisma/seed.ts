@@ -125,9 +125,12 @@ const TEST_STORE_NAME = 'Boutique Test Shimmer';
 
 /**
  * Store de test, sans clé en dur (le dépôt est public).
- * - SEED_STORE_API_KEY défini : upsert sur cette clé.
- * - sinon : on réutilise le store existant du même nom, ou on le crée avec une
- *   clé sk_ aléatoire, affichée une seule fois dans le terminal.
+ * - le store « Boutique Test Shimmer » existe : on le réutilise tel quel.
+ *   Si SEED_STORE_API_KEY est défini et ne correspond pas, on s'arrête plutôt
+ *   que de créer un doublon ou de changer sa clé en douce.
+ * - sinon on le crée, avec SEED_STORE_API_KEY ou une clé sk_ aléatoire
+ *   (affichée une seule fois dans le terminal).
+ * Une clé qui appartient déjà à un AUTRE store n'est jamais touchée.
  */
 async function upsertTestStore() {
   const config = {
@@ -135,21 +138,28 @@ async function upsertTestStore() {
     currency: 'EUR',
     features: ['search', 'chat', 'mail', 'sav'],
   };
+  const envKey = process.env.SEED_STORE_API_KEY?.trim() || undefined;
 
-  const envKey = process.env.SEED_STORE_API_KEY?.trim();
   if (envKey) {
-    return prisma.store.upsert({
-      where: { apiKey: envKey },
-      update: { name: TEST_STORE_NAME },
-      create: { name: TEST_STORE_NAME, apiKey: envKey, config },
-    });
+    const owner = await prisma.store.findUnique({ where: { apiKey: envKey } });
+    if (owner && owner.name !== TEST_STORE_NAME) {
+      throw new Error(`SEED_STORE_API_KEY appartient au store #${owner.id}, pas au store de test`);
+    }
+    if (owner) return owner;
   }
 
   const existing = await prisma.store.findFirst({
     where: { name: TEST_STORE_NAME },
     orderBy: { id: 'asc' },
   });
+  if (existing && envKey) {
+    throw new Error(`le store de test #${existing.id} existe déjà avec une autre clé que SEED_STORE_API_KEY`);
+  }
   if (existing) return existing;
+
+  if (envKey) {
+    return prisma.store.create({ data: { name: TEST_STORE_NAME, apiKey: envKey, config } });
+  }
 
   const apiKey = `sk_${randomUUID().replace(/-/g, '')}`;
   const created = await prisma.store.create({ data: { name: TEST_STORE_NAME, apiKey, config } });
