@@ -9,10 +9,11 @@
  *      pairs or rewrite reasons.
  *
  * Endpoints:
- *   POST /api/catalog/cross-sell/generate   — kick off precompute for current store
- *   GET  /api/catalog/cross-sell/product/:id?limit=N — live lookup with merchant overrides (widget)
- *   POST /api/catalog/cross-sell/events     — SDK event ingestion (widget)
- *   DELETE /api/catalog/cross-sell          — wipe and regenerate clean
+ *   POST   /api/catalog/cross-sell/generate          kick off precompute for current store
+ *   GET    /api/catalog/cross-sell/product/:id?limit=N  live lookup with merchant overrides (widget)
+ *   POST   /api/catalog/cross-sell/events            SDK event ingestion (widget)
+ *   GET    /api/catalog/cross-sell/stats | /analytics  admin metrics
+ *   DELETE /api/catalog/cross-sell                   wipe and regenerate clean
  *
  * Two routers: crossSellWidgetRouter holds the routes the storefront widget
  * calls and accepts a publishable key (widgetAuth, per route). crossSellRouter
@@ -23,6 +24,7 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { getPrisma, ClaudeClient, logger } from '@shimmer/core';
 import { widgetAuth } from '../middleware/auth.js';
+import { createScopedRateLimiter } from '../middleware/rate-limiter.js';
 
 export const crossSellRouter = Router();
 export const crossSellWidgetRouter = Router();
@@ -41,15 +43,25 @@ const client = new ClaudeClient();
 const VALID_EVENT_TYPES = ['impression', 'click', 'add', 'view_target', 'purchase'] as const;
 type CrossSellEventType = typeof VALID_EVENT_TYPES[number];
 
+// /events accepte la clé publiable : tout ce qui arrive ici peut venir d'un
+// inconnu. Le rôle est ré-affiché dans les tableaux de bord (d'où le motif
+// strict), les ids tiennent dans un int4 et la metadata reste petite.
+const INT4_MAX = 2_147_483_647;
+const MAX_METADATA_CHARS = 2_000;
+
 const eventSchema = z.object({
-  product_id: z.number().int().positive(),
-  target_id: z.number().int().positive(),
-  role: z.string().min(1).max(40),
+  product_id: z.number().int().positive().max(INT4_MAX),
+  target_id: z.number().int().positive().max(INT4_MAX),
+  role: z.string().regex(/^[a-z_]{1,40}$/),
   event_type: z.enum(VALID_EVENT_TYPES),
   session_id: z.string().min(8).max(64),
   position: z.number().int().min(0).max(20).optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.unknown()).optional()
+    .refine((m) => m === undefined || JSON.stringify(m).length <= MAX_METADATA_CHARS, 'metadata too large'),
 });
+
+// Par IP (trust proxy côté index.ts). Le SDK envoie au plus un lot toutes les 1,5 s.
+const eventsLimiter = createScopedRateLimiter('cross-sell-events', 60_000, 60);
 
 const batchEventsSchema = z.object({
   events: z.array(eventSchema).min(1).max(50),
@@ -703,13 +715,12 @@ crossSellRouter.get('/stats', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/catalog/products/:id/cross-sell?limit=4
-// Mounted under /api/catalog so it sits next to /products/:id endpoints.
+// GET /api/catalog/cross-sell/product/:id?limit=4 (widget, pk_ ou sk_)
 crossSellWidgetRouter.get('/product/:id', widgetAuth, async (req: Request, res: Response) => {
   try {
     const storeId = req.storeId!;
     const id = Number(req.params.id);
-    if (!Number.isFinite(id)) {
+    if (!Number.isInteger(id) || id <= 0 || id > INT4_MAX) {
       res.status(400).json({ error: 'Invalid product id' });
       return;
     }
@@ -830,7 +841,9 @@ crossSellWidgetRouter.get('/product/:id', widgetAuth, async (req: Request, res: 
       })),
     });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    // Route publique : pas de message interne (Prisma cite requête et chemins).
+    logger.error({ err }, 'cross_sell.lookup.failed');
+    res.status(500).json({ error: 'Internal error' });
   }
 });
 
@@ -841,7 +854,7 @@ crossSellWidgetRouter.get('/product/:id', widgetAuth, async (req: Request, res: 
 /** POST /api/catalog/cross-sell/events
  *  Ingests one or a batch of events from the SDK. Returns 204 on success.
  *  Accepts: { events: [{...}] } or { ...singleEvent } for backwards compat. */
-crossSellWidgetRouter.post('/events', widgetAuth, async (req: Request, res: Response) => {
+crossSellWidgetRouter.post('/events', eventsLimiter, widgetAuth, async (req: Request, res: Response) => {
   try {
     const storeId = req.storeId!;
     const body = Array.isArray(req.body?.events)
@@ -869,7 +882,8 @@ crossSellWidgetRouter.post('/events', widgetAuth, async (req: Request, res: Resp
       res.status(400).json({ error: 'Validation error', details: err.errors });
       return;
     }
-    res.status(500).json({ error: (err as Error).message });
+    logger.error({ err }, 'cross_sell.events.failed');
+    res.status(500).json({ error: 'Internal error' });
   }
 });
 

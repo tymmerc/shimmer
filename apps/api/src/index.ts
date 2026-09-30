@@ -61,7 +61,9 @@ app.use(compression());
 // Safety relies on (a) credentials never being reflected, and (b) abuse-prone
 // endpoints having their own scoped rate limiters. Auth uses Bearer tokens
 // which browsers never attach automatically.
-app.use(cors({ origin: '*', credentials: false }));
+// maxAge : le préflight (Authorization + X-Shimmer-Store) reste en cache 10 min,
+// sinon chaque envoi du SDK, y compris à la fermeture de page, en paie un.
+app.use(cors({ origin: '*', credentials: false, maxAge: 600 }));
 // We capture rawBody so downstream HMAC checks (Shopify, WooCommerce, etc.)
 // can verify signatures against the exact bytes Shopify sent. Without this,
 // JSON.parse/re-stringify would invalidate the HMAC.

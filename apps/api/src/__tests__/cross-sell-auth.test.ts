@@ -37,6 +37,11 @@ vi.mock('@shimmer/core', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
+// Limiteur Redis remplacé par un passe-plat (même helper que stock-alerts).
+vi.mock('../middleware/rate-limiter.js', () => ({
+  createScopedRateLimiter: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+
 process.env.SHIMMER_PK_SECRET = 'test-pk-secret';
 
 const { authMiddleware } = await import('../middleware/auth.js');
@@ -101,6 +106,53 @@ describe('cross-sell widget routes with a publishable key', () => {
   it('rejects a request without any key', async () => {
     const res = await fetch(`${base}/product/1`);
     expect(res.status).toBe(401);
+  });
+});
+
+describe('cross-sell widget routes reject hostile input (public since pk_)', () => {
+  async function postEvent(over: Record<string, unknown>): Promise<number> {
+    const res = await fetch(`${base}/events`, {
+      method: 'POST', headers: pkHeaders(), body: JSON.stringify({ events: [{ ...oneEvent, ...over }] }),
+    });
+    return res.status;
+  }
+
+  it('refuses a role carrying markup (rendered by the admin dashboard)', async () => {
+    expect(await postEvent({ role: '<img src=x onerror=alert(1)>' })).toBe(400);
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
+  it('keeps accepting the roles already stored (lowercase words)', async () => {
+    expect(await postEvent({ role: 'accord' })).toBe(204);
+  });
+
+  it('refuses ids outside int4 and oversized metadata', async () => {
+    expect(await postEvent({ product_id: 2 ** 31 })).toBe(400);
+    expect(await postEvent({ metadata: { blob: 'x'.repeat(5000) } })).toBe(400);
+  });
+
+  it.each(['1.5', '1e10', '0', '-3'])('answers 400 on product id %s', async (id) => {
+    const res = await fetch(`${base}/product/${id}`, { headers: pkHeaders() });
+    expect(res.status).toBe(400);
+  });
+
+  it('does not leak internal error text on a 500', async () => {
+    fakePrisma.product.findFirst.mockRejectedValueOnce(new Error('prisma invocation at /opt/secret/path.ts'));
+    const res = await fetch(`${base}/product/1`, { headers: pkHeaders() });
+    expect(res.status).toBe(500);
+    expect(await res.text()).not.toContain('/opt/secret');
+  });
+});
+
+describe('src/index.ts mount order', () => {
+  it('mounts the widget cross-sell router before /api/catalog + authMiddleware', async () => {
+    const { readFileSync } = await import('fs');
+    const src = readFileSync(new URL('../index.ts', import.meta.url), 'utf8');
+    const widget = src.indexOf("app.use('/api/catalog/cross-sell', crossSellWidgetRouter)");
+    const catalog = src.indexOf("app.use('/api/catalog', authMiddleware");
+    expect(widget).toBeGreaterThan(-1);
+    expect(catalog).toBeGreaterThan(-1);
+    expect(widget).toBeLessThan(catalog);
   });
 });
 
