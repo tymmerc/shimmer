@@ -20,6 +20,10 @@ embedding-sidecar/models/
 embedding-sidecar/.venv/
 embedding-sidecar/model/
 data/indexes/
+# Index vectoriel réécrit par l'API à chaque ré-embedding des catalogues
+# (embeddings de vraies boutiques, jamais dans le dépôt public). Reconstruit
+# depuis la base s'il manque.
+apps/api/data/indexes/
 
 # Build outputs / deploy artefacts (jamais versionnés)
 .next/
