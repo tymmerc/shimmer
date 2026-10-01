@@ -90,7 +90,12 @@ Plateforme IA e-commerce : un vendeur conversationnel dans la barre de recherche
     - PUBLIC_API_BASE lu pareil partout.
     - **Mise en prod** : appliquer `packages/core/src/prisma/sql/2026-10-01-cart-reminders.sql` (ajouts seulement), puis redémarrer. L'ordre n'est plus critique : sans le SQL, le code crée les paniers comme avant et met les relances en pause (`lib/reminder-schema.ts`, revérifié chaque minute).
     - SQL vérifié sur une base jetable (copie du schéma).
-  - **Encore avant Resend** : la newsletter part à tous les clients, sans contrôle d'accord marketing (problème antérieur, tâche à part). Import CSV du catalogue : découpe par ligne avant les guillemets, casse sur l'export Shopify (catalog-import.ts).
+  - **Newsletter réservée aux clients qui ont accepté le marketing** (209c0b0, autre session, PAS ENCORE EN PROD). Les éléments :
+    - SQL `2026-10-01-customer-marketing-consent.sql` (colonne `customers.marketing_consent`) ;
+    - garde-fou `lib/consent-schema.ts` : newsletter en pause tant que le SQL manque.
+    - **À savoir** : les 88 clients existants n'ont pas d'accord enregistré, donc ils sont hors newsletter jusqu'à leur prochaine commande.
+    - **Mise en prod groupée avec les relances** : les 2 SQL, puis redémarrage de l'API.
+  - **Encore avant Resend** : import CSV du catalogue : découpe par ligne avant les guillemets, casse sur l'export Shopify (catalog-import.ts).
 - **01/10 · le widget prend la DA de la boutique (étages 1 à 3), EN PROD** (6a9d1d9, GO Tym, déployé 09:16 : API redémarrée, SDK et site publiés ; test de fumée 29/29, aller-retour `appearance` sur la boutique 4 puis remis à vide, navigateur prod OK avec l'endpoint réel ; sauvegardes `/opt/backups/*-20261001-0916.tar.gz`) :
   - SDK : `sdk/src/theme.ts` (calcul pur des jetons, contrastes, filtres) + `sdk/src/theme-dom.ts` (lecture de la page : fond, texte, police, arrondi de la barre de recherche, couleur du bouton d'ajout au panier). Priorité : variables CSS `--shimmer-accent|font|radius|surface|text` de la boutique > `data-accent|font|radius|theme` de la balise > réglages de l'admin > détection > défauts. Dock en Shadow DOM avec `::part()` (`#shimmer-root::part(chip)`, liste dans l'admin), cross-sell en classes `.sx-*`. Plus aucune couleur Shimmer en dur (fini l'indigo et le violet). Bulle du chat masquée 700 ms au plus le temps de lire l'admin.
   - API : `GET /api/public/appearance?store=N` (public, cache 60 s + revalidation), clé `appearance` du config via `PATCH /api/stores/me/config` (`lib/appearance.ts`, même règle de police que le SDK). Demande un redémarrage de l'API (dev et prod partagent le process).
