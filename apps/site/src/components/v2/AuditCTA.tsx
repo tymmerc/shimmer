@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { AUDIT_MAILTO } from '@/lib/audit';
+import { AUDIT_EMAIL, AUDIT_MAILTO } from '@/lib/audit';
 
 const LEAKS = [
   ['01', 'Les recherches qui ne trouvent rien.'],
@@ -37,23 +38,59 @@ export function AuditCTA() {
             ))}
           </div>
 
-          <div className="mt-8 flex flex-col items-stretch gap-5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-6 md:mt-12">
-            <a
-              href={AUDIT_MAILTO}
-              className="btn btn-acid group inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full bg-acid px-7 py-4 font-sans text-[13px] uppercase tracking-[0.14em] text-ink sm:px-8 sm:text-sm sm:tracking-[0.18em]"
-            >
-              Obtenir mon audit gratuit
-              <span className="transition-transform duration-300 group-hover:translate-x-1.5">→</span>
-            </a>
-            <div className="flex flex-wrap gap-x-6 gap-y-2 font-mono text-[11px] uppercase tracking-[0.16em] text-paper/50">
-              <span>Gratuit</span>
-              <span>Sans engagement</span>
-              <span>30 min de restitution</span>
-              <span>Réponse sous 24 h</span>
+          {/* L'adresse en clair, cliquable ET copiable : sur un ordinateur sans
+              logiciel de messagerie, un mailto seul n'ouvre rien (01/10). */}
+          <div className="mt-10 border-t border-paper/15 pt-7 md:mt-14 md:pt-9">
+            <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-paper/50">
+              Écrivez-moi, réponse sous 24 h
             </div>
+            <div className="mt-4 flex flex-col items-start gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:gap-6">
+              <a
+                href={AUDIT_MAILTO}
+                className="break-words font-display text-[clamp(26px,4.4vw,60px)] leading-[1.05] tracking-tightest text-paper underline decoration-acid/50 decoration-1 underline-offset-[0.22em] transition-colors hover:decoration-acid"
+              >
+                {AUDIT_EMAIL}
+              </a>
+              <CopyEmail />
+            </div>
+            <p className="mt-5 max-w-[56ch] text-pretty text-[15px] leading-relaxed text-paper/60 md:text-base">
+              Donnez l&apos;adresse de votre boutique et sa plateforme (Shopify, WooCommerce…).
+              Gratuit, sans engagement, 30 minutes de restitution.
+            </p>
           </div>
         </motion.div>
       </div>
     </section>
+  );
+}
+
+function CopyEmail() {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(AUDIT_EMAIL);
+    } catch {
+      // Presse-papiers refusé (iframe, vieux navigateur) : on sélectionne le texte.
+      const range = document.createRange();
+      const link = document.querySelector('#audit a[href^="mailto:"]');
+      if (link) {
+        range.selectNodeContents(link);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2200);
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      aria-live="polite"
+      className="rounded-full border border-paper/25 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-paper/80 transition-colors hover:border-paper/60 hover:text-paper"
+    >
+      {copied ? 'Adresse copiée' : 'Copier l’adresse'}
+    </button>
   );
 }

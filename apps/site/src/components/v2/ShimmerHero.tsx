@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { ToxicCanvas } from '../ToxicCanvas';
-import { AUDIT_MAILTO } from '@/lib/audit';
+import { AUDIT_ANCHOR } from '@/lib/audit';
 import { SiteNav } from './SiteNav';
 import { HeroTeaser } from './HeroTeaser';
 
@@ -64,15 +64,15 @@ export function ShimmerHero() {
           className="mt-6 flex flex-col items-stretch gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 md:mt-12"
         >
           <a
-            href={AUDIT_MAILTO}
-            className="btn btn-acid group inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full bg-acid px-7 py-3.5 font-sans text-[13px] sm:py-4 uppercase tracking-[0.14em] text-ink sm:px-8 sm:text-sm sm:tracking-[0.18em]"
+            href={AUDIT_ANCHOR}
+            className="group inline-flex items-center justify-center gap-3 whitespace-nowrap rounded-full bg-paper px-7 py-3.5 font-sans text-[15px] font-medium text-ink transition-colors duration-300 hover:bg-bone sm:py-4"
           >
-            Obtenir mon audit gratuit
-            <span className="transition-transform duration-300 group-hover:translate-x-1.5">→</span>
+            Demander un audit
+            <span className="text-ink/50 transition-transform duration-300 group-hover:translate-x-1">→</span>
           </a>
           <a
             href="/shimmer/demo/"
-            className="btn btn-ghost inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full border border-paper/25 px-7 py-3.5 font-sans text-[13px] sm:py-4 uppercase tracking-[0.14em] text-paper sm:px-8 sm:text-sm sm:tracking-[0.18em]"
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-full border border-paper/25 px-7 py-3.5 font-sans text-[15px] text-paper transition-colors duration-300 hover:border-paper/60 sm:py-4"
           >
             Voir les démos
           </a>

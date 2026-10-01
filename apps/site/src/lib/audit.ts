@@ -1,6 +1,11 @@
-// L'audit gratuit est l'accroche commerciale n°1 : tous les CTA "audit"
-// pointent vers ce mailto pré-rempli (il n'existe pas encore de formulaire
-// dédié ; le signup crée un store + clé API, ce n'est pas un audit).
+// L'audit gratuit est l'accroche commerciale n°1. Les CTA de la landing
+// mènent au bloc #audit, où l'adresse est affichée en clair (copiable) en plus
+// du mailto : sur un ordinateur sans logiciel de messagerie, un simple mailto
+// n'ouvre rien et la demande se perd sans qu'on le sache (01/10).
+
+export const AUDIT_EMAIL = 'tym.mercier@gmail.com';
+/** Le bloc audit de la landing, depuis n'importe quelle page du site. */
+export const AUDIT_ANCHOR = '/shimmer/#audit';
 
 const AUDIT_SUBJECT = 'Audit gratuit de ma boutique';
 
@@ -15,6 +20,6 @@ const AUDIT_BODY = [
   'Merci !',
 ].join('\n');
 
-export const AUDIT_MAILTO = `mailto:tym.mercier@gmail.com?subject=${encodeURIComponent(
+export const AUDIT_MAILTO = `mailto:${AUDIT_EMAIL}?subject=${encodeURIComponent(
   AUDIT_SUBJECT,
 )}&body=${encodeURIComponent(AUDIT_BODY)}`;

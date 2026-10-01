@@ -1,6 +1,6 @@
 'use client';
 
-import { AUDIT_MAILTO } from '@/lib/audit';
+import { AUDIT_ANCHOR } from '@/lib/audit';
 
 /**
  * Nav minimale, partagée. Trois ancres, et l'audit en simple lien texte : le
@@ -15,7 +15,7 @@ export function SiteNav() {
           Shimmer<span className="text-acid">.</span>
         </a>
         <a
-          href={AUDIT_MAILTO}
+          href={AUDIT_ANCHOR}
           className="border-b border-paper/30 pb-px font-mono text-[10px] uppercase tracking-[0.18em] text-paper/80 md:hidden"
         >
           Demander un audit
@@ -31,7 +31,7 @@ export function SiteNav() {
             Démos
           </a>
           <a
-            href={AUDIT_MAILTO}
+            href={AUDIT_ANCHOR}
             className="ml-2 border-b border-paper/30 pb-px font-mono text-[11px] uppercase tracking-[0.2em] text-paper/85 transition hover:border-paper hover:text-paper"
           >
             Demander un audit

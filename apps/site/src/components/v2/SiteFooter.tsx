@@ -1,4 +1,4 @@
-import { AUDIT_MAILTO } from '@/lib/audit';
+import { AUDIT_ANCHOR } from '@/lib/audit';
 
 /** Footer léger : une ligne, les liens essentiels, la souveraineté. */
 export function SiteFooter() {
@@ -18,7 +18,7 @@ export function SiteFooter() {
           <a href="#automatisations" className="transition hover:text-paper">Ce que ça fait</a>
           <a href="#preuve" className="transition hover:text-paper">La preuve</a>
           <a href="/shimmer/demo/" className="transition hover:text-paper">Démos</a>
-          <a href={AUDIT_MAILTO} className="text-acid transition hover:text-acid-deep">Audit gratuit</a>
+          <a href={AUDIT_ANCHOR} className="text-acid transition hover:text-acid-deep">Audit gratuit</a>
         </div>
       </div>
 
