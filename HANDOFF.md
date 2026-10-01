@@ -75,6 +75,20 @@ Plateforme IA e-commerce : un vendeur conversationnel dans la barre de recherche
 
 - **26/09 · landing** : V3 (refonte "sobre" de l'autre session, 23/08) **supprimée** sur décision Tym, on reste sur la V2. Retours appliqués et **poussés en prod** : plus de pastille "cerveau IA" ni de bouton jaune "Audit gratuit" (lien texte), texte mobile réduit, **shader toxique actif sur téléphone** (allégé : res 0.26, DPR 1, 20 fps, lueur qui dérive seule), bruit adapté au portrait, hero mobile = un écran avec `HeroTeaser` (vendeur en action) en bas. Backup prod : `/opt/backups/shimmer/showcase-main-20260926-1110.tar.gz`.
 - **28/09 · landing, 2e lot en prod** (GO Tym) : frise « Comment ça se passe » (piste + jalons + durée par étape, dernière en acide), typo display desserrée partout (`tracking-tightest` -0.045 → -0.022em, interligne 1.02, hero 128 px max ; on GARDE Fraunces), intros de section repliées dans `SectionMore` (« + En savoir plus », `<details>` natif), apparition en cascade sur « Et tout autour » (Tym a refusé une orbite animée : il voulait juste une apparition). Backup prod : `/opt/backups/shimmer/showcase-main-20260928-0941.tar.gz`. Playwright pour les captures : `/opt/node_modules` a disparu, utiliser `/opt/corsairaventure/node_modules` (script posé dans ce dossier).
+- **01/10 soir · contact de la landing (post LinkedIn)** :
+  - **Constat.** Aucun formulaire : tous les boutons d'audit ouvraient un mailto. Sur un PC sans logiciel de messagerie, ça n'ouvre rien. Les 4 visites venues de LinkedIn étaient toutes sous Windows. Aucun e-mail d'audit reçu sur 30 jours.
+  - **EN PROD à 22:31** (73299a2 + c210043, sur GO de Tym, sauvegarde `/opt/backups/showcase-main-20261001-2231.tar.gz`) :
+    - les CTA mènent à `#audit` ;
+    - adresse en clair, cliquable et copiable ;
+    - bouton du haut sobre (« Demander un audit », fond papier, plus le jaune « cheap ») ;
+    - `/signup/` renvoie vers l'audit au lieu de « Erreur 403 ».
+    - Publié SANS `--delete` et SANS `/demo/` ni `/demo-boutiques/` (la page démo attend toujours le GO).
+  - **Formulaire d'audit en cours** (workflow `shimmer-lead-form`) :
+    - côté API : `POST /api/public/leads`, ping, table `leads` (SQL `2026-10-01-leads.sql`), alerte Resend à Tym via `LEAD_NOTIFY_*` ;
+    - côté site : `AuditForm.tsx`, qui ne s'affiche que si `/api/public/leads/ping` répond.
+    - `LEAD_NOTIFY_RESEND_API_KEY`, `LEAD_NOTIFY_FROM` (entre guillemets, sinon `start-api.sh` casse) et `LEAD_NOTIFY_TO` sont DÉJÀ dans `/opt/shimmer/.env`. C'est la clé d'envoi de Cors'Air, Tym a donné son accord ; elle est séparée de RESEND_API_KEY, donc les e-mails clients restent simulés.
+    - Mise en prod = SQL leads (+ ceux des relances et de l'accord marketing), redémarrage de l'API, puis site. Tout ça demande le GO de Tym.
+  - **GitHub** : la désactivation du workflow « Deploy site to VPS (dev) » (mails d'échec à chaque commit) a été refusée par le garde-fou. C'est à Tym : Actions > le workflow > « … » > Disable workflow.
 - **01/10 après-midi** :
   - **Ton « Neutre » de la page Réglages : corrigé et EN PROD** (422c23b, API redémarrée sur GO de Tym, test de fumée 29/29, enregistrement vérifié sur la boutique 4 puis remis à « tu »).
   - **Page démo « le vendeur chez vous »** (`/demo/boutiques/` + `public/demo-boutiques/*.html`, 2b80326) : sur dev seulement, la prod attend le GO de Tym. Ensuite seulement, lancer `packages/core/src/prisma/sql/2026-10-01-demo-images.sql` (illustrations des boutiques 4 et 5). Vérif : `heavy node /opt/corsairaventure/shimmer-demo-boutiques-check.mjs <base> <onglet>`.
