@@ -9,6 +9,7 @@ import cors from 'cors';
 import { logger, closePrisma, closeRedis, getPrisma, getRedis } from '@shimmer/core';
 import { initializeIndexes } from '@shimmer/smart-search';
 import { authMiddleware, widgetAuth } from './middleware/auth.js';
+import { operatorOnly } from './middleware/operator.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { createRateLimiter, createScopedRateLimiter, trustProxy } from './middleware/rate-limiter.js';
 import { assertPublishableSecret } from './lib/publishable-key.js';
@@ -45,6 +46,8 @@ import { publicReviewsRouter } from './routes/public-reviews.js';
 import { publicStockAlertsRouter } from './routes/public-stock-alerts.js';
 import { publicUnsubscribeRouter } from './routes/public-unsubscribe.js';
 import { publicAppearanceRouter } from './routes/public-appearance.js';
+import { publicLeadsRouter } from './routes/public-leads.js';
+import { leadsRouter } from './routes/leads.js';
 import { reviewToolRouter } from './routes/review-tool.js';
 import { holdoutRouter } from './routes/holdout.js';
 import { knowledgeRouter } from './routes/knowledge.js';
@@ -84,6 +87,8 @@ const keepRawBody = (req: Request & { rawBody?: Buffer }, _res: unknown, buf: Bu
 const jsonDefault = express.json({ limit: '1mb', verify: keepRawBody });
 // Un produit Shopify avec beaucoup de variantes et d'images pèse lourd.
 const jsonWebhooks = express.json({ limit: '5mb', verify: keepRawBody });
+// Formulaire d'audit de la landing : public, quelques champs courts.
+const jsonLeads = express.json({ limit: '16kb' });
 // Import du catalogue : seule route à gros corps, lue APRÈS la clé secrète.
 const catalogBody = [
   express.json({ limit: '50mb', verify: keepRawBody }),
@@ -92,6 +97,7 @@ const catalogBody = [
 app.use((req: Request, res: Response, next: NextFunction) => {
   if (req.path.startsWith('/api/catalog/') && !req.path.startsWith('/api/catalog/cross-sell/')) return next();
   if (req.path.startsWith('/api/webhooks/')) return jsonWebhooks(req, res, next);
+  if (req.path.startsWith('/api/public/leads')) return jsonLeads(req, res, next);
   return jsonDefault(req, res, next);
 });
 app.use(createHttpLogger());
@@ -156,6 +162,7 @@ app.use('/api/public/reviews', publicReviewsRouter);
 app.use('/api/public/stock-alerts', publicStockAlertsRouter);
 app.use('/api/public/unsubscribe', publicUnsubscribeRouter);
 app.use('/api/public/appearance', publicAppearanceRouter);
+app.use('/api/public/leads', publicLeadsRouter);
 app.use('/api/review-tool', reviewToolRouter);
 app.use('/api/holdout', holdoutRouter);
 app.use('/api/knowledge', authMiddleware, knowledgeRouter);
@@ -200,6 +207,8 @@ app.use('/api/webhooks/shopify', platformWebhookLimiter, webhooksShopifyRouter);
 app.use('/api/webhooks/woocommerce', platformWebhookLimiter, webhooksWooCommerceRouter);
 app.use('/api/integration', authMiddleware, integrationRouter);
 app.use('/api/automations', authMiddleware, automationsRouter);
+// Demandes d'audit de la landing : opérateur Shimmer seulement.
+app.use('/api/leads', authMiddleware, operatorOnly, leadsRouter);
 
 // Error handler
 app.use(errorHandler);
