@@ -76,7 +76,7 @@
 | Build (SDK) | esbuild | 0.24.x |
 | Tests | Vitest | 2.x |
 | Monorepo | pnpm workspaces | 9.x |
-| Conteneurs | Docker Compose | 2.32.4 |
+| Services | systemd (shimmer-api, shimmer-embedding), pas de Docker pour Shimmer | |
 | Reverse proxy | Nginx | existant sur le serveur |
 
 ---
@@ -91,7 +91,6 @@
 ├── .env
 ├── .env.example
 ├── .gitignore
-├── docker-compose.yml
 │
 ├── apps/
 │   └── api/
@@ -168,7 +167,6 @@
 │       └── embed.ts
 │
 ├── embedding-sidecar/
-│   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── app.py
 │   └── download_model.py
@@ -302,7 +300,7 @@ Service Python séparé (FastAPI + ONNX Runtime) qui expose l'inférence d'embed
 - Latence : ~20-50ms pour batch de 10 textes sur CPU
 - Dimensions : 768
 
-**Déploiement** : Docker container ou processus host Python selon espace disque disponible.
+**Déploiement** : processus Python sur l'hôte (service systemd `shimmer-embedding`, uvicorn depuis `embedding-sidecar/.venv`, écoute sur 127.0.0.1:8100). Pas de Docker.
 
 **Cache** : Les embeddings sont cachés dans Redis (TTL 1h, clé = hash du texte).
 
@@ -310,16 +308,18 @@ Service Python séparé (FastAPI + ONNX Runtime) qui expose l'inférence d'embed
 
 ## 7. Infrastructure
 
-### 7.1 Docker Compose
+### 7.1 Services (systemd, pas de Docker)
 
-Services gérés par Docker Compose :
-- `embedding-sidecar` : FastAPI ONNX (port 8100, interne)
+La prod de Shimmer tourne en services systemd, sans Docker. Le `docker-compose.yml` et le `Dockerfile` du sidecar ont été retirés le 01/10/2026 : ils ne servaient plus (ne pas les recréer par réflexe).
+- `shimmer-api` : API Express + workers BullMQ (relecture de nuit, balayage des automatisations…), lancée par `start-api.sh` (tsx sur le source), 127.0.0.1:3003.
+- `shimmer-embedding` : FastAPI ONNX, uvicorn depuis `embedding-sidecar/.venv`, 127.0.0.1:8100.
+- `shimmer-workers` : désactivé le 30/09/2026 (doublon exact des workers de l'API).
 
-Services externes (déjà en place) :
+Services externes (hors de ce dépôt) :
 - `ecommerce-postgres` : PostgreSQL 16, port 5434, DB `ecommerce_db`
 - `ecommerce-redis` : Redis 7, port 6381
 
-L'API Express et les workers BullMQ tournent directement sur l'hôte (pas containerisés) pour le dev.
+Ces deux conteneurs sont lancés par `/opt/ecommerce-automation/docker-compose.yml`, pas par Shimmer.
 
 ### 7.2 Nginx
 
