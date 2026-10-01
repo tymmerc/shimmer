@@ -17,6 +17,7 @@ import { getPrisma, logger, ShimmerError } from '@shimmer/core';
 import { enqueueCartReminders } from '../lib/automations/queue.js';
 import { completeCart, recoverCartsForOrder, shopifyExplicitOptOut, shopifyMarketingConsent, upsertCart } from '../lib/abandoned-carts.js';
 import { suppressEmail } from '../lib/unsubscribe.js';
+import { recordPlatformConsent, shopifyCustomerConsent } from '../lib/marketing-consent.js';
 import { attributeOrderToChat } from '../lib/attribution.js';
 import { recordOrderForVisitor } from './holdout.js';
 import { detectRestock, notifyRestock, recordStockAlertConversions } from '../lib/stock-alerts.js';
@@ -103,7 +104,11 @@ interface ShopifyOrder {
   total_price?: string;
   financial_status?: string;
   fulfillment_status?: string | null;
-  customer?: ShopifyAddress;
+  customer?: ShopifyAddress & {
+    accepts_marketing?: boolean | null;
+    email_marketing_consent?: { state?: string | null } | null;
+  };
+  buyer_accepts_marketing?: boolean | null;
   line_items?: ShopifyLineItem[];
   created_at?: string;
   // Shimmer visitor id carried through checkout as a note/cart attribute.
@@ -273,6 +278,16 @@ webhooksShopifyRouter.post(
           },
         });
       }
+
+      // Accord marketing du client (la newsletter n'écrit qu'à ceux qui ont dit oui).
+      await recordPlatformConsent({
+        storeId,
+        customerId: customer.id,
+        email,
+        consent: shopifyCustomerConsent(payload),
+        optedOut: shopifyExplicitOptOut(payload),
+        source: 'shopify',
+      });
 
       // Create the order. Shopify renvoie un webhook qui n'a pas eu sa réponse
       // à temps : une commande déjà connue n'est ni recréée ni recomptée.

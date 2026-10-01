@@ -16,6 +16,7 @@ import crypto from 'crypto';
 import { getPrisma, logger, ShimmerError } from '@shimmer/core';
 import { enqueueCartReminders } from '../lib/automations/queue.js';
 import { recoverCartsForOrder, upsertCart } from '../lib/abandoned-carts.js';
+import { recordPlatformConsent, wooMarketingConsent } from '../lib/marketing-consent.js';
 import { attributeOrderToChat } from '../lib/attribution.js';
 import { linkOrderItems } from '../lib/order-items.js';
 import { scheduleReviewAfterShipping } from '../lib/review-on-delivery.js';
@@ -213,6 +214,17 @@ async function handleOrder(req: Request, res: Response): Promise<void> {
       },
     });
   }
+
+  // Accord marketing, seulement si une extension le pose sur la commande
+  // (Mailchimp for WooCommerce) ; Woo n'a pas de désinscription à relayer.
+  await recordPlatformConsent({
+    storeId,
+    customerId: customer.id,
+    email,
+    consent: wooMarketingConsent(payload),
+    optedOut: false,
+    source: 'woocommerce',
+  });
 
   const orderNumber = payload.number ? `WC-${payload.number}` : `WC-${payload.id ?? Date.now()}`;
   const incoming = mapStatus(payload.status);

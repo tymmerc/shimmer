@@ -107,6 +107,14 @@ const cartRemindersShape = z.object({
   message: 'discount_code et discount_percent vont ensemble',
 });
 
+// Newsletter. Par défaut, seulement les clients qui ont accepté le marketing.
+// « all » : tous les clients (hors désinscrits), à ne choisir que si la
+// boutique a documenté une autre base légale (par exemple l'exception CNIL
+// pour ses propres clients, informés et libres de refuser à la commande).
+const newsletterShape = z.object({
+  audience: z.enum(['subscribers', 'all']).optional(),
+}).strict();
+
 const configUpdateSchema = z.object({
   // Les trois choix de la page Réglages. « neutre » : le vendeur évite les
   // pronoms (sales-assistant), les gabarits de la recherche guidée vouvoient.
@@ -115,6 +123,7 @@ const configUpdateSchema = z.object({
   universe_overrides: z.record(z.string().max(60), overrideShape).nullable().optional(),
   cross_sell_rules: crossSellRulesShape.nullable().optional(),
   cart_reminders: cartRemindersShape.nullable().optional(),
+  newsletter: newsletterShape.nullable().optional(),
   // Objet entier remplacé ; {} = tout automatique, null = clé retirée.
   appearance: appearanceSchema.nullable().optional(),
 }).strict();
@@ -181,7 +190,7 @@ storesRouter.patch('/me/config', authMiddleware, async (req: Request, res: Respo
     // config, un lire-modifier-réécrire effaçait ses clés.
     const set: Record<string, unknown> = {};
     const unset: string[] = [];
-    for (const key of ['tone', 'voice', 'universe_overrides', 'cross_sell_rules', 'appearance', 'cart_reminders'] as const) {
+    for (const key of ['tone', 'voice', 'universe_overrides', 'cross_sell_rules', 'appearance', 'cart_reminders', 'newsletter'] as const) {
       const value = body[key];
       if (value === undefined) continue;
       if (value === null) unset.push(key);
