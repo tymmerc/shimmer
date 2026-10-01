@@ -16,6 +16,7 @@ import { derivePublishableKey } from '../lib/publishable-key.js';
 import { publicStoreProfile } from '../lib/public-store.js';
 import { CRITERION_ID_RE } from '../lib/criterion-id.js';
 import { patchStoreConfig } from '../lib/knowledge-ingest.js';
+import { appearanceSchema } from '../lib/appearance.js';
 
 export const storesRouter = Router();
 
@@ -101,6 +102,8 @@ const configUpdateSchema = z.object({
   voice: voiceShape.nullable().optional(),
   universe_overrides: z.record(z.string().max(60), overrideShape).nullable().optional(),
   cross_sell_rules: crossSellRulesShape.nullable().optional(),
+  // Objet entier remplacé ; {} = tout automatique, null = clé retirée.
+  appearance: appearanceSchema.nullable().optional(),
 }).strict();
 
 // POST /api/stores — create a new store (admin, no auth required)
@@ -165,7 +168,7 @@ storesRouter.patch('/me/config', authMiddleware, async (req: Request, res: Respo
     // config, un lire-modifier-réécrire effaçait ses clés.
     const set: Record<string, unknown> = {};
     const unset: string[] = [];
-    for (const key of ['tone', 'voice', 'universe_overrides', 'cross_sell_rules'] as const) {
+    for (const key of ['tone', 'voice', 'universe_overrides', 'cross_sell_rules', 'appearance'] as const) {
       const value = body[key];
       if (value === undefined) continue;
       if (value === null) unset.push(key);

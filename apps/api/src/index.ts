@@ -43,6 +43,7 @@ import { integrationRouter } from './routes/integration.js';
 import { automationsRouter } from './routes/automations.js';
 import { publicReviewsRouter } from './routes/public-reviews.js';
 import { publicStockAlertsRouter } from './routes/public-stock-alerts.js';
+import { publicAppearanceRouter } from './routes/public-appearance.js';
 import { reviewToolRouter } from './routes/review-tool.js';
 import { holdoutRouter } from './routes/holdout.js';
 import { knowledgeRouter } from './routes/knowledge.js';
@@ -152,6 +153,7 @@ app.get('/health/ready', async (_req, res) => {
 app.use('/api/public/outbound', publicOutboundRouter);
 app.use('/api/public/reviews', publicReviewsRouter);
 app.use('/api/public/stock-alerts', publicStockAlertsRouter);
+app.use('/api/public/appearance', publicAppearanceRouter);
 app.use('/api/review-tool', reviewToolRouter);
 app.use('/api/holdout', holdoutRouter);
 app.use('/api/knowledge', authMiddleware, knowledgeRouter);

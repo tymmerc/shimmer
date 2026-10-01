@@ -13,6 +13,7 @@ import { AdminEmails } from './AdminEmails';
 import { AdminOverview } from './AdminOverview';
 import { AdminSettings } from './AdminSettings';
 import { AdminIntegration } from './AdminIntegration';
+import { AdminAppearance } from './AdminAppearance';
 import { AdminCatalog } from './AdminCatalog';
 import { AdminOnboarding } from './AdminOnboarding';
 import { AdminVentes } from './AdminVentes';
@@ -25,7 +26,7 @@ type Section =
  | 'overview' | 'onboarding' | 'preuve'
  | 'ventes' | 'relation' | 'marketing'
  | 'inbox' | 'sav' | 'reviews' | 'orders' | 'carts' | 'campaigns' | 'emails'
- | 'catalog' | 'settings' | 'integration' | 'restock';
+ | 'catalog' | 'settings' | 'integration' | 'appearance' | 'restock';
 
 type Role = 'admin' | 'direction' | 'commercial' | 'sav' | 'marketing' | 'logistique';
 
@@ -39,7 +40,7 @@ type Role = 'admin' | 'direction' | 'commercial' | 'sav' | 'marketing' | 'logist
  */
 const ROLE_ACCESS: Record<Role, Section[] | 'all'> = {
  admin: 'all',
- direction: ['overview', 'onboarding', 'preuve', 'ventes', 'relation', 'marketing', 'catalog', 'settings', 'integration', 'restock'],
+ direction: ['overview', 'onboarding', 'preuve', 'ventes', 'relation', 'marketing', 'catalog', 'settings', 'integration', 'appearance', 'restock'],
  commercial: ['overview', 'ventes', 'orders', 'catalog', 'reviews', 'restock'],
  sav: ['relation', 'sav', 'inbox', 'reviews', 'orders'],
  marketing: ['marketing', 'campaigns', 'carts', 'emails', 'reviews', 'restock'],
@@ -61,6 +62,7 @@ const ALL_SECTIONS: SectionDef[] = [
  { key: 'restock', label: 'Réassort', group: '' },
  { key: 'settings', label: 'Réglages', group: '' },
  { key: 'integration', label: 'Intégration', group: '' },
+ { key: 'appearance', label: 'Apparence', group: '' },
 ];
 
 function readRole(): Role {
@@ -192,6 +194,7 @@ export function AdminApp() {
  {section === 'catalog' && <AdminCatalog />}
  {section === 'settings' && <AdminSettings />}
  {section === 'integration' && <AdminIntegration />}
+ {section === 'appearance' && <AdminAppearance />}
  </motion.div>
  </AnimatePresence>
  </section>

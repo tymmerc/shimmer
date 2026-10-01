@@ -5,6 +5,8 @@
 
 import { looksLikeOrderTracking } from './order-intent';
 import { formatPrice } from './price';
+import { DEFAULT_TOKENS, themeInputFromConfig, tokensCss } from './theme';
+import { ThemeController } from './theme-dom';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -57,10 +59,21 @@ interface ShimmerConfig {
   customer?: ShimmerCustomer | null;
 }
 
+/** Apparence (voir theme.ts). Sans rien, le widget copie l'allure de la
+ *  boutique ; les variables CSS --shimmer-* de la boutique priment sur tout. */
 interface ShimmerTheme {
+  /** Toute couleur CSS. Ancien nom : primaryColor. */
+  accent: string;
   primaryColor: string;
+  /** Liste de polices CSS. Ancien nom : fontFamily. */
+  font: string;
   fontFamily: string;
+  /** 8, "8px" ou "0.5rem" (borné à 24 px). Ancien nom : borderRadius. */
+  radius: number | string;
   borderRadius: string;
+  mode: 'auto' | 'light' | 'dark';
+  /** false : ne pas copier le style de la page (défaut true). */
+  auto: boolean;
   chatPosition: 'bottom-right' | 'bottom-left';
 }
 
@@ -217,13 +230,6 @@ interface ReviewStats {
 }
 
 // ─── Defaults ────────────────────────────────────────────────────────────────
-
-const DEFAULT_THEME: ShimmerTheme = {
-  primaryColor: '#6366f1',
-  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  borderRadius: '12px',
-  chatPosition: 'bottom-right',
-};
 
 const LABELS = {
   fr: {
@@ -453,36 +459,50 @@ function getShimmerRoot(): ShadowRoot {
   return shimmerRoot;
 }
 
-function injectStyles(theme: ShimmerTheme) {
-  const css = buildStyles(theme);
+type ChatPosition = ShimmerTheme['chatPosition'];
+
+/** Jetons par défaut dans une couche CSS : la balise de thème (hors couche)
+ *  passe devant quel que soit l'ordre des <style>, et le widget reste lisible
+ *  même si elle manque. */
+const defaultTokens = (selector: string) => `@layer shimmer-defaults{${tokensCss(selector, DEFAULT_TOKENS)}}\n`;
+
+function injectStyles(chatPosition: ChatPosition) {
+  const css = buildStyles(chatPosition);
   // Light DOM : cross-sell (dans la page marchand). Prefixe .shimmer-, ne fuit pas.
   if (!document.getElementById('shimmer-sdk-styles')) {
     const style = document.createElement('style');
     style.id = 'shimmer-sdk-styles';
-    style.textContent = css;
+    style.textContent = defaultTokens('.sx-wrap') + css;
     document.head.appendChild(style);
   }
   // Shadow DOM : dock + chat. :host remet tout a zero pour que rien n'herite
   // du theme (font, color, line-height...), .shimmer-widget re-pose les notres.
+  // `all` ne touche pas aux propriétés personnalisées : les --shm-* passent.
   const root = getShimmerRoot();
-  if (!root.querySelector('#shimmer-shadow-styles')) {
+  const shadowCss = defaultTokens(':host') + `:host { all: initial; display: block; position: static; }\n` + css;
+  const existing = root.querySelector('#shimmer-shadow-styles');
+  if (existing) {
+    if (existing.textContent !== shadowCss) existing.textContent = shadowCss;
+  } else {
     const style = document.createElement('style');
     style.id = 'shimmer-shadow-styles';
-    style.textContent = `:host { all: initial; display: block; position: static; }\n` + css;
+    style.textContent = shadowCss;
     root.appendChild(style);
   }
 }
 
-function buildStyles(theme: ShimmerTheme): string {
+/** Couleurs, police et arrondis viennent tous des jetons --shm-* (theme.ts). */
+function buildStyles(chatPosition: ChatPosition): string {
+  const side = chatPosition === 'bottom-left' ? 'left: 20px' : 'right: 20px';
   return `
     .shimmer-widget * { box-sizing: border-box; margin: 0; padding: 0; }
-    .shimmer-widget { font-family: ${theme.fontFamily}; font-size: 14px; line-height: 1.5; color: #1f2937; }
+    .shimmer-widget { font-family: var(--shm-font); font-size: 14px; line-height: 1.5; color: var(--shm-text); }
 
     /* Dock discret ancré sous la barre de recherche du thème : pas de plein
        écran, pas de voile. Produits en haut, question du vendeur en bas. */
     .shimmer-dock {
-      position: fixed; z-index: 99998; background: #fff;
-      border: 1px solid rgba(0,0,0,0.09); border-radius: ${theme.borderRadius};
+      position: fixed; z-index: 99998; background: var(--shm-surface);
+      border: 1px solid var(--shm-border); border-radius: var(--shm-radius);
       box-shadow: 0 12px 32px rgba(0,0,0,0.14);
       display: flex; flex-direction: column; overflow: hidden;
       max-height: min(60vh, 540px);
@@ -492,132 +512,141 @@ function buildStyles(theme: ShimmerTheme): string {
     .shimmer-dock.active { opacity: 1; transform: translateY(0); pointer-events: auto; }
     .shimmer-search-results { flex: 1 1 auto; overflow-y: auto; padding: 6px; }
     .shimmer-search-results:empty { display: none; }
-    .shimmer-dock-bottom { flex: 0 0 auto; border-top: 1px solid #f1f2f4; }
+    .shimmer-dock-bottom { flex: 0 0 auto; border-top: 1px solid var(--shm-hover); }
     .shimmer-search-results:empty + .shimmer-dock-bottom { border-top: none; }
     /* La petite question du vendeur, en bas : elle propose, elle ne s'impose pas. */
     .shimmer-vendor-q { display: none; padding: 10px 14px 4px; font-size: 14px; line-height: 1.45;
-      color: ${theme.primaryColor}; }
+      color: var(--shm-accent-text); }
     .shimmer-vendor-q.active { display: block; }
     .shimmer-dock-footer { display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px 8px; }
     .shimmer-dock-footer button {
       border: none; background: none; padding: 4px 6px; cursor: pointer;
-      font-family: inherit; font-size: 12px; color: #9ca3af;
+      font-family: inherit; font-size: 12px; color: var(--shm-muted);
     }
-    .shimmer-dock-footer button:hover { color: #374151; text-decoration: underline; }
+    .shimmer-dock-footer button:hover { color: var(--shm-text); text-decoration: underline; }
     .shimmer-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 14px 8px; }
-    .shimmer-chip { border: 1px solid ${theme.primaryColor}; background: transparent; color: ${theme.primaryColor}; font-family: inherit; line-height: 1.5;
-      border-radius: 999px; padding: 8px 14px; font-size: 14px; cursor: pointer; transition: .15s; }
-    .shimmer-chip:hover { background: ${theme.primaryColor}; color: #fff; }
+    .shimmer-chip { border: 1px solid var(--shm-accent-line); background: transparent; color: var(--shm-accent-text); font-family: inherit; line-height: 1.5;
+      border-radius: var(--shm-radius-ctl); padding: 8px 14px; font-size: 14px; cursor: pointer; transition: .15s; }
+    .shimmer-chip:hover { background: var(--shm-accent); border-color: var(--shm-accent); color: var(--shm-on-accent); }
     .shimmer-search-item {
-      display: flex; gap: 12px; padding: 12px; border-radius: 8px; cursor: pointer;
+      display: flex; gap: 12px; padding: 12px; border-radius: var(--shm-radius-sm); cursor: pointer;
       transition: background 0.15s;
     }
-    .shimmer-search-item:hover { background: #f3f4f6; }
-    .shimmer-search-item img {
-      width: 56px; height: 56px; object-fit: cover; border-radius: 8px; background: #f3f4f6;
+    .shimmer-search-item:hover { background: var(--shm-hover); }
+    .shimmer-search-item img, .shimmer-search-item-ph {
+      flex: 0 0 auto; width: 56px; height: 56px; object-fit: cover; border-radius: var(--shm-radius-sm); background: var(--shm-hover);
     }
     .shimmer-search-item-info { flex: 1; min-width: 0; }
     .shimmer-search-item-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .shimmer-search-item-desc { font-size: 12px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .shimmer-search-item-price { font-weight: 700; color: ${theme.primaryColor}; white-space: nowrap; }
-    .shimmer-search-empty { padding: 24px; text-align: center; color: #9ca3af; }
-    .shimmer-restock { margin: 6px 12px 10px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fafafa; }
-    .shimmer-restock-title { font-size: 13px; color: #111827; margin-bottom: 8px; }
+    .shimmer-search-item-desc { font-size: 12px; color: var(--shm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .shimmer-search-item-price { font-weight: 700; color: var(--shm-accent-text); white-space: nowrap; }
+    .shimmer-search-empty { padding: 24px; text-align: center; color: var(--shm-muted); }
+    .shimmer-restock { margin: 6px 12px 10px; padding: 12px 14px; border: 1px solid var(--shm-border); border-radius: var(--shm-radius); background: var(--shm-hover); }
+    .shimmer-restock-title { font-size: 13px; color: var(--shm-text); margin-bottom: 8px; }
     .shimmer-restock-title strong { font-weight: 600; }
     .shimmer-restock-form { display: flex; gap: 8px; }
-    .shimmer-restock-form input { flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 999px; font: inherit; font-size: 13px; outline: none; }
-    .shimmer-restock-form input:focus { border-color: #111827; }
-    .shimmer-restock-form button { padding: 9px 14px; border: none; border-radius: 999px; background: #111827; color: #fff; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+    .shimmer-restock-form input { flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid var(--shm-border); border-radius: var(--shm-radius-ctl);
+      background: var(--shm-surface); color: var(--shm-text); font: inherit; font-size: 13px; outline: none; }
+    .shimmer-restock-form input:focus { border-color: var(--shm-accent-line); }
+    .shimmer-restock-form button { padding: 9px 14px; border: none; border-radius: var(--shm-radius-ctl); background: var(--shm-accent); color: var(--shm-on-accent); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
     .shimmer-restock-form button:disabled { opacity: .5; cursor: default; }
-    .shimmer-restock-done { font-size: 13px; color: #047857; }
+    .shimmer-restock-done { font-size: 13px; color: var(--shm-success); }
+    .shimmer-widget input::placeholder { color: var(--shm-muted); opacity: 1; }
 
     /* Chat bubble */
     .shimmer-chat-bubble {
-      position: fixed; ${theme.chatPosition === 'bottom-right' ? 'right: 20px' : 'left: 20px'}; bottom: 20px;
-      width: 56px; height: 56px; border-radius: 50%; background: ${theme.primaryColor}; color: #fff;
+      position: fixed; ${side}; bottom: 20px;
+      width: 56px; height: 56px; border-radius: 50%; background: var(--shm-accent); color: var(--shm-on-accent);
       display: flex; align-items: center; justify-content: center; cursor: pointer;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 99997; border: none;
-      transition: transform 0.2s;
+      transition: transform 0.2s, opacity 0.2s;
     }
+    /* Cachée tant que l'apparence de l'admin n'est pas connue (700 ms au plus). */
+    :host(:not([data-shm-ready])) .shimmer-chat-bubble { opacity: 0; pointer-events: none; }
     .shimmer-chat-bubble:hover { transform: scale(1.1); }
     .shimmer-chat-bubble svg { width: 24px; height: 24px; }
 
     /* Chat window */
     .shimmer-chat-window {
-      position: fixed; ${theme.chatPosition === 'bottom-right' ? 'right: 20px' : 'left: 20px'}; bottom: 88px;
+      position: fixed; ${side}; bottom: 88px;
       width: 380px; max-width: calc(100vw - 40px); height: 520px; max-height: calc(100vh - 120px);
-      background: #fff; border-radius: ${theme.borderRadius}; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+      background: var(--shm-surface); border-radius: var(--shm-radius); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
       z-index: 99998; display: flex; flex-direction: column; overflow: hidden;
       opacity: 0; transform: translateY(20px) scale(0.95); transition: all 0.2s; pointer-events: none;
     }
     .shimmer-chat-window.active { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
     .shimmer-chat-header {
-      padding: 16px; background: ${theme.primaryColor}; color: #fff;
+      padding: 16px; background: var(--shm-accent); color: var(--shm-on-accent);
       display: flex; justify-content: space-between; align-items: center;
     }
     .shimmer-chat-header h3 { font-size: 15px; font-weight: 600; }
-    .shimmer-chat-close { background: none; border: none; color: #fff; cursor: pointer; font-size: 20px; line-height: 1; }
+    .shimmer-chat-close { background: none; border: none; color: inherit; cursor: pointer; font-size: 20px; line-height: 1; }
     .shimmer-chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-    .shimmer-chat-msg { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 13px; word-wrap: break-word; }
-    .shimmer-chat-msg.user { align-self: flex-end; background: ${theme.primaryColor}; color: #fff; border-bottom-right-radius: 4px; }
-    .shimmer-chat-msg.assistant { align-self: flex-start; background: #f3f4f6; color: #1f2937; border-bottom-left-radius: 4px; }
+    .shimmer-chat-msg { max-width: 85%; padding: 10px 14px; border-radius: var(--shm-radius); font-size: 13px; word-wrap: break-word; }
+    .shimmer-chat-msg.user { align-self: flex-end; background: var(--shm-accent); color: var(--shm-on-accent); border-bottom-right-radius: min(4px, var(--shm-radius)); }
+    .shimmer-chat-msg.assistant { align-self: flex-start; background: var(--shm-hover); color: var(--shm-text); border-bottom-left-radius: min(4px, var(--shm-radius)); }
     .shimmer-track-link {
-      display: inline-block; margin-top: 8px; padding: 4px 10px; border-radius: 8px;
-      background: #fff; border: 1px solid #e5e7eb; color: ${theme.primaryColor};
+      display: inline-block; margin-top: 8px; padding: 4px 10px; border-radius: var(--shm-radius-sm);
+      background: var(--shm-surface); border: 1px solid var(--shm-border); color: var(--shm-accent-text);
       font-size: 12px; font-weight: 600; text-decoration: none;
     }
-    .shimmer-track-link:hover { border-color: ${theme.primaryColor}; }
-    .shimmer-chat-form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #e5e7eb; }
+    .shimmer-track-link:hover { border-color: var(--shm-accent-line); }
+    .shimmer-chat-form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--shm-border); }
     .shimmer-chat-form input {
-      flex: 1; padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 24px;
-      outline: none; font-size: 13px; font-family: inherit;
+      flex: 1; padding: 10px 14px; border: 1px solid var(--shm-border); border-radius: var(--shm-radius-ctl);
+      background: var(--shm-surface); color: var(--shm-text); outline: none; font-size: 13px; font-family: inherit;
     }
-    .shimmer-chat-form input:focus { border-color: ${theme.primaryColor}; }
+    .shimmer-chat-form input:focus { border-color: var(--shm-accent-line); }
     .shimmer-chat-form button {
-      padding: 10px 16px; background: ${theme.primaryColor}; color: #fff; border: none;
-      border-radius: 24px; cursor: pointer; font-size: 13px; font-weight: 600; font-family: inherit;
+      padding: 10px 16px; background: var(--shm-accent); color: var(--shm-on-accent); border: none;
+      border-radius: var(--shm-radius-ctl); cursor: pointer; font-size: 13px; font-weight: 600; font-family: inherit;
       transition: opacity 0.15s;
     }
     .shimmer-chat-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .shimmer-suggestions { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 0; }
+    .shimmer-suggestion { padding: 6px 12px; border: 1px solid var(--shm-border); border-radius: var(--shm-radius-ctl);
+      background: var(--shm-surface); color: var(--shm-text); font-size: 12px; cursor: pointer; font-family: inherit; transition: background 0.15s; }
+    .shimmer-suggestion:hover { background: var(--shm-hover); }
 
     /* Products in chat */
     .shimmer-products { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
     .shimmer-product-card {
-      display: flex; gap: 10px; padding: 10px; background: #fff; border: 1px solid #e5e7eb;
-      border-radius: 10px; font-size: 12px;
+      display: flex; gap: 10px; padding: 10px; background: var(--shm-surface); color: var(--shm-text); border: 1px solid var(--shm-border);
+      border-radius: var(--shm-radius-sm); font-size: 12px;
     }
-    .shimmer-product-card img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; }
+    .shimmer-product-card img { width: 48px; height: 48px; object-fit: cover; border-radius: var(--shm-radius-sm); }
     .shimmer-product-card-info { flex: 1; }
     .shimmer-product-card-name { font-weight: 600; font-size: 13px; }
-    .shimmer-product-card-price { color: ${theme.primaryColor}; font-weight: 700; }
+    .shimmer-product-card-brand { font-size: 11px; color: var(--shm-muted); }
+    .shimmer-product-card-price { color: var(--shm-accent-text); font-weight: 700; }
 
     /* Progress bar */
     .shimmer-progress { margin-top: 8px; }
-    .shimmer-progress-bar { height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; }
-    .shimmer-progress-fill { height: 100%; background: ${theme.primaryColor}; transition: width 0.3s; border-radius: 2px; }
-    .shimmer-progress-label { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+    .shimmer-progress-bar { height: 4px; background: var(--shm-border); border-radius: 2px; overflow: hidden; }
+    .shimmer-progress-fill { height: 100%; background: var(--shm-accent); transition: width 0.3s; border-radius: 2px; }
+    .shimmer-progress-label { font-size: 11px; color: var(--shm-muted); margin-top: 2px; }
 
-    .shimmer-powered { text-align: center; font-size: 11px; color: #9ca3af; padding: 4px 0 8px; }
+    .shimmer-powered { text-align: center; font-size: 11px; color: var(--shm-muted); padding: 4px 0 8px; }
 
     /* Typing indicator */
     .shimmer-typing { display: flex; gap: 4px; padding: 10px 14px; align-self: flex-start; }
     .shimmer-typing span {
-      width: 6px; height: 6px; background: #9ca3af; border-radius: 50%;
+      width: 6px; height: 6px; background: var(--shm-muted); border-radius: 50%;
       animation: shimmer-bounce 1.2s infinite;
     }
     .shimmer-typing span:nth-child(2) { animation-delay: 0.2s; }
     .shimmer-typing span:nth-child(3) { animation-delay: 0.4s; }
     /* ── Cross-sell widget ────────────────────────────────────────── */
     .sx-wrap {
-      font-family: ${theme.fontFamily};
-      color: #0e0a1c;
+      font-family: var(--shm-font);
+      color: var(--shm-text);
       width: 100%;
     }
     .sx-title {
       font-size: 13px;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      color: #6a5d7f;
+      color: var(--shm-muted);
       margin: 0 0 16px;
       font-weight: 500;
     }
@@ -630,9 +659,9 @@ function buildStyles(theme: ShimmerTheme): string {
       display: flex;
       flex-direction: column;
       padding: 18px 16px;
-      background: #fff;
-      border: 1px solid rgba(14,10,28,0.08);
-      border-radius: 12px;
+      background: var(--shm-surface);
+      border: 1px solid var(--shm-border);
+      border-radius: var(--shm-radius);
       cursor: pointer;
       transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
       text-decoration: none;
@@ -641,62 +670,59 @@ function buildStyles(theme: ShimmerTheme): string {
     }
     .sx-card:hover {
       transform: translateY(-2px);
-      box-shadow: 0 14px 30px -16px rgba(106, 43, 245, 0.28);
-      border-color: rgba(106, 43, 245, 0.22);
+      box-shadow: 0 14px 30px -16px rgba(0,0,0,0.25);
+      border-color: var(--shm-accent-line);
     }
+    /* Une seule allure pour tous les rôles (les classes sx-chip-<rôle> restent
+       sur le balisage, la boutique peut les colorer si elle veut). */
     .sx-chip {
       align-self: flex-start;
-      font-family: ${theme.fontFamily};
+      font-family: inherit;
       font-size: 10px;
       letter-spacing: 0.16em;
       text-transform: uppercase;
       padding: 4px 10px;
-      border-radius: 999px;
+      border-radius: var(--shm-radius-ctl);
       margin-bottom: 12px;
       font-weight: 600;
+      background: var(--shm-hover);
+      color: var(--shm-accent-text);
     }
-    .sx-chip-apero      { background: #fff3e6; color: #9c4d00; }
-    .sx-chip-repas      { background: #fff0d9; color: #875f00; }
-    .sx-chip-dessert    { background: #fde7f3; color: #a3236e; }
-    .sx-chip-decouverte { background: #e6f4ff; color: #1b5b91; }
-    .sx-chip-cadeau     { background: #ece4ff; color: #4a23c0; }
-    .sx-chip-accessoire { background: #ecf6ec; color: #2f7a37; }
-    .sx-chip-complement { background: #efefef; color: #3b2e54; }
 
     .sx-img {
       width: 100%;
       aspect-ratio: 1 / 1;
       object-fit: cover;
-      border-radius: 8px;
-      background: #f3f0ea;
+      border-radius: var(--shm-radius-sm);
+      background: var(--shm-hover);
       margin-bottom: 12px;
     }
     .sx-img-placeholder {
       width: 100%;
       aspect-ratio: 1 / 1;
-      background: linear-gradient(135deg, #f3f0ea 0%, #e7dfd0 100%);
-      border-radius: 8px;
+      background: var(--shm-hover);
+      border-radius: var(--shm-radius-sm);
       margin-bottom: 12px;
       display: flex; align-items: center; justify-content: center;
-      color: #b3a99a; font-size: 28px;
+      color: var(--shm-muted); font-size: 28px;
     }
     .sx-name {
       font-size: 14.5px;
       font-weight: 500;
       line-height: 1.3;
       margin-bottom: 4px;
-      color: #0e0a1c;
+      color: var(--shm-text);
     }
     .sx-brand {
       font-size: 11px;
-      color: #6a5d7f;
+      color: var(--shm-muted);
       letter-spacing: 0.04em;
       margin-bottom: 10px;
       text-transform: uppercase;
     }
     .sx-reason {
       font-size: 12.5px;
-      color: #3b2e54;
+      color: var(--shm-text);
       line-height: 1.45;
       margin-bottom: 14px;
       font-style: italic;
@@ -710,20 +736,21 @@ function buildStyles(theme: ShimmerTheme): string {
     .sx-price {
       font-size: 16px;
       font-weight: 600;
-      color: #0e0a1c;
+      color: var(--shm-text);
     }
     .sx-add {
-      background: #0e0a1c;
-      color: #fff;
+      background: var(--shm-accent);
+      color: var(--shm-on-accent);
       border: 0;
-      border-radius: 8px;
+      border-radius: var(--shm-radius-ctl);
       padding: 6px 12px;
+      font-family: inherit;
       font-size: 12px;
       font-weight: 500;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: opacity 0.2s;
     }
-    .sx-add:hover { background: #6a2bf5; }
+    .sx-add:hover { opacity: 0.85; }
 
     .sx-loading {
       display: grid;
@@ -732,9 +759,9 @@ function buildStyles(theme: ShimmerTheme): string {
     }
     .sx-skel {
       height: 250px;
-      background: linear-gradient(90deg, #f3f0ea 0%, #ecebe7 50%, #f3f0ea 100%);
+      background: linear-gradient(90deg, var(--shm-hover) 0%, var(--shm-surface) 50%, var(--shm-hover) 100%);
       background-size: 200% 100%;
-      border-radius: 12px;
+      border-radius: var(--shm-radius);
       animation: sx-shimmer 1.4s infinite;
     }
     @keyframes sx-shimmer {
@@ -777,6 +804,8 @@ class SearchWidget {
     private searchSelector?: string,
     /** Fired on each handled query; used to enroll the visitor into the holdout measure. */
     private onQuery?: () => void,
+    /** Ouverture du dock : relit le style de la page avec la vraie barre. */
+    private onOpen?: (anchor: HTMLInputElement | null) => void,
   ) {
     this.createOverlay();
     this.hookExistingInputs();
@@ -789,14 +818,16 @@ class SearchWidget {
     // retourner aux résultats classiques. On propose, on ne s'impose pas.
     this.overlay = document.createElement('div');
     this.overlay.className = 'shimmer-widget shimmer-dock';
+    // part="…" : l'intégrateur peut styler via #shimmer-root::part(chip) etc.
+    this.overlay.setAttribute('part', 'dock');
     this.overlay.innerHTML = `
-      <div class="shimmer-search-results"></div>
+      <div class="shimmer-search-results" part="results"></div>
       <div class="shimmer-dock-bottom">
-        <div class="shimmer-vendor-q"></div>
+        <div class="shimmer-vendor-q" part="question"></div>
         <div class="shimmer-chips-zone"></div>
-        <div class="shimmer-dock-footer">
-          <button type="button" class="shimmer-dock-native"></button>
-          <button type="button" class="shimmer-dock-close">Fermer</button>
+        <div class="shimmer-dock-footer" part="footer">
+          <button type="button" class="shimmer-dock-native" part="native-link"></button>
+          <button type="button" class="shimmer-dock-close" part="close">Fermer</button>
         </div>
       </div>
     `;
@@ -888,6 +919,7 @@ class SearchWidget {
       this.anchor = anchor;
       this.savedPlaceholder = anchor.placeholder;
     }
+    try { this.onOpen?.(this.anchor); } catch { /* le thème ne bloque jamais le dock */ }
     this.overlay.classList.add('active');
     this.position();
     const nativeBtn = this.overlay.querySelector<HTMLButtonElement>('.shimmer-dock-native')!;
@@ -917,7 +949,7 @@ class SearchWidget {
     this.setQuestion(`Avec plaisir. Pour bien vous orienter sur «\u00A0${query}\u00A0», c'est pour quelle occasion\u00A0?`);
     const chips = ['Apéritif', 'Un repas', 'Un cadeau', 'Découvrir', 'Petit budget'];
     this.chipsEl.innerHTML =
-      `<div class="shimmer-chips">${chips.map(c => `<button class="shimmer-chip" type="button">${esc(c)}</button>`).join('')}</div>`;
+      `<div class="shimmer-chips" part="chips">${chips.map(c => `<button class="shimmer-chip" part="chip" type="button">${esc(c)}</button>`).join('')}</div>`;
     this.chipsEl.querySelectorAll<HTMLButtonElement>('.shimmer-chip').forEach((btn) => {
       btn.addEventListener('click', () => {
         this.refined = true;
@@ -983,7 +1015,7 @@ class SearchWidget {
       }
     } catch {
       this.setQuestion('');
-      this.resultsEl.innerHTML = `<div class="shimmer-search-empty">Le vendeur n'est pas joignable, réessayez dans un instant.</div>`;
+      this.resultsEl.innerHTML = `<div class="shimmer-search-empty" part="empty">Le vendeur n'est pas joignable, réessayez dans un instant.</div>`;
     }
   }
 
@@ -1014,11 +1046,12 @@ class SearchWidget {
     const it = items[0]!;
     const box = document.createElement('div');
     box.className = 'shimmer-restock';
+    box.setAttribute('part', 'restock');
     box.innerHTML = `
       <div class="shimmer-restock-title"><strong>${esc(it.name)}</strong> est épuisé. Je vous préviens dès qu'il revient\u00A0?</div>
       <form class="shimmer-restock-form">
-        <input type="email" required placeholder="votre@email.fr" autocomplete="email" />
-        <button type="submit">Prévenez-moi</button>
+        <input type="email" required placeholder="votre@email.fr" autocomplete="email" part="restock-input" />
+        <button type="submit" part="restock-button">Prévenez-moi</button>
       </form>`;
     const form = box.querySelector('form') as HTMLFormElement;
     const input = box.querySelector('input') as HTMLInputElement;
@@ -1055,13 +1088,13 @@ class SearchWidget {
   private renderProducts(products: VendeurProduct[]) {
     if (!products.length) { this.resultsEl.innerHTML = ''; return; }
     this.resultsEl.innerHTML = products.slice(0, 8).map((p) => `
-      <div class="shimmer-search-item" data-id="${p.id}">
-        ${safeUrl(p.imageUrl) ? `<img src="${safeUrl(p.imageUrl)}" alt="${esc(p.name)}" />` : '<div style="width:56px;height:56px;background:#f3f4f6;border-radius:8px"></div>'}
+      <div class="shimmer-search-item" part="item" data-id="${p.id}">
+        ${safeUrl(p.imageUrl) ? `<img src="${safeUrl(p.imageUrl)}" alt="${esc(p.name)}" part="item-image" />` : '<div class="shimmer-search-item-ph" part="item-image"></div>'}
         <div class="shimmer-search-item-info">
-          <div class="shimmer-search-item-name">${esc(p.name)}</div>
-          <div class="shimmer-search-item-desc">${esc(p.category || '')} ${p.brand ? '· ' + esc(p.brand) : ''}</div>
+          <div class="shimmer-search-item-name" part="item-name">${esc(p.name)}</div>
+          <div class="shimmer-search-item-desc" part="item-desc">${esc(p.category || '')} ${p.brand ? '· ' + esc(p.brand) : ''}</div>
         </div>
-        <div class="shimmer-search-item-price">${esc(formatPrice(p.price))}</div>
+        <div class="shimmer-search-item-price" part="item-price">${esc(formatPrice(p.price))}</div>
       </div>`).join('');
     // Une ligne mène au produit : on rejoue la recherche NATIVE du thème sur
     // son nom (même mécanisme que « Voir les résultats classiques »). Sans
@@ -1127,6 +1160,7 @@ class ChatWidget {
   private createBubble() {
     this.bubble = document.createElement('button');
     this.bubble.className = 'shimmer-widget shimmer-chat-bubble';
+    this.bubble.setAttribute('part', 'bubble');
     this.bubble.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>`;
     this.bubble.addEventListener('click', () => this.toggle());
     getShimmerRoot().appendChild(this.bubble);
@@ -1135,16 +1169,17 @@ class ChatWidget {
   private createWindow() {
     this.window = document.createElement('div');
     this.window.className = 'shimmer-widget shimmer-chat-window';
+    this.window.setAttribute('part', 'chat');
     this.window.innerHTML = `
-      <div class="shimmer-chat-header">
+      <div class="shimmer-chat-header" part="chat-header">
         <h3>${this.labels.assistTitle}</h3>
-        <button class="shimmer-chat-close">&times;</button>
+        <button class="shimmer-chat-close" part="close">&times;</button>
       </div>
-      <div class="shimmer-chat-messages"></div>
+      <div class="shimmer-chat-messages" part="chat-messages"></div>
       <div class="shimmer-powered">${this.labels.poweredBy}</div>
       <form class="shimmer-chat-form">
-        <input type="text" placeholder="${this.labels.assistPlaceholder}" autocomplete="off" />
-        <button type="submit">${this.labels.send}</button>
+        <input type="text" placeholder="${this.labels.assistPlaceholder}" autocomplete="off" part="chat-input" />
+        <button type="submit" part="chat-send">${this.labels.send}</button>
       </form>
     `;
     getShimmerRoot().appendChild(this.window);
@@ -1172,11 +1207,12 @@ class ChatWidget {
   private addMessage(role: 'user' | 'assistant', content: string, products?: SearchResult[], progress?: number) {
     const div = document.createElement('div');
     div.className = `shimmer-chat-msg ${role}`;
+    div.setAttribute('part', `message message-${role}`);
     let html = esc(content).replace(/\n/g, '<br>');
 
     if (products?.length) {
       html += `<div class="shimmer-products">${products.map((p) => `
-        <div class="shimmer-product-card">
+        <div class="shimmer-product-card" part="product-card">
           ${safeUrl(p.imageUrl) ? `<img src="${safeUrl(p.imageUrl)}" alt="${esc(p.name)}" />` : ''}
           <div class="shimmer-product-card-info">
             <div class="shimmer-product-card-name">${esc(p.name)}</div>
@@ -1229,6 +1265,7 @@ class ChatWidget {
     // Create streaming message bubble
     const msgDiv = document.createElement('div');
     msgDiv.className = 'shimmer-chat-msg assistant';
+    msgDiv.setAttribute('part', 'message message-assistant');
     msgDiv.innerHTML = '<span class="shimmer-typing"><span></span><span></span><span></span></span>';
     this.messagesEl.appendChild(msgDiv);
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
@@ -1265,10 +1302,10 @@ class ChatWidget {
 
           if (metaData?.highlightedProducts?.length) {
             html += `<div class="shimmer-products">${metaData.highlightedProducts.map((p: any) => `
-              <div class="shimmer-product-card">
+              <div class="shimmer-product-card" part="product-card">
                 <div class="shimmer-product-card-info">
                   <div class="shimmer-product-card-name">${esc(p.name)}</div>
-                  <div style="font-size:11px;color:#6b7280">${esc(p.brand)}</div>
+                  <div class="shimmer-product-card-brand">${esc(p.brand)}</div>
                   <div class="shimmer-product-card-price">${esc(p.price)}</div>
                 </div>
               </div>
@@ -1303,6 +1340,7 @@ class ChatWidget {
   private async sendSavMessage(msg: string) {
     const msgDiv = document.createElement('div');
     msgDiv.className = 'shimmer-chat-msg assistant';
+    msgDiv.setAttribute('part', 'message message-assistant');
     msgDiv.innerHTML = '<span class="shimmer-typing"><span></span><span></span><span></span></span>';
     this.messagesEl.appendChild(msgDiv);
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
@@ -1329,13 +1367,13 @@ class ChatWidget {
 
     const div = document.createElement('div');
     div.className = 'shimmer-suggestions';
-    div.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;padding:4px 0;';
+    div.setAttribute('part', 'chips');
     for (const s of suggestions) {
       const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'shimmer-suggestion';
+      btn.setAttribute('part', 'chip');
       btn.textContent = s;
-      btn.style.cssText = 'padding:6px 12px;border:1px solid #e5e7eb;border-radius:16px;background:#fff;font-size:12px;cursor:pointer;font-family:inherit;transition:background 0.15s;';
-      btn.addEventListener('mouseenter', () => { btn.style.background = '#f3f4f6'; });
-      btn.addEventListener('mouseleave', () => { btn.style.background = '#fff'; });
       btn.addEventListener('click', () => {
         this.formInput.value = s;
         this.sendMessage();
@@ -1375,6 +1413,7 @@ function renderSavReply(
     if (href.protocol !== 'https:' && href.protocol !== 'http:') continue;
     const a = document.createElement('a');
     a.className = 'shimmer-track-link';
+    a.setAttribute('part', 'track-link');
     a.href = href.toString();
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
@@ -1877,7 +1916,7 @@ class CrossSellWidget {
             ${brand}
             <p class="sx-reason">« ${esc(item.reason)} »</p>
             <div class="sx-foot">
-              <span class="sx-price">${esc(item.product.price)}€</span>
+              <span class="sx-price">${esc(formatPrice(item.product.price))}</span>
               <button type="button" class="sx-add" data-add="${item.product.id}">Ajouter</button>
             </div>
           </${tag}>
@@ -2000,7 +2039,11 @@ export class Shimmer {
   private searchWidget: SearchWidget | null = null;
   private chatWidget: ChatWidget | null = null;
   private config: ShimmerConfig;
-  private theme: ShimmerTheme;
+  private chatPosition: ChatPosition;
+  /** Apparence : config + admin + page, réappliquée au besoin (theme-dom.ts). */
+  private themeCtl: ThemeController | null = null;
+  private readonly onWindowLoad = () => this.themeCtl?.refresh();
+  private readonly onSearchOpen = (anchor: HTMLInputElement | null) => this.themeCtl?.refresh(anchor);
   private labels: typeof LABELS['fr'];
   private consent: ConsentState = 'unknown';
   /** Identifiant du boot mesuré, reposé tel quel après un retrait puis un ré-accord. */
@@ -2012,7 +2055,8 @@ export class Shimmer {
 
   private constructor(config: ShimmerConfig) {
     this.config = config;
-    this.theme = { ...DEFAULT_THEME, ...config.theme };
+    // Les valeurs par défaut vivent dans resolveTokens : rien n'est fusionné ici.
+    this.chatPosition = config.theme?.chatPosition === 'bottom-left' ? 'bottom-left' : 'bottom-right';
     this.labels = LABELS[config.locale || 'fr'];
     this.client = new ShimmerClient(config.apiUrl, config.apiKey, config.storeId);
     this.customer = validCustomer(config.customer) ?? Shimmer.pendingCustomer;
@@ -2037,7 +2081,8 @@ export class Shimmer {
     try {
       if (Shimmer.instance) Shimmer.instance.destroy();
       const shimmer = new Shimmer(config);
-      try { injectStyles(shimmer.theme); } catch (e) { console.warn('[shimmer] styles', e); }
+      try { injectStyles(shimmer.chatPosition); } catch (e) { console.warn('[shimmer] styles', e); }
+      try { shimmer.startTheme(); } catch (e) { console.warn('[shimmer] thème', e); }
       Shimmer.instance = shimmer;
       // bootstrap is async + already internally guarded; never await it here.
       shimmer.bootstrapHoldoutAndMount().catch((e) => console.warn('[shimmer] bootstrap', e));
@@ -2047,6 +2092,34 @@ export class Shimmer {
       // Return a non-functional instance so callers that hold the ref don't NPE.
       return Shimmer.instance ?? (new Shimmer(config));
     }
+  }
+
+  /**
+   * Apparence : défauts + config + détection de la page tout de suite, puis
+   * l'admin quand l'endpoint public répond, et une relecture au 'load' (feuilles
+   * et polices du thème chargées). Ni stockage ni mesure : pas de consentement.
+   */
+  private startTheme(): void {
+    this.themeCtl = new ThemeController(getShimmerRoot, themeInputFromConfig(this.config.theme));
+    this.themeCtl.refresh();
+    if (document.readyState !== 'complete') window.addEventListener('load', this.onWindowLoad, { once: true });
+    this.loadAppearance(this.config.storeId);
+    // Au pire 700 ms d'attente : au-delà, la détection seule fait foi.
+    window.setTimeout(() => this.themeCtl?.markReady(), 700);
+  }
+
+  /** GET simple (ni Authorization ni cookie) : requête CORS simple, réponse en cache public. */
+  private loadAppearance(storeId: number | undefined): void {
+    if (!storeId || !Number.isInteger(storeId) || storeId <= 0) { this.themeCtl?.markReady(); return; }
+    fetchWithTimeout(`${this.config.apiUrl}/api/public/appearance?store=${storeId}`, { credentials: 'omit' }, 4_000)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body: { appearance?: unknown } | null) => {
+        if (body && typeof body === 'object' && body.appearance && typeof body.appearance === 'object') {
+          this.themeCtl?.setRemote(body.appearance);
+        }
+      })
+      .catch(() => { /* pas d'apparence réglée ou API absente : le reste suffit */ })
+      .finally(() => this.themeCtl?.markReady());
   }
 
   /** Point d'entrée : résout le consentement puis démarre le bon mode. */
@@ -2140,7 +2213,7 @@ export class Shimmer {
    */
   private async sessionBoot(): Promise<void> {
     if (this.searchWidget) return;
-    this.searchWidget = new SearchWidget(this.client, this.labels, this.config.searchSelector, undefined);
+    this.searchWidget = new SearchWidget(this.client, this.labels, this.config.searchSelector, undefined, this.onSearchOpen);
     if (this.config.enableChat) this.chatWidget = new ChatWidget(this.client, this.labels, () => this.customer);
   }
 
@@ -2164,6 +2237,7 @@ export class Shimmer {
           if (meRes.ok) {
             const me = (await meRes.json()) as { id?: number; storeId?: number };
             storeId = me.id ?? me.storeId;
+            this.loadAppearance(storeId);
           }
         } catch { /* ignore */ }
       }
@@ -2218,7 +2292,7 @@ export class Shimmer {
       // Monté en mode session avant le signal : on branche juste l'enrôlement.
       this.searchWidget.setOnQuery(onQuery);
     } else {
-      this.searchWidget = new SearchWidget(this.client, this.labels, this.config.searchSelector, onQuery);
+      this.searchWidget = new SearchWidget(this.client, this.labels, this.config.searchSelector, onQuery, this.onSearchOpen);
     }
     if (this.config.enableChat && !this.chatWidget) {
       this.chatWidget = new ChatWidget(this.client, this.labels, () => this.customer);
@@ -2396,6 +2470,9 @@ export class Shimmer {
   destroy() {
     this.searchWidget?.destroy();
     this.chatWidget?.destroy();
+    this.themeCtl?.destroy();
+    this.themeCtl = null;
+    window.removeEventListener('load', this.onWindowLoad);
     document.getElementById('shimmer-sdk-styles')?.remove();
     Shimmer.instance = null;
   }
@@ -2443,6 +2520,14 @@ export class Shimmer {
         enableChat: el.hasAttribute('data-chat'),
         // data-consent="auto|strict|granted|denied" — voir ShimmerConfig.consentMode.
         consentMode: (el.getAttribute('data-consent') as ShimmerConfig['consentMode']) || undefined,
+        // Apparence (facultatif) : data-accent="#0a7" data-font="Inter" data-radius="8"
+        // data-theme="auto|light|dark". Les variables CSS --shimmer-* priment.
+        theme: {
+          accent: el.getAttribute('data-accent') || undefined,
+          font: el.getAttribute('data-font') || undefined,
+          radius: el.getAttribute('data-radius') || undefined,
+          mode: (el.getAttribute('data-theme') || undefined) as ShimmerTheme['mode'] | undefined,
+        },
         // Client connecté (thème Liquid) : suivi de commande sans rien redemander.
         customer: {
           email: el.getAttribute('data-customer-email') || '',
