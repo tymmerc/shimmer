@@ -12,8 +12,10 @@ import { deriveCustomerIdentitySecret, identityEpoch } from '../lib/customer-ide
 export const integrationRouter = Router();
 
 function publicBase(req: Request): string {
+  // PUBLIC_API_BASE vaut « https://domaine/shimmer » (voir lib/public-url.ts) ;
+  // l'admin ajoute lui-même /shimmer/api/… à cette base : on renvoie l'origine.
   const env = process.env.PUBLIC_API_BASE;
-  if (env) return env.replace(/\/$/, '');
+  if (env) return env.replace(/\/+$/, '').replace(/\/shimmer$/, '');
   const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? req.protocol ?? 'https';
   const host = (req.headers['x-forwarded-host'] as string | undefined) ?? req.get('host') ?? 'tymmerc.eu';
   return `${proto}://${host}`;

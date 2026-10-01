@@ -15,6 +15,8 @@ import crypto from 'crypto';
 import express from 'express';
 import { getPrisma, logger, ShimmerError } from '@shimmer/core';
 import { enqueueCartReminders } from '../lib/automations/queue.js';
+import { completeCart, recoverCartsForOrder, shopifyExplicitOptOut, shopifyMarketingConsent, upsertCart } from '../lib/abandoned-carts.js';
+import { suppressEmail } from '../lib/unsubscribe.js';
 import { attributeOrderToChat } from '../lib/attribution.js';
 import { recordOrderForVisitor } from './holdout.js';
 import { detectRestock, notifyRestock, recordStockAlertConversions } from '../lib/stock-alerts.js';
@@ -76,12 +78,21 @@ interface ShopifyInventoryLevel {
 
 interface ShopifyAbandonedCheckout {
   id?: number;
+  /** Identifiant stable du checkout, le même à chaque checkouts/update. */
+  token?: string;
   email?: string;
   total_price?: string;
   line_items?: ShopifyLineItem[];
-  customer?: ShopifyAddress;
+  customer?: ShopifyAddress & {
+    accepts_marketing?: boolean | null;
+    email_marketing_consent?: { state?: string | null } | null;
+  };
+  buyer_accepts_marketing?: boolean | null;
   abandoned_checkout_url?: string;
   created_at?: string;
+  updated_at?: string;
+  /** Rempli quand le checkout est devenu une commande. */
+  completed_at?: string | null;
 }
 
 interface ShopifyOrder {
@@ -175,31 +186,56 @@ webhooksShopifyRouter.post(
         throw new ShimmerError('Invalid HMAC', 'INVALID_SIGNATURE', 401);
       }
       const payload = req.body as ShopifyAbandonedCheckout;
+      const checkoutKey = payload.token ?? (payload.id ? String(payload.id) : null);
+      const platformRef = checkoutKey ? `shopify:${checkoutKey}` : null;
+      const total = Number(payload.total_price ?? 0);
 
-      const prisma = getPrisma();
-      const cart = await prisma.abandonedCart.create({
-        data: {
-          storeId,
-          customerEmail: payload.email ?? payload.customer?.email ?? null,
-          items: (payload.line_items ?? []).map(li => ({
-            name: li.title ?? 'Produit',
-            price: Number(li.price ?? 0),
-            quantity: li.quantity ?? 1,
-            productId: li.product_id ?? null,
-          })) as unknown as Parameters<typeof prisma.abandonedCart.create>[0]['data']['items'],
-          totalAmount: Number(payload.total_price ?? 0),
-          status: 'pending',
-          abandonedAt: payload.created_at ? new Date(payload.created_at) : new Date(),
-        },
-      });
-
-      try {
-        await enqueueCartReminders(cart.id);
-      } catch (err) {
-        logger.warn({ err, cartId: cart.id }, 'shopify.cart.abandoned.enqueue-failed');
+      // Checkout terminé : c'est une commande, pas un abandon.
+      if (payload.completed_at) {
+        const done = platformRef ? await completeCart(storeId, platformRef, total) : 0;
+        logger.info({ storeId, completed: done }, 'shopify.cart.checkout-completed');
+        res.json({ accepted: true, action: 'completed' });
+        return;
       }
-      logger.info({ storeId, cartId: cart.id, source: 'shopify' }, 'shopify.cart.abandoned');
-      res.json({ accepted: true, cartId: cart.id });
+
+      const checkoutEmail = payload.email ?? payload.customer?.email ?? null;
+      // Désinscrit côté Shopify : vaut aussi pour les e-mails de Shimmer,
+      // même si la boutique relance tout le monde (audience « all »).
+      if (checkoutEmail && shopifyExplicitOptOut(payload)) {
+        await suppressEmail(storeId, checkoutEmail, 'platform_unsubscribed')
+          .catch((err) => logger.warn({ err, storeId }, 'shopify.cart.optout-failed'));
+      }
+      const result = await upsertCart({
+        storeId,
+        platformRef,
+        email: checkoutEmail,
+        items: (payload.line_items ?? []).map(li => ({
+          name: li.title ?? 'Produit',
+          price: Number(li.price ?? 0),
+          quantity: li.quantity ?? 1,
+          productId: li.product_id ?? null,
+        })),
+        total,
+        lastActivityAt: new Date(payload.updated_at ?? payload.created_at ?? Date.now()),
+        marketingConsent: shopifyMarketingConsent(payload),
+        checkoutUrl: payload.abandoned_checkout_url ?? null,
+      });
+      if (result.action === 'ignored') {
+        res.json({ accepted: false, reason: result.reason });
+        return;
+      }
+
+      // Relances planifiées une seule fois, à la création ; les tâches
+      // revérifient l'âge du panier avant d'envoyer.
+      if (result.action === 'created') {
+        try {
+          await enqueueCartReminders(result.cartId);
+        } catch (err) {
+          logger.warn({ err, cartId: result.cartId }, 'shopify.cart.abandoned.enqueue-failed');
+        }
+      }
+      logger.info({ storeId, cartId: result.cartId, action: result.action, source: 'shopify' }, 'shopify.cart.abandoned');
+      res.json({ accepted: true, cartId: result.cartId, action: result.action });
     } catch (err) {
       next(err);
     }
@@ -264,14 +300,7 @@ webhooksShopifyRouter.post(
       }))).catch((err) => logger.warn({ err, orderId: order.id }, 'shopify.order.items-failed'));
 
       // Mark any matching abandoned cart as recovered (abandonné avant la commande)
-      await prisma.abandonedCart.updateMany({
-        where: { storeId, customerEmail: email, recoveredAt: null, abandonedAt: { lte: order.orderedAt ?? new Date() } },
-        data: {
-          status: 'recovered',
-          recoveredAt: new Date(),
-          recoveredAmount: Number(payload.total_price ?? 0),
-        },
-      });
+      await recoverCartsForOrder(storeId, email, order.orderedAt ?? new Date(), Number(payload.total_price ?? 0));
 
       // Link the order to the holdout visitor (if the cart carried a shimmer id)
       const vid = shimmerVisitorId(payload);

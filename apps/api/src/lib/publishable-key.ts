@@ -32,6 +32,15 @@ export function assertPublishableSecret(): void {
   pkSecret();
 }
 
+/**
+ * Clé dérivée de SHIMMER_PK_SECRET pour un usage précis (séparation des
+ * domaines) : une clé de chiffrement des liens de désinscription ne peut pas
+ * servir à fabriquer une pk_, et inversement.
+ */
+export function secretSubkey(purpose: string): Buffer {
+  return crypto.createHmac('sha256', pkSecret()).update(`subkey:${purpose}`).digest();
+}
+
 /** The publishable key for a store. Stable as long as SHIMMER_PK_SECRET is stable. */
 export function derivePublishableKey(storeId: number): string {
   const h = crypto.createHmac('sha256', pkSecret()).update(`store:${storeId}`).digest('base64url');

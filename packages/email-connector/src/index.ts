@@ -28,6 +28,23 @@ export interface SendEmailInput {
   fromAddr?: string;
   /** Version gardée en base à la place de bodyText (lien à usage unique masqué, par exemple). */
   storedBodyText?: string;
+  /**
+   * Lien de désinscription en un clic (RFC 8058) : pose List-Unsubscribe et
+   * List-Unsubscribe-Post, que Gmail et Outlook affichent en haut du message.
+   * E-mails non transactionnels seulement.
+   */
+  unsubscribeUrl?: string;
+}
+
+/** En-têtes List-Unsubscribe, ou rien si l'adresse n'est pas une URL https propre. */
+export function listUnsubscribeHeaders(url: string | undefined): Record<string, string> | undefined {
+  if (!url || url.length > 1500 || /[\r\n<>\s]/.test(url)) return undefined;
+  try {
+    if (new URL(url).protocol !== 'https:') return undefined;
+  } catch {
+    return undefined;
+  }
+  return { 'List-Unsubscribe': `<${url}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' };
 }
 
 export interface SendEmailResult {
@@ -74,6 +91,7 @@ async function sendViaResend(
   subject: string,
   bodyText: string | undefined,
   bodyHtml: string | undefined,
+  headers?: Record<string, string>,
 ): Promise<ProviderSendResult> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { error: 'resend_not_configured' };
@@ -81,6 +99,7 @@ async function sendViaResend(
   const payload: Record<string, unknown> = { from: fromAddr, to: [toAddr], subject };
   if (bodyText) payload.text = bodyText;
   if (bodyHtml) payload.html = bodyHtml;
+  if (headers) payload.headers = headers;
   // Resend requires at least one of text/html.
   if (!bodyText && !bodyHtml) payload.text = subject;
 
@@ -111,6 +130,7 @@ async function sendViaMailgun(
   subject: string,
   bodyText: string | undefined,
   bodyHtml: string | undefined,
+  headers?: Record<string, string>,
 ): Promise<ProviderSendResult> {
   const apiKey = process.env.MAILGUN_API_KEY;
   const domain = process.env.MAILGUN_DOMAIN;
@@ -122,6 +142,7 @@ async function sendViaMailgun(
   form.set('subject', subject);
   if (bodyText) form.set('text', bodyText);
   if (bodyHtml) form.set('html', bodyHtml);
+  for (const [name, value] of Object.entries(headers ?? {})) form.set(`h:${name}`, value);
 
   try {
     const ctl = new AbortController();
@@ -227,8 +248,8 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
 
   // 4. Real send through the chosen provider.
   const result = provider === 'resend'
-    ? await sendViaResend(fromAddr, input.to, input.subject, input.bodyText, input.bodyHtml)
-    : await sendViaMailgun(fromAddr, input.to, input.subject, input.bodyText, input.bodyHtml);
+    ? await sendViaResend(fromAddr, input.to, input.subject, input.bodyText, input.bodyHtml, listUnsubscribeHeaders(input.unsubscribeUrl))
+    : await sendViaMailgun(fromAddr, input.to, input.subject, input.bodyText, input.bodyHtml, listUnsubscribeHeaders(input.unsubscribeUrl));
 
   if (result.error) {
     await prisma.sentEmail.update({

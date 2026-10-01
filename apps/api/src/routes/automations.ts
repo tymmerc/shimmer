@@ -13,6 +13,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { getPrisma } from '@shimmer/core';
 import { runAutomationTick, getLastReport, setLastReport } from '../lib/automations/tick.js';
 import { isOperator, operatorOnly } from '../middleware/operator.js';
+import { MIN_GAP_BETWEEN_REMINDERS_MS } from '../lib/automations/cart-reminders.js';
 
 export const automationsRouter = Router();
 
@@ -36,10 +37,12 @@ automationsRouter.get('/status', async (req: Request, res: Response, next: NextF
       prisma.abandonedCart.count({
         where: {
           storeId,
-          reminder1At: { not: null },
+          reminder1At: { not: null, lte: new Date(now.getTime() - MIN_GAP_BETWEEN_REMINDERS_MS) },
           reminder2At: null,
           recoveredAt: null,
           abandonedAt: { lte: oneDayAgo },
+          // Mêmes paniers que le balayage : un panier clos (désinscrit…) n'attend plus rien.
+          status: { in: ['pending', 'abandoned', 'reminded_once'] },
         },
       }),
       prisma.reviewRequest.count({

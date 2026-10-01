@@ -167,6 +167,22 @@ describe('PATCH /api/stores/me/config { appearance }', () => {
     await patch({ tone: 'vous', appearance: { radius: 4 } });
     expect(patchStoreConfig.mock.calls[0]![2]).toEqual({ tone: 'vous', appearance: { radius: 4 } });
   });
+  it('réglages des relances : audience, code déclaré par la boutique (code et % ensemble)', async () => {
+    expect((await patch({ cart_reminders: { audience: 'all' } })).status).toBe(200);
+    expect((await patch({ cart_reminders: { discount_code: 'MERCI10', discount_percent: 10 } })).status).toBe(200);
+    expect((await patch({ cart_reminders: null })).status).toBe(200);
+    expect(patchStoreConfig.mock.calls.map((c) => [c[2], c[3]])).toEqual([
+      [{ cart_reminders: { audience: 'all' } }, []],
+      [{ cart_reminders: { discount_code: 'MERCI10', discount_percent: 10 } }, []],
+      [{}, ['cart_reminders']],
+    ]);
+    for (const cart_reminders of [
+      { discount_code: 'MERCI10' }, { discount_percent: 10 }, { discount_code: 'a b', discount_percent: 10 },
+      { discount_code: 'MERCI10', discount_percent: 95 }, { audience: 'everyone' }, { evil: 1 },
+    ]) {
+      expect((await patch({ cart_reminders })).status).toBe(400);
+    }
+  });
   it('accepte les trois tons proposés par la page Réglages (neutre compris)', async () => {
     for (const tone of ['tu', 'vous', 'neutre']) {
       const r = await patch({ tone });

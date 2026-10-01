@@ -79,7 +79,18 @@ Plateforme IA e-commerce : un vendeur conversationnel dans la barre de recherche
   - **Ton « Neutre » de la page Réglages : corrigé et EN PROD** (422c23b, API redémarrée sur GO de Tym, test de fumée 29/29, enregistrement vérifié sur la boutique 4 puis remis à « tu »).
   - **Page démo « le vendeur chez vous »** (`/demo/boutiques/` + `public/demo-boutiques/*.html`, 2b80326) : sur dev seulement, la prod attend le GO de Tym. Ensuite seulement, lancer `packages/core/src/prisma/sql/2026-10-01-demo-images.sql` (illustrations des boutiques 4 et 5). Vérif : `heavy node /opt/corsairaventure/shimmer-demo-boutiques-check.mjs <base> <onglet>`.
   - **Tuto pour Tym** : `docs/mise-en-route-mistral-shopify-domaine.md` (Mistral, boutique de dev Shopify, domaine + Resend).
-  - **À corriger AVANT de poser RESEND_API_KEY** : relances de panier (nouveau panier à chaque checkouts/update, code SHIMMER10 jamais créé dans Shopify, ni désinscription ni contrôle du consentement), lien des demandes d'avis en dur (review-requests.ts), double sens de PUBLIC_API_BASE (public-url.ts contre integration.ts). Import CSV du catalogue : découpe par ligne avant les guillemets, casse sur l'export Shopify (catalog-import.ts).
+  - **Relances de panier refaites, PAS ENCORE EN PROD** (commit « fix: relances de panier… ») :
+    - un panier par checkout (`lib/abandoned-carts.ts`) ;
+    - accord marketing obligatoire par défaut (`config.cart_reminders.audience`) ;
+    - désinscription en un clic sur les relances, la newsletter et les demandes d'avis (`lib/unsubscribe.ts`, `/api/public/unsubscribe`, en-têtes List-Unsubscribe) ;
+    - plus de faux code SHIMMER10 (code déclaré par la boutique seulement) ;
+    - un seul fil par client ;
+    - commande payée depuis l'abandon : panier clos « ordered » SANS recovered_at (la preuve facturée reste juste) ;
+    - lien des avis sur `publicApiBase()` ;
+    - PUBLIC_API_BASE lu pareil partout.
+    - **Mise en prod** : appliquer `packages/core/src/prisma/sql/2026-10-01-cart-reminders.sql` (ajouts seulement), puis redémarrer. L'ordre n'est plus critique : sans le SQL, le code crée les paniers comme avant et met les relances en pause (`lib/reminder-schema.ts`, revérifié chaque minute).
+    - SQL vérifié sur une base jetable (copie du schéma).
+  - **Encore avant Resend** : la newsletter part à tous les clients, sans contrôle d'accord marketing (problème antérieur, tâche à part). Import CSV du catalogue : découpe par ligne avant les guillemets, casse sur l'export Shopify (catalog-import.ts).
 - **01/10 · le widget prend la DA de la boutique (étages 1 à 3), EN PROD** (6a9d1d9, GO Tym, déployé 09:16 : API redémarrée, SDK et site publiés ; test de fumée 29/29, aller-retour `appearance` sur la boutique 4 puis remis à vide, navigateur prod OK avec l'endpoint réel ; sauvegardes `/opt/backups/*-20261001-0916.tar.gz`) :
   - SDK : `sdk/src/theme.ts` (calcul pur des jetons, contrastes, filtres) + `sdk/src/theme-dom.ts` (lecture de la page : fond, texte, police, arrondi de la barre de recherche, couleur du bouton d'ajout au panier). Priorité : variables CSS `--shimmer-accent|font|radius|surface|text` de la boutique > `data-accent|font|radius|theme` de la balise > réglages de l'admin > détection > défauts. Dock en Shadow DOM avec `::part()` (`#shimmer-root::part(chip)`, liste dans l'admin), cross-sell en classes `.sx-*`. Plus aucune couleur Shimmer en dur (fini l'indigo et le violet). Bulle du chat masquée 700 ms au plus le temps de lire l'admin.
   - API : `GET /api/public/appearance?store=N` (public, cache 60 s + revalidation), clé `appearance` du config via `PATCH /api/stores/me/config` (`lib/appearance.ts`, même règle de police que le SDK). Demande un redémarrage de l'API (dev et prod partagent le process).

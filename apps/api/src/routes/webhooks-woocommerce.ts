@@ -15,6 +15,7 @@ import express from 'express';
 import crypto from 'crypto';
 import { getPrisma, logger, ShimmerError } from '@shimmer/core';
 import { enqueueCartReminders } from '../lib/automations/queue.js';
+import { recoverCartsForOrder, upsertCart } from '../lib/abandoned-carts.js';
 import { attributeOrderToChat } from '../lib/attribution.js';
 import { linkOrderItems } from '../lib/order-items.js';
 import { scheduleReviewAfterShipping } from '../lib/review-on-delivery.js';
@@ -276,13 +277,9 @@ async function handleOrder(req: Request, res: Response): Promise<void> {
 }
 
 async function afterPaid(storeId: number, orderId: number, orderedAt: Date, email: string, total: number, payload: WCOrder, orderRef: string): Promise<void> {
-  const prisma = getPrisma();
   // Panier abandonné AVANT cette commande, par le même client : récupéré.
   try {
-    await prisma.abandonedCart.updateMany({
-      where: { storeId, customerEmail: email, recoveredAt: null, abandonedAt: { lte: orderedAt } },
-      data: { status: 'recovered', recoveredAt: new Date(), recoveredAmount: total },
-    });
+    await recoverCartsForOrder(storeId, email, orderedAt, total);
   } catch (err) {
     logger.warn({ err, orderId }, 'woo.order.cart-recovery-failed');
   }
@@ -436,30 +433,37 @@ webhooksWooCommerceRouter.post(
         return;
       }
 
-      const prisma = getPrisma();
-      const cart = await prisma.abandonedCart.create({
-        data: {
-          storeId,
-          customerEmail: email,
-          items: (payload.items ?? []).map(li => ({
-            name: li.name ?? 'Produit',
-            price: Number(li.price ?? 0),
-            quantity: li.quantity ?? 1,
-            productId: li.product_id ?? null,
-          })) as unknown as Parameters<typeof prisma.abandonedCart.create>[0]['data']['items'],
-          totalAmount: Number(payload.total ?? 0),
-          status: 'pending',
-          abandonedAt: payload.abandoned_at ? new Date(payload.abandoned_at) : new Date(),
-        },
+      // Un panier par panier Woo : les envois répétés du même panier le mettent à jour.
+      const result = await upsertCart({
+        storeId,
+        platformRef: payload.cart_id ? `woo:${payload.cart_id}` : null,
+        email,
+        items: (payload.items ?? []).map(li => ({
+          name: li.name ?? 'Produit',
+          price: Number(li.price ?? 0),
+          quantity: li.quantity ?? 1,
+          productId: li.product_id ?? null,
+        })),
+        total: Number(payload.total ?? 0),
+        lastActivityAt: payload.abandoned_at ? new Date(payload.abandoned_at) : new Date(),
+        // WooCommerce ne transmet pas l'accord marketing : inconnu, donc pas de
+        // relance tant que la boutique garde l'audience « abonnés » (défaut).
+        marketingConsent: null,
+        checkoutUrl: null,
       });
-
-      try {
-        await enqueueCartReminders(cart.id);
-      } catch (err) {
-        logger.warn({ err, cartId: cart.id }, 'woo.cart.abandoned.enqueue-failed');
+      if (result.action === 'ignored') {
+        res.json({ accepted: false, reason: result.reason });
+        return;
       }
-      logger.info({ storeId, cartId: cart.id, source: 'woocommerce' }, 'woo.cart.abandoned');
-      res.json({ accepted: true, cartId: cart.id });
+      if (result.action === 'created') {
+        try {
+          await enqueueCartReminders(result.cartId);
+        } catch (err) {
+          logger.warn({ err, cartId: result.cartId }, 'woo.cart.abandoned.enqueue-failed');
+        }
+      }
+      logger.info({ storeId, cartId: result.cartId, action: result.action, source: 'woocommerce' }, 'woo.cart.abandoned');
+      res.json({ accepted: true, cartId: result.cartId, action: result.action });
     } catch (err) {
       next(err);
     }

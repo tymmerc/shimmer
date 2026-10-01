@@ -97,6 +97,16 @@ const crossSellRulesShape = z.object({
   reason_overrides: z.record(z.string().max(280)).optional(),
 });
 
+// Relances de panier. discount_code : un code que la boutique a créé
+// elle-même dans Shopify ou WooCommerce (Shimmer ne crée pas de remise).
+const cartRemindersShape = z.object({
+  audience: z.enum(['subscribers', 'all']).optional(),
+  discount_code: z.string().regex(/^[A-Za-z0-9_-]{3,40}$/).optional(),
+  discount_percent: z.number().int().min(1).max(90).optional(),
+}).strict().refine((v) => (v.discount_code === undefined) === (v.discount_percent === undefined), {
+  message: 'discount_code et discount_percent vont ensemble',
+});
+
 const configUpdateSchema = z.object({
   // Les trois choix de la page Réglages. « neutre » : le vendeur évite les
   // pronoms (sales-assistant), les gabarits de la recherche guidée vouvoient.
@@ -104,6 +114,7 @@ const configUpdateSchema = z.object({
   voice: voiceShape.nullable().optional(),
   universe_overrides: z.record(z.string().max(60), overrideShape).nullable().optional(),
   cross_sell_rules: crossSellRulesShape.nullable().optional(),
+  cart_reminders: cartRemindersShape.nullable().optional(),
   // Objet entier remplacé ; {} = tout automatique, null = clé retirée.
   appearance: appearanceSchema.nullable().optional(),
 }).strict();
@@ -170,7 +181,7 @@ storesRouter.patch('/me/config', authMiddleware, async (req: Request, res: Respo
     // config, un lire-modifier-réécrire effaçait ses clés.
     const set: Record<string, unknown> = {};
     const unset: string[] = [];
-    for (const key of ['tone', 'voice', 'universe_overrides', 'cross_sell_rules', 'appearance'] as const) {
+    for (const key of ['tone', 'voice', 'universe_overrides', 'cross_sell_rules', 'appearance', 'cart_reminders'] as const) {
       const value = body[key];
       if (value === undefined) continue;
       if (value === null) unset.push(key);

@@ -11,6 +11,11 @@ const STATUS_TINT: Record<string, string> = {
  reminded_twice: 'border-toxic-500/40 bg-emerald-500/10 text-emerald-600',
  recovered: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
  lost: 'border-neutral-200 bg-white text-neutral-400',
+ no_consent: 'border-neutral-200 bg-white text-neutral-400',
+ unsubscribed: 'border-neutral-200 bg-white text-neutral-400',
+ no_email: 'border-neutral-200 bg-white text-neutral-400',
+ ordered: 'border-neutral-200 bg-white text-neutral-400',
+ duplicate: 'border-neutral-200 bg-white text-neutral-400',
 };
 
 export function AdminCarts() {

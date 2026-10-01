@@ -6,8 +6,9 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { getPrisma, logger, ShimmerError } from '@shimmer/core';
-import { sendEmail } from '@shimmer/email-connector';
 import { enqueueCartReminders } from '../lib/automations/queue.js';
+import { sendCartReminder, type ReminderSkipReason } from '../lib/automations/cart-reminders.js';
+import { upsertCart } from '../lib/abandoned-carts.js';
 import { isControlCart, resolveHoldoutConfig } from '../lib/holdout/bucket.js';
 import { assertCustomerInStore } from '../lib/tenant.js';
 
@@ -23,6 +24,8 @@ const abandonSchema = z.object({
     quantity: z.number().int().min(1).default(1),
   })).min(1),
   totalAmount: z.number().min(0).max(100000),
+  /** Le client a accepté les e-mails marketing (sinon pas de relance, sauf audience « all »). */
+  marketingConsent: z.boolean().optional(),
 });
 
 const recoverSchema = z.object({
@@ -30,21 +33,16 @@ const recoverSchema = z.object({
   orderId: z.number().int().positive().optional(),
 });
 
-// Reminder copy generator
-function buildReminder(step: 1 | 2, items: Array<{ name: string }>, total: number, promoCode?: string): { subject: string; body: string } {
-  const itemList = items.slice(0, 3).map(i => i.name).join(', ');
-  const more = items.length > 3 ? ` et ${items.length - 3} autre(s)` : '';
-  if (step === 1) {
-    return {
-      subject: `Votre panier vous attend (${total.toFixed(2)}€)`,
-      body: `Bonjour, votre panier avec ${itemList}${more} est toujours là. Une question ? Le vendeur est dispo.`,
-    };
-  }
-  return {
-    subject: `On vous offre 10% si vous finalisez aujourd'hui`,
-    body: `On voulait pas vous laisser partir. Code ${promoCode ?? 'SHIMMER10'} valable 48h pour faire passer votre panier (${total.toFixed(2)}€) à -10%.`,
-  };
-}
+// Pourquoi une relance manuelle n'est pas partie (message pour le marchand).
+const SKIP_MESSAGES: Record<ReminderSkipReason, string> = {
+  paused: 'Les relances sont en pause le temps d\'une mise à jour de la base. Réessayez plus tard.',
+  duplicate: 'Ce client a un panier plus récent, ou a déjà reçu une relance dans les 20 dernières heures.',
+  'no-recipient': "Ce panier n'a pas d'adresse e-mail.",
+  unsubscribed: "Ce client s'est désinscrit des e-mails de la boutique.",
+  'no-consent': "Ce client n'a pas accepté les e-mails marketing : pas de relance (réglage : relances aux abonnés seulement).",
+  ordered: 'Ce client a passé une commande payée depuis : pas de relance.',
+  'already-sent': 'Cette relance est déjà partie.',
+};
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/cart-recovery/abandon — record an abandoned cart
@@ -58,16 +56,22 @@ cartRecoveryRouter.post('/abandon', async (req: Request, res: Response, next: Ne
     }
     const prisma = getPrisma();
     if (body.customerId) await assertCustomerInStore(prisma, storeId, body.customerId);
-    const cart = await prisma.abandonedCart.create({
-      data: {
-        storeId,
-        customerId: body.customerId ?? null,
-        customerEmail: body.customerEmail ?? null,
-        items: body.items as unknown as Parameters<typeof prisma.abandonedCart.create>[0]['data']['items'],
-        totalAmount: body.totalAmount,
-        status: 'pending',
-      },
+    const created = await upsertCart({
+      storeId,
+      platformRef: null,
+      customerId: body.customerId ?? null,
+      email: body.customerEmail ?? null,
+      items: body.items.map((i) => ({ name: i.name, price: i.price, quantity: i.quantity, productId: i.productId ?? null })),
+      total: body.totalAmount,
+      lastActivityAt: new Date(),
+      marketingConsent: body.marketingConsent ?? null,
+      checkoutUrl: null,
     });
+    if (created.action !== 'created') {
+      throw new ShimmerError('customerId or customerEmail is required', 'BAD_REQUEST', 400);
+    }
+    const cart = await prisma.abandonedCart.findUnique({ where: { id: created.cartId } });
+    if (!cart) throw new ShimmerError('Cart not found', 'NOT_FOUND', 404);
     try {
       await enqueueCartReminders(cart.id);
     } catch (err) {
@@ -127,46 +131,26 @@ cartRecoveryRouter.post('/:id/send-reminder', async (req: Request, res: Response
     }
 
     const step: 1 | 2 = cart.reminder1At ? 2 : 1;
-    let promoCode: string | undefined;
-    if (step === 2) {
-      promoCode = `SHIMMER10-${cart.id}`;
-    }
-    const items = (cart.items as unknown as Array<{ name: string; price: number; quantity: number }>) ?? [];
-    const reminder = buildReminder(step, items, Number(cart.totalAmount), promoCode);
-
-    const updated = await prisma.abandonedCart.update({
-      where: { id },
-      data: {
-        ...(step === 1 ? { reminder1At: new Date() } : { reminder2At: new Date(), promoCode }),
-        status: step === 1 ? 'reminded_once' : 'reminded_twice',
-      },
-    });
-
-    // Resolve recipient email
-    let recipient: string | null = cart.customerEmail;
-    if (!recipient && cart.customerId) {
-      const customer = await prisma.customer.findFirst({ where: { id: cart.customerId, storeId } });
-      recipient = customer?.email ?? null;
-    }
-    let emailResult: { id: number; status: string } | null = null;
-    if (recipient) {
-      const r = await sendEmail({
-        storeId,
-        to: recipient,
-        subject: reminder.subject,
-        bodyText: reminder.body,
-        tag: `cart-recovery-step-${step}`,
-        relatedEntity: 'cart',
-        relatedId: id,
-      });
-      emailResult = { id: r.id, status: r.status };
+    if (step === 2 && cart.reminder2At) {
+      throw new ShimmerError(SKIP_MESSAGES['already-sent'], 'ALREADY_SENT', 409);
     }
 
-    logger.info({ storeId, cartId: id, step, emailId: emailResult?.id }, 'cart.reminder.sent');
+    // Mêmes règles que les relances automatiques : désinscription, accord
+    // marketing, commande passée depuis.
+    const outcome = await sendCartReminder(cart, step);
+    if (outcome.status === 'skipped') {
+      throw new ShimmerError(SKIP_MESSAGES[outcome.reason], `REMINDER_${outcome.reason.toUpperCase().replace(/-/g, '_')}`, 409);
+    }
+    if (outcome.status === 'failed') {
+      throw new ShimmerError("L'e-mail a été refusé par le fournisseur d'envoi.", 'SEND_FAILED', 502);
+    }
+    const updated = await prisma.abandonedCart.findUnique({ where: { id } });
+
+    logger.info({ storeId, cartId: id, step, emailId: outcome.emailId }, 'cart.reminder.sent');
     res.json({
       cart: updated,
-      reminder: { step, channel: 'EMAIL', ...reminder, promoCode },
-      email: emailResult,
+      reminder: { step, channel: 'EMAIL', subject: outcome.subject, body: outcome.body, promoCode: outcome.promoCode },
+      email: { id: outcome.emailId, status: outcome.emailStatus },
     });
   } catch (err) {
     next(err);

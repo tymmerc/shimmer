@@ -10,6 +10,8 @@
 
 import { getPrisma, logger } from '@shimmer/core';
 import { sendEmail } from '@shimmer/email-connector';
+import { publicApiBase } from '../public-url.js';
+import { isSuppressed, unsubscribeLink } from '../unsubscribe.js';
 
 interface SweepResult {
   scanned: number;
@@ -48,6 +50,11 @@ async function sendRequest(rr: DueRequest): Promise<'sent' | 'skipped' | 'failed
     await prisma.reviewRequest.updateMany({ where: { id: rr.id, status: 'SCHEDULED' }, data: { status: 'EXPIRED' } });
     return 'skipped';
   }
+  // Désinscrit des e-mails de la boutique : pas de sollicitation.
+  if (await isSuppressed(rr.storeId, rr.customer.email)) {
+    await prisma.reviewRequest.updateMany({ where: { id: rr.id, status: 'SCHEDULED' }, data: { status: 'EXPIRED' } });
+    return 'skipped';
+  }
   const claim = await prisma.reviewRequest.updateMany({
     where: { id: rr.id, status: 'SCHEDULED', sentAt: null },
     data: { status: 'SENT', sentAt: new Date() },
@@ -55,16 +62,21 @@ async function sendRequest(rr: DueRequest): Promise<'sent' | 'skipped' | 'failed
   if (claim.count === 0) return 'skipped';
 
   const firstName = rr.customer.firstName ?? '';
+  const body = (link: string) =>
+    `Bonjour ${firstName},\n\n` +
+    `Votre commande ${rr.order.orderNumber} vous est bien parvenue ? ` +
+    `Un mot, deux étoiles, ça nous aide vraiment.\n\n` +
+    `Lien : ${link}\n\n` +
+    `Merci, l'équipe ${rr.store.name}.`;
+  const unsub = unsubscribeLink(rr.storeId, rr.customer.email);
   const r = await sendEmail({
     storeId: rr.storeId,
     to: rr.customer.email,
     subject: `Comment s'est passé votre achat ?`,
-    bodyText:
-      `Bonjour ${firstName},\n\n` +
-      `Votre commande ${rr.order.orderNumber} vous est bien parvenue ? ` +
-      `Un mot, deux étoiles, ça nous aide vraiment.\n\n` +
-      `Lien : https://tymmerc.eu/shimmer/review/?token=${rr.token}\n\n` +
-      `Merci, l'équipe ${rr.store.name}.`,
+    bodyText: body(`${publicApiBase()}/review/?token=${rr.token}`) + unsub.footer,
+    unsubscribeUrl: unsub.url,
+    // En base, ni le jeton de l'avis ni le lien de désinscription.
+    storedBodyText: `${body('[lien personnel]')}\n\n--\n[lien de désinscription]`,
     tag: 'review-request',
     relatedEntity: 'review_request',
     relatedId: rr.id,

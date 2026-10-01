@@ -30,6 +30,11 @@ const FR: Record<string, string> = {
   reminded_twice: 'Relancé 2×',
   recovered: 'Récupéré',
   holdout_control: 'Témoin',
+  no_consent: 'Sans accord marketing',
+  unsubscribed: 'Désinscrit',
+  no_email: 'Sans e-mail',
+  ordered: 'A commandé',
+  duplicate: 'Doublon',
 };
 
 /** "awaiting_customer" -> "En attente client" ; fallback : jolifie l'enum. */

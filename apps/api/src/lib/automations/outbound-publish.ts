@@ -13,6 +13,7 @@
 
 import { getPrisma, logger } from '@shimmer/core';
 import { sendEmail } from '@shimmer/email-connector';
+import { suppressedAmong, unsubscribeLink } from '../unsubscribe.js';
 
 interface SweepResult {
   scanned: number;
@@ -151,15 +152,21 @@ async function fanOutNewsletter(
   });
 
   const bodyText = renderNewsletterText(nl);
+  // Désinscrits de la boutique (lien en pied de chaque envoi) : jamais relancés.
+  const suppressed = await suppressedAmong(storeId, recipients.map((r) => r.email ?? ''));
   let queued = 0;
   for (const recipient of recipients) {
-    if (!recipient.email) continue;
+    if (!recipient.email || suppressed.has(recipient.email.trim().toLowerCase())) continue;
+    const text = personalize(bodyText, recipient.firstName);
+    const unsub = unsubscribeLink(storeId, recipient.email);
     try {
       await sendEmail({
         storeId,
         to: recipient.email,
         subject: nl.subject ?? 'Notre sélection du moment',
-        bodyText: personalize(bodyText, recipient.firstName),
+        bodyText: text + unsub.footer,
+        unsubscribeUrl: unsub.url,
+        storedBodyText: `${text}\n\n--\n[lien de désinscription]`,
         tag: 'outbound-newsletter',
         relatedEntity: 'campaign',
         relatedId: campaignId,
