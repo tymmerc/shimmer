@@ -167,6 +167,14 @@ describe('PATCH /api/stores/me/config { appearance }', () => {
     await patch({ tone: 'vous', appearance: { radius: 4 } });
     expect(patchStoreConfig.mock.calls[0]![2]).toEqual({ tone: 'vous', appearance: { radius: 4 } });
   });
+  it('accepte les trois tons proposés par la page Réglages (neutre compris)', async () => {
+    for (const tone of ['tu', 'vous', 'neutre']) {
+      const r = await patch({ tone });
+      expect(r.status).toBe(200);
+    }
+    expect(patchStoreConfig.mock.calls.map((c) => c[2])).toEqual([{ tone: 'tu' }, { tone: 'vous' }, { tone: 'neutre' }]);
+    expect((await patch({ tone: 'familier' })).status).toBe(400);
+  });
   it('valeur invalide : 400, rien n\'est écrit', async () => {
     for (const appearance of [{ accent: 'red' }, { font: 'Arial;}' }, { radius: 25 }, { evil: 1 }, 'dark']) {
       const r = await patch({ appearance });

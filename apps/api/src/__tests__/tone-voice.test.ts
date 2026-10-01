@@ -98,6 +98,10 @@ describe('getStoreTone', () => {
   it('reads "vous" from config', () => {
     expect(getStoreTone({ config: { tone: 'vous' } })).toBe('vous');
   });
+  it('maps the admin "neutre" tone to "vous" (no pronoun-free templates)', () => {
+    expect(getStoreTone({ config: { tone: 'neutre' } })).toBe('vous');
+    expect(getStoreTone({ config: { tone: ' Neutre ' } })).toBe('vous');
+  });
   it('falls back to "tu" on invalid tone', () => {
     expect(getStoreTone({ config: { tone: 'mlecher' } })).toBe('tu');
     expect(getStoreTone({ config: { tone: 42 } })).toBe('tu');

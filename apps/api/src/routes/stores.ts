@@ -98,7 +98,9 @@ const crossSellRulesShape = z.object({
 });
 
 const configUpdateSchema = z.object({
-  tone: z.enum(['tu', 'vous']).optional(),
+  // Les trois choix de la page Réglages. « neutre » : le vendeur évite les
+  // pronoms (sales-assistant), les gabarits de la recherche guidée vouvoient.
+  tone: z.enum(['tu', 'vous', 'neutre']).optional(),
   voice: voiceShape.nullable().optional(),
   universe_overrides: z.record(z.string().max(60), overrideShape).nullable().optional(),
   cross_sell_rules: crossSellRulesShape.nullable().optional(),

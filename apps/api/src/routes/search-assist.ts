@@ -26,6 +26,8 @@ export function getStoreTone(store: { config?: unknown } | undefined): StoreTone
     if (typeof tone === 'string') {
       const t = tone.toLowerCase().trim();
       if (t === 'vous' || t === 'tu') return t;
+      // Pas de gabarits sans pronom : « neutre » (page Réglages) vouvoie.
+      if (t === 'neutre') return 'vous';
     }
   }
   return 'tu';
