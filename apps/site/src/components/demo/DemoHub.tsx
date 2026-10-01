@@ -81,6 +81,21 @@ export function DemoHub() {
                 active={active}
                 onSelect={onSelect}
               />
+              <div>
+                <div className="mb-3 flex items-baseline gap-3">
+                  <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">En situation</span>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.20em] text-paper/40">Trois boutiques</span>
+                </div>
+                <a
+                  href="/shimmer/demo/boutiques/"
+                  className="block w-full rounded-xl border border-paper/10 bg-paper/[0.02] px-4 py-3 text-left text-paper/70 transition hover:border-paper/25 hover:bg-paper/[0.04]"
+                >
+                  <div className="font-display text-base text-paper">Le widget chez trois marchands →</div>
+                  <div className="mt-0.5 text-[12px] leading-snug text-paper/55">
+                    La même ligne de script dans trois boutiques au style très différent, il s'adapte à chacune.
+                  </div>
+                </a>
+              </div>
             </div>
           </aside>
 

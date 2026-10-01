@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Champagne Rosé de Saignée · caves forty-two</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: #fbfbf7;
+    color: #121212;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  img { max-width: 100%; height: auto; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  .demo-bar { background: #121212; color: #fbfbf7; font-size: 12px; font-weight: 600; text-align: center; padding: 5px 16px; }
+
+  .head { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; padding-top: 18px; padding-bottom: 18px; }
+  .logo { color: #121212; text-decoration: none; font-size: 26px; font-weight: 900; letter-spacing: -.03em; line-height: 1; }
+  .logo span { color: #ff5a36; }
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-right: auto; }
+  .pills a {
+    padding: 6px 14px; border: 2px solid #121212; border-radius: 999px;
+    color: #121212; text-decoration: none; font-size: 14px; font-weight: 700;
+  }
+  .pills a:hover { background: #121212; color: #fbfbf7; }
+  .search { position: relative; flex: 1 1 260px; max-width: 380px; margin: 0; }
+  .search input {
+    width: 100%; margin: 0; padding: 11px 52px 11px 18px;
+    font: inherit; font-size: 16px; font-weight: 500; color: #121212;
+    background: #ffffff; border: 2px solid #121212; border-radius: 999px;
+    -webkit-appearance: none; appearance: none;
+  }
+  .search input::placeholder { color: #6d6d68; }
+  .search input:focus { outline: 3px solid #ffb4a2; outline-offset: 1px; }
+  .search-go {
+    position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+    width: 36px; height: 36px; padding: 0; border: 0; border-radius: 999px;
+    background: #121212; color: #fbfbf7; cursor: pointer;
+    display: grid; place-items: center;
+  }
+
+  .product { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; margin-top: 18px; }
+  .stage { position: relative; margin: 0; padding: 28px; background: #ffd9cc; border-radius: 36px; }
+  .stage img { display: block; width: 100%; border-radius: 24px; }
+  .sticker {
+    position: absolute; top: 14px; right: 14px; width: 96px; height: 96px;
+    display: grid; place-items: center; text-align: center;
+    background: #121212; color: #fbfbf7; border-radius: 50%;
+    font-size: 13px; font-weight: 800; line-height: 1.15; transform: rotate(-10deg);
+  }
+  .kicker { display: inline-block; margin: 0 0 12px; padding: 4px 12px; background: #121212; color: #fbfbf7; border-radius: 999px; font-size: 13px; font-weight: 700; }
+  .info h1 { margin: 0 0 14px; font-size: clamp(34px, 6vw, 64px); font-weight: 900; line-height: .98; letter-spacing: -.035em; }
+  .maison { margin: 0 0 18px; font-size: 15px; font-weight: 600; color: #4a4a46; }
+  .price { display: inline-block; margin: 0 0 18px; font-size: 28px; font-weight: 900; letter-spacing: -.02em; }
+  .desc { margin: 0 0 20px; max-width: 42ch; font-size: 17px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 24px; padding: 0; list-style: none; }
+  .chips li { padding: 6px 12px; background: #efeee6; border-radius: 999px; font-size: 14px; font-weight: 600; }
+  .product-form__submit {
+    width: 100%; padding: 16px 24px; cursor: pointer;
+    font: inherit; font-size: 17px; font-weight: 800;
+    color: #ffffff; background: #ff5a36; border: 0; border-radius: 999px;
+  }
+  .product-form__submit:hover { background: #f04a26; }
+  .product-form__submit:focus-visible { outline: 3px solid #121212; outline-offset: 3px; }
+  .stock { margin: 12px 0 0; font-size: 14px; font-weight: 600; color: #2f7a3f; }
+
+  .reco { margin: 56px 0 64px; }
+
+  footer { background: #121212; color: #fbfbf7; }
+  .foot { padding-top: 34px; padding-bottom: 40px; }
+  .foot-logo { margin: 0 0 10px; font-size: clamp(30px, 7vw, 56px); font-weight: 900; letter-spacing: -.04em; line-height: 1; }
+  .foot-logo span { color: #ff5a36; }
+  .foot p { margin: 0 0 6px; font-size: 14px; color: #c9c9c2; }
+  .foot .legal { margin-top: 14px; font-weight: 700; color: #fbfbf7; }
+
+  @media (min-width: 780px) {
+    .product { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; }
+    .stage { transform: rotate(-1.5deg); }
+    .product-form__submit { width: auto; min-width: 280px; }
+  }
+  @media (max-width: 440px) {
+    .wrap { padding-left: 16px; padding-right: 16px; }
+    .stage { padding: 18px; border-radius: 28px; }
+    .sticker { width: 80px; height: 80px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="demo-bar">Boutique de démonstration · catalogue de test, aucune commande possible</div>
+
+<header class="wrap head">
+  <a class="logo" href="caves-refonte.html">caves forty-two<span>.</span></a>
+  <nav class="pills" aria-label="Rayons">
+    <a href="caves-refonte.html">Rouges</a>
+    <a href="caves-refonte.html">Blancs</a>
+    <a href="caves-refonte.html">Bulles</a>
+    <a href="caves-refonte.html">Sucrés</a>
+  </nav>
+  <form class="search" role="search" action="caves-refonte.html" method="get">
+    <label class="sr" for="q">Rechercher un vin</label>
+    <input id="q" type="search" name="q" placeholder="On cherche quoi ce soir&nbsp;?" autocomplete="off">
+    <button type="submit" class="search-go" aria-label="Rechercher">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+    </button>
+  </form>
+</header>
+
+<main class="wrap">
+  <article class="product">
+    <figure class="stage">
+      <img src="img/champagne-3.svg" alt="Bouteille de Champagne Rosé de Saignée" width="560" height="560">
+      <span class="sticker" aria-hidden="true">en<br>biody&shy;namie</span>
+    </figure>
+    <div class="info">
+      <p class="kicker">Bulles</p>
+      <h1>Champagne Rosé de Saignée</h1>
+      <p class="maison">Champagne Vouette &amp; Sorbée</p>
+      <p class="price">58,00&nbsp;€</p>
+      <p class="desc">Champagne rosé de saignée biodynamie, structure et fruit. Sur cuisine épicée ou desserts fruits rouges.</p>
+      <ul class="chips" aria-label="En bref">
+        <li>Pinot noir</li>
+        <li>Profil fruité</li>
+        <li>Garde 6 ans</li>
+        <li>Cuisine épicée</li>
+      </ul>
+      <button type="button" name="add" class="product-form__submit button button--primary">Ajouter au panier</button>
+      <p class="stock">En stock · livré en 48&nbsp;h</p>
+    </div>
+  </article>
+
+  <section class="reco" aria-label="Suggestions du vendeur">
+    <div data-shimmer-crosssell="2105"></div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <p class="foot-logo">caves forty-two<span>.</span></p>
+    <p>La même cave de quartier, avec un nouveau site.</p>
+    <p class="legal">L'abus d'alcool est dangereux pour la santé, à consommer avec modération.</p>
+    <p>Boutique fictive créée pour la démonstration du widget Shimmer.</p>
+  </div>
+</footer>
+
+<script src="/shimmer/sdk/shimmer.iife.js" data-shimmer data-store="4" data-key="pk_uUrPNXjew9_HENo4ZkS5k2iLu77sKjWCpn7hd8e5" data-consent="denied" defer></script>
+<script>
+  // Le SDK démarre seul ; les cartes de la fiche produit se demandent à part.
+  document.addEventListener('DOMContentLoaded', function () {
+    if (window.Shimmer && window.Shimmer.crossSell) {
+      window.Shimmer.crossSell.render().catch(function () {});
+    }
+  });
+</script>
+</body>
+</html>
