@@ -83,7 +83,15 @@ Plateforme IA e-commerce : un vendeur conversationnel dans la barre de recherche
     - bouton du haut sobre (« Demander un audit », fond papier, plus le jaune « cheap ») ;
     - `/signup/` renvoie vers l'audit au lieu de « Erreur 403 ».
     - Publié SANS `--delete` et SANS `/demo/` ni `/demo-boutiques/` (la page démo attend toujours le GO).
-  - **Formulaire d'audit en cours** (workflow `shimmer-lead-form`) :
+  - **Formulaire d'audit : CODE FINI ET COMMITÉ (6a5bde1), PAS EN LIGNE.** Tests API : 549. Build du site : en attente du verrou `heavy` ce soir, à revérifier.
+    - Mise en prod, sur GO de Tym, dans cet ordre :
+      1. `git status` ;
+      2. SQL `2026-10-01-leads.sql`, `2026-10-01-cart-reminders.sql` et `2026-10-01-customer-marketing-consent.sql` ;
+      3. `systemctl restart shimmer-api` (met aussi en ligne 76ba426 et 209c0b0) ;
+      4. vérifier que `curl https://tymmerc.eu/shimmer/api/public/leads/ping` répond 200 ;
+      5. rebuild du site + rsync en prod (avec `--exclude='/shimmer/'` et, tant que la démo n'a pas son GO, `--exclude='/demo/' --exclude='/demo-boutiques/'`, sans `--delete`) ;
+      6. une demande d'essai doit arriver dans le Gmail de Tym.
+  - **Détail du formulaire** (workflow `shimmer-lead-form`) :
     - côté API : `POST /api/public/leads`, ping, table `leads` (SQL `2026-10-01-leads.sql`), alerte Resend à Tym via `LEAD_NOTIFY_*` ;
     - côté site : `AuditForm.tsx`, qui ne s'affiche que si `/api/public/leads/ping` répond.
     - `LEAD_NOTIFY_RESEND_API_KEY`, `LEAD_NOTIFY_FROM` (entre guillemets, sinon `start-api.sh` casse) et `LEAD_NOTIFY_TO` sont DÉJÀ dans `/opt/shimmer/.env`. C'est la clé d'envoi de Cors'Air, Tym a donné son accord ; elle est séparée de RESEND_API_KEY, donc les e-mails clients restent simulés.
