@@ -83,7 +83,12 @@ Plateforme IA e-commerce : un vendeur conversationnel dans la barre de recherche
     - bouton du haut sobre (« Demander un audit », fond papier, plus le jaune « cheap ») ;
     - `/signup/` renvoie vers l'audit au lieu de « Erreur 403 ».
     - Publié SANS `--delete` et SANS `/demo/` ni `/demo-boutiques/` (la page démo attend toujours le GO).
-  - **Formulaire d'audit : CODE FINI ET COMMITÉ (6a5bde1), PAS EN LIGNE.** Tests API : 549. Build du site : en attente du verrou `heavy` ce soir, à revérifier.
+  - **Formulaire d'audit EN PROD le 02/10 vers 07:00** (6a5bde1), sur feu vert de Tym. Avec lui : relances de panier (76ba426), newsletter avec accord marketing (209c0b0), 3 SQL appliqués. Détails :
+    - sauvegarde du schéma : `/opt/backups/shimmer-schema-avant-20261002-0700.sql` ;
+    - test de fumée 29/29 ;
+    - demande d'essai reçue dans le Gmail de Tym (expéditeur `alertes@corsairaventure.com`), puis effacée de la table `leads` ;
+    - formulaire vérifié en navigateur sur la prod ;
+    - site publié sans `/demo/` ni `/demo-boutiques/`.
     - Mise en prod, sur GO de Tym, dans cet ordre :
       1. `git status` ;
       2. SQL `2026-10-01-leads.sql`, `2026-10-01-cart-reminders.sql` et `2026-10-01-customer-marketing-consent.sql` ;
