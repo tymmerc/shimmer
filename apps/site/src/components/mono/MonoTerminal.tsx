@@ -34,7 +34,7 @@ export function MonoTerminal() {
                 <span>~ tym@laptop → bash</span>
                 <span className="flex items-center gap-1">
                   <span className="h-1.5 w-1.5 rounded-full bg-rose-400/80" />
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400/80" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-toxic-400/80" />
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/80" />
                 </span>
               </div>

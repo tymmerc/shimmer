@@ -6,7 +6,7 @@ const mails = [
   { from: 'Léa M.', subject: 'Commande pas reçue', tags: ['SAV', 'URGENT'], sentiment: 'négatif', tint: 'bg-rose-500/15 text-rose-700 border-rose-500/30' },
   { from: 'Karim B.', subject: 'Mode d\'emploi de l\'aspi ?', tags: ['QUESTION'], sentiment: 'neutre', tint: 'bg-toxic-500/10 text-toxic-700 border-toxic-500/25' },
   { from: 'Anna T.', subject: 'Top, je recommande', tags: ['AVIS'], sentiment: 'positif', tint: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30' },
-  { from: 'Jean P.', subject: 'Souci avec le filtre', tags: ['SAV'], sentiment: 'mitigé', tint: 'bg-amber-500/10 text-amber-700 border-amber-500/30' },
+  { from: 'Jean P.', subject: 'Souci avec le filtre', tags: ['SAV'], sentiment: 'mitigé', tint: 'bg-toxic-500/10 text-toxic-700 border-toxic-500/30' },
 ];
 
 const reviews = [

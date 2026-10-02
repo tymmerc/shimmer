@@ -79,7 +79,7 @@ export const Scene04Product: React.FC = () => {
                       display: "flex",
                       alignItems: "center",
                       gap: 8,
-                      boxShadow: "0 8px 24px rgba(212,255,58,0.4)",
+                      boxShadow: "0 8px 24px rgba(98,255,184,0.4)",
                     }}
                   >
                     <span style={{ fontSize: 16 }}>★</span> Les clients

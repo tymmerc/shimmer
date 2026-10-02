@@ -54,7 +54,7 @@ export function SectionIntegration() {
               <div className="relative overflow-hidden rounded-2xl border border-ink/15 bg-ink shadow-[0_30px_60px_-25px_rgba(13,11,20,0.4)]">
                 <div className="flex items-center gap-2 border-b border-paper/10 bg-paper/[0.04] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-paper/45">
                   <span className="h-2 w-2 rounded-full bg-rose-400/80" />
-                  <span className="h-2 w-2 rounded-full bg-amber-400/80" />
+                  <span className="h-2 w-2 rounded-full bg-toxic-400/80" />
                   <span className="h-2 w-2 rounded-full bg-acid/90" />
                   <span className="ml-3">index.html · 3 lignes ajoutées</span>
                 </div>

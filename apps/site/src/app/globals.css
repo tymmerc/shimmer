@@ -82,9 +82,8 @@ html, body {
 /* lift, glow). Uniquement transform/opacity => compositeur.           */
 /* ------------------------------------------------------------------ */
 /* Accent : menthe par défaut (choix de Tym, 02/10). Les autres teintes ne
-   servent qu'aux essais (?accent=acide|corail|cyan|ambre|os, voir layout.tsx). */
+   servent qu'aux essais (?accent=corail|cyan|ambre|os, voir layout.tsx). */
 :root { --acid: 98 255 184; --acid-deep: 52 214 142; }
-html[data-accent='acide']  { --acid: 212 255 58;  --acid-deep: 168 230 32; }
 html[data-accent='corail'] { --acid: 255 112 82; --acid-deep: 224 78 48; }
 html[data-accent='cyan']   { --acid: 92 225 255;  --acid-deep: 40 190 224; }
 html[data-accent='ambre']  { --acid: 255 176 46;  --acid-deep: 224 140 14; }

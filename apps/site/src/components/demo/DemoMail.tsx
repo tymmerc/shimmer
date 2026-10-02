@@ -47,7 +47,7 @@ const mails = [
     sentiment: 'mitigé',
     draft: 'Bonjour Jean, il y a deux modèles de filtre selon le n° de série. Pouvez-vous m\'envoyer une photo du n° gravé sous l\'aspi ? Je vous renvoie le bon, à mes frais.',
     action: 'Ticket SAV créé',
-    tint: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
+    tint: 'border-toxic-500/40 bg-toxic-500/10 text-toxic-300',
   },
 ];
 

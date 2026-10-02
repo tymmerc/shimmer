@@ -6,7 +6,7 @@ import { SectionHeader, Loading, ErrorBlock, Stat } from './AdminOverview';
 
 const STATUS_TINT: Record<string, string> = {
  sent: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
- queued: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
+ queued: 'border-toxic-500/40 bg-toxic-500/10 text-toxic-300',
  failed: 'border-rose-500/40 bg-rose-500/10 text-rose-300',
 };
 

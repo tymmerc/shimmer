@@ -193,7 +193,7 @@ export const Annotation: React.FC<{ f: number }> = ({ f }) => {
         strokeDashoffset={1 - draw}
         opacity={1 - out}
         style={{
-          filter: `drop-shadow(0 0 ${14 * glow}px rgba(212,255,58,${0.45 * glow}))`,
+          filter: `drop-shadow(0 0 ${14 * glow}px rgba(98,255,184,${0.45 * glow}))`,
         }}
       />
     </svg>

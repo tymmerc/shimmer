@@ -83,7 +83,7 @@ export function AdminIntegration() {
  </p>
  )}
  {(!data.email.configured || !data.sms.configured) && (
- <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-200">
+ <div className="mt-4 rounded-xl border border-toxic-500/30 bg-toxic-500/5 px-4 py-3 text-xs text-toxic-200">
  <strong>Mode démo :</strong> les canaux non configurés sont en mode simulation. Les envois sont
  loggés mais pas réellement transmis. Configurez Mailgun et Twilio dans le .env pour activer la production.
  </div>
@@ -175,7 +175,7 @@ export function AdminIntegration() {
  multiline
  />
  ) : (
- <p className="text-xs text-amber-600">Indisponible pour le moment.</p>
+ <p className="text-xs text-toxic-600">Indisponible pour le moment.</p>
  )}
  <p className="mt-3 text-xs text-neutral-400">
  La valeur <code className="rounded bg-neutral-50 px-1">sid_…</code> est <strong>secrète</strong> : ne la mettez nulle part ailleurs que dans ce code Liquid. Shopify l&apos;exécute sur son serveur, elle n&apos;arrive jamais dans le navigateur de vos visiteurs. Elle prouve que l&apos;email vient bien de votre boutique (la preuve expire au bout de 24 h), personne ne peut consulter les commandes d&apos;un autre client. Si ce code a fuité, demandez-nous un nouveau secret. L&apos;email n&apos;est envoyé qu&apos;au moment où le client pose une question sur sa commande dans le chat, jamais pour la mesure, sans cookie.
@@ -212,7 +212,7 @@ function ServiceCard({ label, provider, configured }: { label: string; provider:
 function StatusDot({ ok }: { ok: boolean }) {
  return (
  <span
- className={`inline-block h-2 w-2 rounded-full ${ok ? 'bg-emerald-600 shadow-[0_0_8px_rgba(155,255,0,0.6)]' : 'bg-amber-400/70'}`}
+ className={`inline-block h-2 w-2 rounded-full ${ok ? 'bg-emerald-600 shadow-[0_0_8px_rgba(155,255,0,0.6)]' : 'bg-toxic-400/70'}`}
  aria-label={ok ? 'configuré' : 'mode démo'}
  />
  );

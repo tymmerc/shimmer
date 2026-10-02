@@ -24,7 +24,7 @@ const tickets = [
     priority: 'NORMALE',
     age: 'il y a 1 h',
     auto: 'Réponse envoyée · attente du N° série',
-    tone: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
+    tone: 'border-toxic-500/40 bg-toxic-500/10 text-toxic-300',
   },
   {
     id: '#SAV-2839',

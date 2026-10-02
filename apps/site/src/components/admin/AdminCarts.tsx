@@ -6,7 +6,7 @@ import { api, type AbandonedCart } from './api';
 import { SectionHeader, SourceBadge, Loading, ErrorBlock, Stat } from './AdminOverview';
 
 const STATUS_TINT: Record<string, string> = {
- pending: 'border-amber-500/40 bg-amber-500/10 text-amber-600',
+ pending: 'border-toxic-500/40 bg-toxic-500/10 text-toxic-600',
  reminded_once: 'border-emerald-200 bg-emerald-100 text-emerald-600',
  reminded_twice: 'border-toxic-500/40 bg-emerald-500/10 text-emerald-600',
  recovered: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',

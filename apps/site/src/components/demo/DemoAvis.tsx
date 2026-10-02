@@ -29,7 +29,7 @@ const avis = [
     age: 'il y a 6 h',
     status: 'À MODÉRER',
     action: 'Mis en attente · vérification équipe',
-    tone: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
+    tone: 'border-toxic-500/40 bg-toxic-500/10 text-toxic-300',
   },
   {
     stars: 2,
@@ -130,7 +130,7 @@ export function DemoAvis() {
                       initial={{ width: 0 }}
                       animate={{ width: `${d.pct}%` }}
                       transition={{ delay: 0.2, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-                      className={`h-full rounded-full ${d.stars >= 4 ? 'bg-acid' : d.stars >= 3 ? 'bg-amber-400' : 'bg-rose-400'}`}
+                      className={`h-full rounded-full ${d.stars >= 4 ? 'bg-acid' : d.stars >= 3 ? 'bg-toxic-400' : 'bg-rose-400'}`}
                     />
                   </div>
                   <div className="text-right font-mono text-xs text-paper/55">{d.count}</div>
@@ -158,7 +158,7 @@ function Stars({ n }: { n: number }) {
   return (
     <div className="flex gap-0.5">
       {Array.from({ length: 5 }).map((_, i) => (
-        <svg key={i} width="14" height="14" viewBox="0 0 24 24" fill={i < n ? '#d4ff3a' : 'rgba(255,255,255,0.15)'}>
+        <svg key={i} width="14" height="14" viewBox="0 0 24 24" fill={i < n ? '#62ffb8' : 'rgba(255,255,255,0.15)'}>
           <path d="M12 2 L14.85 8.46 L22 9.27 L16.5 13.97 L18.18 21 L12 17.27 L5.82 21 L7.5 13.97 L2 9.27 L9.15 8.46 Z" />
         </svg>
       ))}

@@ -20,7 +20,7 @@ interface Timeline {
 }
 
 const STATUS_TINT: Record<string, string> = {
- pending: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
+ pending: 'border-toxic-500/40 bg-toxic-500/10 text-toxic-300',
  confirmed: 'border-acid/40 bg-acid/10 text-acid',
  prepared: 'border-acid/40 bg-acid/10 text-acid',
  shipped: 'border-toxic-500/40 bg-toxic-500/10 text-toxic-300',

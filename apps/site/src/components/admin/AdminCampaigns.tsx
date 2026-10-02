@@ -5,7 +5,7 @@ import { api, type OutboundCampaign } from './api';
 import { SectionHeader, Loading, ErrorBlock, Stat } from './AdminOverview';
 
 const STATUS_TINT: Record<string, string> = {
- draft: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
+ draft: 'border-toxic-500/40 bg-toxic-500/10 text-toxic-300',
  approved: 'border-acid/40 bg-acid/10 text-acid',
  scheduled: 'border-toxic-500/40 bg-toxic-500/10 text-toxic-300',
  published: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',

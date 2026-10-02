@@ -7,7 +7,7 @@ let acidRgb: string | null = null;
 function acidRgba(alpha: number): string {
   if (acidRgb === null) {
     const v = getComputedStyle(document.documentElement).getPropertyValue('--acid').trim();
-    acidRgb = v ? v.split(/\s+/).join(',') : '212,255,58';
+    acidRgb = v ? v.split(/\s+/).join(',') : '98,255,184';
   }
   return `rgba(${acidRgb},${alpha})`;
 }

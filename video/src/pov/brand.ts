@@ -38,7 +38,7 @@ export const S = {
   ink: "#0d0b14",
   ink2: "#15121f",
   paper: "#fbf9f4",
-  acid: "#d4ff3a",
+  acid: "#62ffb8",
   violet: "#6a2bf5",
   magenta: "#e84aff",
   line: "rgba(251,249,244,0.12)",

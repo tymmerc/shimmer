@@ -97,8 +97,8 @@ export function HoldoutScene() {
             <motion.div style={{ opacity: baseDim }}>
               <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.22em] text-paper/45">
                 <span>Vos visiteurs</span>
-                <motion.span style={{ opacity: temoinT }} className="flex items-center gap-2 text-amber-300">
-                  <span className="h-2 w-2 rounded-full border border-amber-300" />
+                <motion.span style={{ opacity: temoinT }} className="flex items-center gap-2 text-toxic-300">
+                  <span className="h-2 w-2 rounded-full border border-toxic-300" />
                   témoin · 10 %
                 </motion.span>
               </div>
@@ -226,7 +226,7 @@ function Dot({ isTemoin, t }: { isTemoin: boolean; t: MotionValue<number> }) {
       <motion.span style={{ opacity: fill }} className="absolute inset-0 rounded-full bg-paper/70" />
       <motion.span
         style={{ opacity: ring }}
-        className="absolute inset-0 rounded-full border-2 border-amber-300 bg-transparent"
+        className="absolute inset-0 rounded-full border-2 border-toxic-300 bg-transparent"
       />
     </span>
   );

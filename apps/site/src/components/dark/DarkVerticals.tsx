@@ -48,7 +48,7 @@ export function DarkVerticals() {
         </div>
 
         <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-paper/15 bg-paper/[0.04] px-3 py-1 font-mono text-[10px] uppercase tracking-[0.22em] text-paper/55">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+          <span className="h-1.5 w-1.5 rounded-full bg-toxic-400" />
           Boutiques de démonstration · données illustratives
         </div>
         <h2 className="mb-8 max-w-[22ch] font-display text-balance text-[clamp(40px,6vw,88px)] font-normal leading-[1.02] tracking-editorial text-paper">

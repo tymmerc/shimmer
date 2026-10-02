@@ -463,7 +463,7 @@ export function DemoOutbound() {
       </AnimatePresence>
 
       {liveError && !loading && (
-        <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-400/5 px-4 py-3 font-mono text-[11px] text-amber-200">
+        <div className="mt-4 rounded-xl border border-toxic-400/40 bg-toxic-400/5 px-4 py-3 font-mono text-[11px] text-toxic-200">
           ⚠ {liveError}
         </div>
       )}

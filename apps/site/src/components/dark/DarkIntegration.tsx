@@ -60,7 +60,7 @@ export function DarkIntegration() {
               <div className="relative overflow-hidden rounded-2xl border border-paper/10 bg-black shadow-[0_30px_60px_-25px_rgba(0,0,0,0.6)]">
                 <div className="flex items-center gap-2 border-b border-paper/10 bg-paper/[0.04] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-paper/50">
                   <span className="h-2 w-2 rounded-full bg-rose-400/80" />
-                  <span className="h-2 w-2 rounded-full bg-amber-400/80" />
+                  <span className="h-2 w-2 rounded-full bg-toxic-400/80" />
                   <span className="h-2 w-2 rounded-full bg-acid" />
                   <span className="ml-3">votre-fiche-produit.html · 3 lignes à coller</span>
                 </div>

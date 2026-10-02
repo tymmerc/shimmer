@@ -30,7 +30,7 @@ const variants = [
     name: 'Dark',
     tagline: 'Acid sombre',
     mood: 'Noir profond. Vert acide. Canvas toxique en background full. Plus tech, plus serré.',
-    palette: ['#0d0b14', '#d4ff3a', '#6a2bf5'],
+    palette: ['#0d0b14', '#62ffb8', '#6a2bf5'],
     accent: 'bg-acid',
     preview: (
       <div className="relative h-full w-full overflow-hidden bg-ink">
@@ -77,7 +77,7 @@ const variants = [
     name: 'Brut',
     tagline: 'Brutalist',
     mood: 'Acid green plein écran. Sans-serif noir ultra-bold. Blocs cassés. Le plus radical.',
-    palette: ['#d4ff3a', '#0d0b14', '#0d0b14'],
+    palette: ['#62ffb8', '#0d0b14', '#0d0b14'],
     accent: 'bg-ink',
     preview: (
       <div className="relative h-full w-full overflow-hidden bg-acid font-sans">

@@ -113,7 +113,7 @@ export function AdminOverview() {
 
  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-400">
  <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Natif Shopify</span>
- <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Nécessite un widget Shimmer</span>
+ <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-toxic-400" />Nécessite un widget Shimmer</span>
  </div>
 
  {/* L'ARGENT GAGNÉ — la star */}
@@ -175,9 +175,9 @@ function MoneyHero({ holdout, summary }: { holdout: HoldoutReport | null; summar
  </div>
  {holdout && (
  <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
- proven ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'
+ proven ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-toxic-200 bg-toxic-50 text-toxic-700'
  }`}>
- <span className={`h-1.5 w-1.5 rounded-full ${proven ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+ <span className={`h-1.5 w-1.5 rounded-full ${proven ? 'bg-emerald-500' : 'bg-toxic-500'}`} />
  {proven ? 'Vérifié et prouvé' : `${confidencePct} % de certitude`}
  </span>
  )}
@@ -324,7 +324,7 @@ export function SectionHeader({ eyebrow, title, accent, badge }: { eyebrow: stri
 export function SourceBadge({ label, native = false }: { label: string; native?: boolean }) {
  return (
  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-xs text-neutral-500">
- <span className={`h-1.5 w-1.5 rounded-full ${native ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+ <span className={`h-1.5 w-1.5 rounded-full ${native ? 'bg-emerald-500' : 'bg-toxic-400'}`} />
  {label}
  </span>
  );
@@ -336,7 +336,7 @@ export function SourceDot({ native = false, title }: { native?: boolean; title: 
  <span
  title={title}
  aria-label={title}
- className={`mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${native ? 'bg-emerald-500' : 'bg-amber-400'}`}
+ className={`mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${native ? 'bg-emerald-500' : 'bg-toxic-400'}`}
  />
  );
 }

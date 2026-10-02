@@ -68,7 +68,7 @@ export function ProofSimple() {
                     transition={{ duration: 0.3, ease }}
                     className={
                       control
-                        ? 'aspect-square rounded-full border-[1.5px] border-amber-300/80 bg-transparent'
+                        ? 'aspect-square rounded-full border-[1.5px] border-toxic-300/80 bg-transparent'
                         : 'aspect-square rounded-full bg-toxic-300/70'
                     }
                   />
@@ -77,7 +77,7 @@ export function ProofSimple() {
             </div>
             <div className="mt-4 flex items-center gap-4 font-mono text-[10px] uppercase tracking-[0.16em] text-paper/45">
               <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full border-[1.5px] border-amber-300/80" /> 4 témoins · 10 %
+                <span className="h-2 w-2 rounded-full border-[1.5px] border-toxic-300/80" /> 4 témoins · 10 %
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-toxic-300/70" /> exposés

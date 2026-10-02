@@ -361,7 +361,7 @@ function MiniBox({ label, value }: { label: string; value: string }) {
 function GateLine({ label, ok }: { label: string; ok: boolean }) {
  return (
  <div className="flex items-center gap-2">
- <span className={`inline-block h-2 w-2 rounded-full ${ok ? 'bg-acid shadow-[0_0_8px_rgb(var(--acid)/0.7)]' : 'bg-amber-400/70'}`} />
+ <span className={`inline-block h-2 w-2 rounded-full ${ok ? 'bg-acid shadow-[0_0_8px_rgb(var(--acid)/0.7)]' : 'bg-toxic-400/70'}`} />
  <span className={ok ? 'text-paper' : 'text-paper/55'}>{label}</span>
  </div>
  );

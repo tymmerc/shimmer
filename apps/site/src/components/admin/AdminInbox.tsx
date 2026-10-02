@@ -8,7 +8,7 @@ const CATEGORY_TINT: Record<string, string> = {
  DELIVERY_ISSUE: 'border-rose-500/40 bg-rose-500/10 text-rose-300',
  COMPLAINT: 'border-rose-500/40 bg-rose-500/10 text-rose-300',
  PRODUCT_QUESTION: 'border-acid/40 bg-acid/10 text-acid',
- ORDER_STATUS: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
+ ORDER_STATUS: 'border-toxic-500/40 bg-toxic-500/10 text-toxic-300',
  REFUND_REQUEST: 'border-rose-500/40 bg-rose-500/10 text-rose-300',
  POSITIVE_FEEDBACK: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
  OTHER: 'border-paper/20 bg-paper/[0.04] text-paper/55',

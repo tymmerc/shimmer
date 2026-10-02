@@ -7,16 +7,16 @@ import { SectionHeader, SourceBadge, Loading, ErrorBlock, Stat } from './AdminOv
 
 const PRIORITY_TINT: Record<string, string> = {
  delivery: 'border-red-500/40 bg-red-500/10 text-red-600',
- product_defect: 'border-amber-500/40 bg-amber-500/10 text-amber-600',
+ product_defect: 'border-toxic-500/40 bg-toxic-500/10 text-toxic-600',
  refund: 'border-red-500/40 bg-red-500/10 text-red-600',
- return: 'border-amber-500/40 bg-amber-500/10 text-amber-600',
+ return: 'border-toxic-500/40 bg-toxic-500/10 text-toxic-600',
  question: 'border-emerald-200 bg-emerald-100 text-emerald-600',
  other: 'border-neutral-200 bg-white text-neutral-500',
 };
 
 const STATUS_TINT: Record<string, string> = {
  open: 'border-red-500/40 bg-red-500/10 text-red-600',
- in_progress: 'border-amber-500/40 bg-amber-500/10 text-amber-600',
+ in_progress: 'border-toxic-500/40 bg-toxic-500/10 text-toxic-600',
  awaiting_customer: 'border-neutral-200 bg-white text-neutral-500',
  escalated: 'border-red-500/40 bg-red-500/10 text-red-600',
  resolved: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',

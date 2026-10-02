@@ -21,7 +21,7 @@ export const Stage: React.FC<{
           inset: 0,
           background:
             "radial-gradient(ellipse 50% 40% at 75% 35%, rgba(106,43,245,0.45), transparent 60%)," +
-            "radial-gradient(ellipse 40% 50% at 80% 75%, rgba(212,255,58,0.10), transparent 70%)",
+            "radial-gradient(ellipse 40% 50% at 80% 75%, rgba(98,255,184,0.10), transparent 70%)",
         }}
       />
     )}

@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="dark">
+<title>Lampe Bourgie · L'Atelier Lumière</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; background: #0b0b0c; }
+  body {
+    margin: 0;
+    background: #0b0b0c;
+    color: #ece8e1;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-weight: 300;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  img { max-width: 100%; height: auto; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  .demo-bar { border-bottom: 1px solid #1f1e1c; color: #8d877d; font-size: 10px; letter-spacing: .24em; text-transform: uppercase; text-align: center; padding: 6px 16px; }
+
+  .site-header { border-bottom: 1px solid #1f1e1c; }
+  .head-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 32px; padding-top: 22px; padding-bottom: 22px; }
+  .logo { color: #ece8e1; text-decoration: none; font-size: 15px; font-weight: 400; letter-spacing: .34em; text-transform: uppercase; }
+  .main-nav { display: flex; flex-wrap: wrap; gap: 6px 26px; }
+  .main-nav a { color: #b9b3a9; text-decoration: none; font-size: 11px; letter-spacing: .26em; text-transform: uppercase; }
+  .main-nav a:hover, .main-nav a[aria-current] { color: #ece8e1; }
+  .woocommerce-product-search { flex: 1 1 240px; max-width: 320px; margin: 0; }
+  .search-field {
+    width: 100%; margin: 0; padding: 10px 12px;
+    font: inherit; font-size: 16px; font-weight: 300; letter-spacing: .02em; color: #ece8e1;
+    background: transparent; border: 1px solid #3a3835; border-radius: 0;
+    -webkit-appearance: none; appearance: none;
+  }
+  .search-field::placeholder { color: #77736c; }
+  .search-field:focus { outline: none; border-color: #e0a43a; }
+
+  .crumbs { margin: 26px 0 26px; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: #77736c; }
+  .crumbs a { color: inherit; text-decoration: none; }
+
+  .product { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .media { margin: 0; background: #151413; }
+  .media img { display: block; width: 100%; }
+  .designer { margin: 0 0 14px; font-size: 11px; letter-spacing: .26em; text-transform: uppercase; color: #e0a43a; }
+  .summary h1 { margin: 0 0 14px; font-size: clamp(30px, 4.4vw, 48px); font-weight: 200; letter-spacing: .04em; line-height: 1.08; text-transform: uppercase; }
+  .price { margin: 0 0 22px; font-size: 20px; font-weight: 300; letter-spacing: .06em; }
+  .desc { margin: 0 0 26px; max-width: 44ch; color: #cfc9bf; }
+  .specs { width: 100%; margin: 0 0 28px; border-collapse: collapse; font-size: 13px; }
+  .specs th, .specs td { padding: 9px 0; border-top: 1px solid #1f1e1c; text-align: left; vertical-align: top; }
+  .specs th { width: 42%; font-weight: 400; font-size: 10px; letter-spacing: .24em; text-transform: uppercase; color: #8d877d; padding-top: 11px; }
+  .cart { display: flex; flex-wrap: wrap; gap: 12px; margin: 0; }
+  .single_add_to_cart_button {
+    flex: 1 1 220px; padding: 17px 28px; cursor: pointer;
+    font: inherit; font-size: 12px; font-weight: 500; letter-spacing: .28em; text-transform: uppercase;
+    color: #0b0b0c; background: #e0a43a; border: 0; border-radius: 0;
+  }
+  .single_add_to_cart_button:hover { background: #ebb554; }
+  .single_add_to_cart_button:focus-visible { outline: 1px solid #ece8e1; outline-offset: 3px; }
+  .stock { margin: 14px 0 0; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #8d877d; }
+
+  .related { margin: 64px 0 72px; padding-top: 30px; border-top: 1px solid #1f1e1c; }
+
+  footer { border-top: 1px solid #1f1e1c; }
+  .foot { padding-top: 30px; padding-bottom: 36px; font-size: 12px; color: #77736c; }
+  .foot p { margin: 0 0 6px; }
+  .foot-logo { font-size: 12px; letter-spacing: .34em; text-transform: uppercase; color: #b9b3a9; }
+
+  @media (min-width: 820px) {
+    .product { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 56px; align-items: center; }
+  }
+  @media (max-width: 480px) {
+    .wrap { padding-left: 16px; padding-right: 16px; }
+    .main-nav { gap: 6px 18px; }
+    .main-nav a { letter-spacing: .2em; }
+    .logo { letter-spacing: .26em; }
+  }
+</style>
+</head>
+<body>
+<div class="demo-bar">Boutique de démonstration · catalogue de test</div>
+
+<header class="site-header">
+  <div class="wrap head-row">
+    <a class="logo" href="atelier.html">L'Atelier Lumière</a>
+    <nav class="main-nav" aria-label="Collections">
+      <a href="atelier.html">Suspensions</a>
+      <a href="atelier.html" aria-current="page">Lampes</a>
+      <a href="atelier.html">Appliques</a>
+      <a href="atelier.html">Lampadaires</a>
+      <a href="atelier.html">Bureau</a>
+    </nav>
+    <form role="search" class="woocommerce-product-search" action="atelier.html" method="get">
+      <label class="sr" for="s">Rechercher un luminaire</label>
+      <input id="s" type="search" class="search-field" name="s" placeholder="Rechercher" autocomplete="off">
+      <input type="hidden" name="post_type" value="product">
+    </form>
+  </div>
+</header>
+
+<main class="wrap">
+  <p class="crumbs"><a href="atelier.html">Collections</a> / <a href="atelier.html">Lampes de table</a> / Bourgie</p>
+
+  <article class="product">
+    <figure class="media">
+      <img src="img/lampe-table-1.svg" alt="Lampe de table Bourgie" width="640" height="640">
+    </figure>
+    <div class="summary">
+      <p class="designer">Kartell · Ferruccio Laviani</p>
+      <h1>Lampe Bourgie</h1>
+      <p class="price">290,00&nbsp;€</p>
+      <p class="desc">Bourgie, lampe Kartell Ferruccio Laviani. Style baroque revisité, polycarbonate. Pièce ludique et chic.</p>
+      <table class="specs">
+        <tr><th scope="row">Hauteur</th><td>68 cm</td></tr>
+        <tr><th scope="row">Matière</th><td>Polycarbonate</td></tr>
+        <tr><th scope="row">Finitions</th><td>Transparent, noir, or</td></tr>
+        <tr><th scope="row">Ampoule</th><td>E14, 60 W max, 2700 K</td></tr>
+        <tr><th scope="row">Pour</th><td>Salon, chambre</td></tr>
+      </table>
+      <form class="cart" action="atelier.html">
+        <button type="button" name="add-to-cart" value="2138" class="single_add_to_cart_button button alt">Ajouter au panier</button>
+      </form>
+      <p class="stock">En stock · expédition sous 72&nbsp;h</p>
+    </div>
+  </article>
+
+  <section class="related" aria-label="Suggestions du vendeur">
+    <div data-shimmer-crosssell="2138"></div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <p class="foot-logo">L'Atelier Lumière</p>
+    <p>Galerie de luminaires contemporains et rééditions.</p>
+    <p>Boutique fictive créée pour la démonstration du widget Shimmer.</p>
+  </div>
+</footer>
+
+<script src="/shimmer/sdk/shimmer.iife.js" data-shimmer data-store="5" data-key="pk_7Zo54Ma12J0FGsoM8zkOpJC8K-HuzOg7iVonCAb4" data-consent="denied" defer></script>
+<script>
+  // Le SDK démarre seul ; les cartes de la fiche produit se demandent à part.
+  document.addEventListener('DOMContentLoaded', function () {
+    if (window.Shimmer && window.Shimmer.crossSell) {
+      window.Shimmer.crossSell.render().catch(function () {});
+    }
+  });
+</script>
+</body>
+</html>

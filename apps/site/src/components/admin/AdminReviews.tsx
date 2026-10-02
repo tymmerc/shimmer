@@ -26,7 +26,7 @@ interface Stats {
 }
 
 const STATUS_TINT: Record<string, string> = {
- PENDING_MODERATION: 'border-amber-500/40 bg-amber-500/10 text-amber-600',
+ PENDING_MODERATION: 'border-toxic-500/40 bg-toxic-500/10 text-toxic-600',
  PUBLISHED: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
  REJECTED: 'border-red-500/40 bg-red-500/10 text-red-600',
  HIDDEN: 'border-neutral-200 bg-white text-neutral-400',
@@ -102,7 +102,7 @@ export function AdminReviews() {
  <ul className="mt-3 space-y-2 text-sm text-neutral-600">
  <li className="flex gap-2"><span className="text-emerald-600">·</span> 48h après livraison, demande d'avis envoyée auto.</li>
  <li className="flex gap-2"><span className="text-emerald-600">·</span> <span className="text-emerald-300">4-5★</span> publiés direct sur la fiche.</li>
- <li className="flex gap-2"><span className="text-emerald-600">·</span> <span className="text-amber-600">3★</span> en modération humaine.</li>
+ <li className="flex gap-2"><span className="text-emerald-600">·</span> <span className="text-toxic-600">3★</span> en modération humaine.</li>
  <li className="flex gap-2"><span className="text-emerald-600">·</span> <span className="text-red-600">1-2★</span> déclenchent un ticket SAV avant Google.</li>
  </ul>
  </div>
@@ -164,7 +164,7 @@ function Stars({ n }: { n: number }) {
  return (
  <div className="flex gap-0.5">
  {Array.from({ length: 5 }).map((_, i) => (
- <svg key={i} width="14" height="14" viewBox="0 0 24 24" fill={i < n ? '#d4ff3a' : 'rgba(255,255,255,0.15)'}>
+ <svg key={i} width="14" height="14" viewBox="0 0 24 24" fill={i < n ? '#62ffb8' : 'rgba(255,255,255,0.15)'}>
  <path d="M12 2 L14.85 8.46 L22 9.27 L16.5 13.97 L18.18 21 L12 17.27 L5.82 21 L7.5 13.97 L2 9.27 L9.15 8.46 Z" />
  </svg>
  ))}
