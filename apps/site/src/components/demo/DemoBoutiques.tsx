@@ -38,7 +38,7 @@ const SHOPS: readonly Shop[] = [
     file: 'caves.html',
     storeId: 4,
     frameTitle: 'Boutique de démonstration Caves Forty-Two, fiche Saint-Émilion Grand Cru 2019',
-    queries: ['un rouge pour un barbecue', 'une idée cadeau autour de 40 €'],
+    queries: ['rouge', 'un cadeau'],
     reads: 'fond crème, texte brun, police à empattements, bouton bordeaux aux coins de 4 px',
   },
   {
@@ -48,7 +48,7 @@ const SHOPS: readonly Shop[] = [
     file: 'atelier.html',
     storeId: 5,
     frameTitle: "Boutique de démonstration L'Atelier Lumière, fiche Lampe Bourgie",
-    queries: ['une lampe pour lire au lit', 'une suspension pour une table de 6'],
+    queries: ['lampe', 'suspension'],
     reads: 'fond presque noir, texte ivoire, Helvetica fine, bouton ambre, angles droits',
   },
   {
@@ -58,7 +58,7 @@ const SHOPS: readonly Shop[] = [
     file: 'caves-refonte.html',
     storeId: 4,
     frameTitle: 'Boutique de démonstration Caves Forty-Two après refonte, fiche Champagne Rosé de Saignée',
-    queries: ['des bulles pour un apéro', 'un blanc bien frais'],
+    queries: ['bulles', 'un blanc'],
     reads: 'fond blanc cassé, texte noir, police système, bouton tomate en pilule',
   },
 ];
