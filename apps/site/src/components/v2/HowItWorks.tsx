@@ -93,7 +93,7 @@ export function HowItWorks() {
                   aria-hidden
                   className={`absolute left-0 top-[3px] h-[11px] w-[11px] rounded-full border lg:-top-[5px] ${
                     s.final
-                      ? 'border-acid bg-acid shadow-[0_0_18px_rgba(212,255,58,0.65)]'
+                      ? 'border-acid bg-acid shadow-[0_0_18px_rgb(var(--acid)/0.65)]'
                       : 'border-acid/70 bg-ink'
                   }`}
                 />

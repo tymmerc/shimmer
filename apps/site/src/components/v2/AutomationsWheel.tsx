@@ -97,7 +97,7 @@ export function AutomationsWheel() {
                       y1="50"
                       x2={c.x}
                       y2={c.y}
-                      stroke={active === i ? 'rgba(212,255,58,0.7)' : 'rgba(255,255,255,0.10)'}
+                      stroke={active === i ? 'rgb(var(--acid)/0.7)' : 'rgba(255,255,255,0.10)'}
                       strokeWidth={active === i ? 0.6 : 0.35}
                       className="transition-all duration-300"
                     />
@@ -118,7 +118,7 @@ export function AutomationsWheel() {
                     <span
                       className={`wheel-counter flex h-full w-full items-center justify-center rounded-full border text-center font-mono text-[10px] uppercase tracking-[0.14em] transition-colors duration-300 md:text-[11px] ${
                         active === i
-                          ? 'border-acid/70 bg-acid/15 text-acid shadow-[0_0_30px_rgba(212,255,58,0.25)]'
+                          ? 'border-acid/70 bg-acid/15 text-acid shadow-[0_0_30px_rgb(var(--acid)/0.25)]'
                           : 'border-paper/15 bg-ink/60 text-paper/70 group-hover:text-paper'
                       }`}
                     >

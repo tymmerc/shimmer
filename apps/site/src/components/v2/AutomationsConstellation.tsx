@@ -2,6 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+// Accent lu une fois depuis la variable CSS --acid (voir globals.css).
+let acidRgb: string | null = null;
+function acidRgba(alpha: number): string {
+  if (acidRgb === null) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue('--acid').trim();
+    acidRgb = v ? v.split(/\s+/).join(',') : '212,255,58';
+  }
+  return `rgba(${acidRgb},${alpha})`;
+}
+
 interface Link { to: string; text: string; }
 interface Node { key: string; label: string; line: string; links: Link[]; }
 
@@ -189,7 +199,7 @@ export function AutomationsConstellation() {
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
           ctx.quadraticCurveTo(mx, my, b.x, b.y);
-          ctx.strokeStyle = 'rgba(212,255,58,0.5)';
+          ctx.strokeStyle = acidRgba(0.5);
           ctx.lineWidth = 1.4;
           ctx.stroke();
           // particules acides le long de l'arc
@@ -200,7 +210,7 @@ export function AutomationsConstellation() {
             const y = q * q * a.y + 2 * q * tt * my + tt * tt * b.y;
             ctx.beginPath();
             ctx.arc(x, y, 2, 0, TAU);
-            ctx.fillStyle = `rgba(212,255,58,${Math.sin(tt * Math.PI) * 0.9})`;
+            ctx.fillStyle = acidRgba(Math.sin(tt * Math.PI) * 0.9);
             ctx.fill();
           }
         }

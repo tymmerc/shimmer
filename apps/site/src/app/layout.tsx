@@ -36,7 +36,18 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr" className={`${fraunces.variable} ${interTight.variable} ${jetbrains.variable}`}>
+    <html lang="fr" className={`${fraunces.variable} ${interTight.variable} ${jetbrains.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Essais de couleur d'accent : ?accent=corail|cyan|ambre|menthe|os, gardé
+            pour la session ; ?accent=acide revient au jaune. Liste fixe, aucune
+            valeur de l'URL n'est écrite telle quelle. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var A=['corail','cyan','ambre','menthe','os'],q=new URLSearchParams(location.search).get('accent'),v=q==='acide'?null:(A.indexOf(q)>-1?q:sessionStorage.getItem('shimmer-accent'));if(q)q==='acide'?sessionStorage.removeItem('shimmer-accent'):A.indexOf(q)>-1&&sessionStorage.setItem('shimmer-accent',q);if(v&&A.indexOf(v)>-1)document.documentElement.setAttribute('data-accent',v)}catch(e){}",
+          }}
+        />
+      </head>
       <body className="font-sans antialiased">
         <ScrollProgress />
         <SmoothScroll>{children}</SmoothScroll>

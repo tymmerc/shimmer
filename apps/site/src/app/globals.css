@@ -43,7 +43,7 @@ html, body {
     radial-gradient(52% 68% at 90% 55%, rgba(232, 74, 255, 0.6), rgba(232, 74, 255, 0) 72%),
     radial-gradient(34% 42% at 68% 46%, rgba(255, 158, 247, 0.55), rgba(255, 158, 247, 0) 68%),
     radial-gradient(40% 52% at 62% 74%, rgba(139, 77, 255, 0.55), rgba(139, 77, 255, 0) 72%),
-    radial-gradient(20% 24% at 57% 55%, rgba(212, 255, 58, 0.14), rgba(212, 255, 58, 0) 70%),
+    radial-gradient(20% 24% at 57% 55%, rgb(var(--acid) / 0.14), rgb(var(--acid) / 0) 70%),
     radial-gradient(60% 75% at 84% 84%, rgba(79, 29, 199, 0.65), rgba(79, 29, 199, 0) 75%),
     radial-gradient(45% 60% at 96% 12%, rgba(58, 20, 150, 0.55), rgba(58, 20, 150, 0) 72%),
     #0d0b14;
@@ -59,7 +59,7 @@ html, body {
   background:
     radial-gradient(30% 38% at 72% 38%, rgba(255, 120, 240, 0.5), rgba(255, 120, 240, 0) 70%),
     radial-gradient(26% 32% at 60% 62%, rgba(168, 120, 255, 0.4), rgba(168, 120, 255, 0) 70%),
-    radial-gradient(20% 26% at 80% 70%, rgba(212, 255, 58, 0.1), rgba(212, 255, 58, 0) 70%);
+    radial-gradient(20% 26% at 80% 70%, rgb(var(--acid) / 0.1), rgb(var(--acid) / 0) 70%);
 }
 /* Dérive seulement sur desktop à pointeur fin (fluidité tactile préservée). */
 @media (hover: hover) and (pointer: fine) {
@@ -81,6 +81,15 @@ html, body {
 /* Boutons : hover à la hauteur du reste du design (sweep de lumière,  */
 /* lift, glow). Uniquement transform/opacity => compositeur.           */
 /* ------------------------------------------------------------------ */
+/* Accent : jaune acide par défaut. Les autres teintes ne servent qu'aux essais
+   (?accent=corail|cyan|ambre|menthe|os sur le site, voir layout.tsx). */
+:root { --acid: 212 255 58; --acid-deep: 168 230 32; }
+html[data-accent='corail'] { --acid: 255 112 82; --acid-deep: 224 78 48; }
+html[data-accent='cyan']   { --acid: 92 225 255;  --acid-deep: 40 190 224; }
+html[data-accent='ambre']  { --acid: 255 176 46;  --acid-deep: 224 140 14; }
+html[data-accent='menthe'] { --acid: 98 255 184;  --acid-deep: 52 214 142; }
+html[data-accent='os']     { --acid: 241 236 224; --acid-deep: 214 207 190; }
+
 .btn {
   position: relative;
   overflow: hidden;
@@ -106,7 +115,7 @@ html, body {
 
 .btn-acid:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 40px -6px rgba(212, 255, 58, 0.45), 0 2px 12px rgba(212, 255, 58, 0.25);
+  box-shadow: 0 8px 40px -6px rgb(var(--acid) / 0.45), 0 2px 12px rgb(var(--acid) / 0.25);
 }
 .btn-ghost::after {
   background: linear-gradient(115deg, transparent 25%, rgba(251, 249, 244, 0.14) 50%, transparent 75%);
@@ -164,10 +173,10 @@ html.lenis, html.lenis body { height: auto; }
 }
 a[data-node]:hover .node-face,
 .node-face.is-active {
-  border-color: rgba(212,255,58,0.7);
-  background: rgba(212,255,58,0.14);
-  color: #d4ff3a;
-  box-shadow: 0 0 34px rgba(212,255,58,0.28);
+  border-color: rgb(var(--acid) / 0.7);
+  background: rgb(var(--acid) / 0.14);
+  color: rgb(var(--acid));
+  box-shadow: 0 0 34px rgb(var(--acid) / 0.28);
 }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 

@@ -28,9 +28,11 @@ const config: Config = {
           800: '#260a66',
           900: '#160340',
         },
+        // Accent piloté par --acid / --acid-deep (triplets rgb, voir globals.css) :
+        // jaune acide par défaut, autres teintes via ?accent= pour les essais.
         acid: {
-          DEFAULT: '#d4ff3a',
-          deep: '#a8e620',
+          DEFAULT: 'rgb(var(--acid) / <alpha-value>)',
+          deep: 'rgb(var(--acid-deep) / <alpha-value>)',
         },
         bone: '#f1ece0',
       },

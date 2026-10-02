@@ -16,7 +16,7 @@ export function ToxicSpread() {
           background:
             'radial-gradient(38% 46% at 62% 30%, rgba(232,74,255,0.85), rgba(232,74,255,0) 70%),' +
             'radial-gradient(44% 52% at 44% 52%, rgba(139,77,255,0.8), rgba(139,77,255,0) 72%),' +
-            'radial-gradient(26% 32% at 55% 48%, rgba(212,255,58,0.3), rgba(212,255,58,0) 68%)',
+            'radial-gradient(26% 32% at 55% 48%, rgb(var(--acid)/0.3), rgb(var(--acid)/0) 68%)',
         }}
       />
       <div

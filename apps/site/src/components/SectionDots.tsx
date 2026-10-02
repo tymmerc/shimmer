@@ -70,7 +70,7 @@ export function SectionDots() {
             <span
               className={`rounded-full transition-all duration-300 ${
                 isActive
-                  ? 'h-2.5 w-2.5 bg-acid shadow-[0_0_12px_rgba(212,255,58,0.8)]'
+                  ? 'h-2.5 w-2.5 bg-acid shadow-[0_0_12px_rgb(var(--acid)/0.8)]'
                   : 'h-1.5 w-1.5 bg-paper/30 group-hover:bg-paper/70'
               }`}
             />

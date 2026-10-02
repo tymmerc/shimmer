@@ -120,7 +120,7 @@ export function ProofSimple() {
                     variants={{ hidden: { width: 0 }, show: { width: `${ACID_PCT}%` } }}
                     transition={{ duration: 0.7, ease, delay: 0.9 }}
                     style={{ left: `${REF_PCT}%` }}
-                    className="absolute inset-y-0 rounded-r-full bg-acid shadow-[0_0_22px_rgba(212,255,58,0.5)]"
+                    className="absolute inset-y-0 rounded-r-full bg-acid shadow-[0_0_22px_rgb(var(--acid)/0.5)]"
                   />
                   {/* ligne de référence : niveau « sans Shimmer » */}
                   <div

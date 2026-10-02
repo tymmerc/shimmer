@@ -5,12 +5,6 @@ import { AUDIT_EMAIL, AUDIT_MAILTO } from '@/lib/audit';
 import { AuditForm, useLeadFormAvailable } from './AuditForm';
 import { CopyEmail } from './CopyEmail';
 
-const LEAKS = [
-  ['01', 'Les recherches qui ne trouvent rien.'],
-  ['02', 'Les paniers qui partent sans relance.'],
-  ['03', 'Les avis jamais demandés.'],
-];
-
 /** Le moment CTA : l'audit gratuit, l'accroche commerciale n°1. */
 export function AuditCTA() {
   // Formulaire seulement si l'API a la route (ping) ; sinon, et en attendant,
@@ -33,17 +27,8 @@ export function AuditCTA() {
           <h2 className="mt-5 max-w-[20ch] font-display text-[clamp(30px,5.5vw,84px)] font-normal leading-[1.02] tracking-tightest text-paper md:mt-6">
             Un audit gratuit qui montre <span className="italic text-acid">ce qui fuit</span>.
           </h2>
-          {/* Pas de paragraphe d'intro : le titre + les trois fuites disent tout. */}
-          <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4 md:mt-12">
-            {LEAKS.map(([n, txt]) => (
-              <div key={n} className="flex gap-4 border-t border-paper/15 pt-4 sm:pt-5">
-                <span className="font-mono text-sm text-acid">{n}</span>
-                <span className="text-pretty text-[15px] leading-snug text-paper md:text-xl">{txt}</span>
-              </div>
-            ))}
-          </div>
 
-          <div className="mt-10 border-t border-paper/15 pt-7 md:mt-14 md:pt-9">
+          <div className="mt-8 border-t border-paper/15 pt-7 md:mt-12 md:pt-9">
             {formReady ? (
               <motion.div
                 initial={reduceMotion ? false : { opacity: 0 }}

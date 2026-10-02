@@ -43,7 +43,7 @@ export function DemoSuivi() {
                 <span
                   className={`absolute -left-[27px] top-1 h-3 w-3 rounded-full border-2 ${
                     e.current
-                      ? 'border-acid bg-acid shadow-[0_0_12px_rgba(212,255,58,0.6)]'
+                      ? 'border-acid bg-acid shadow-[0_0_12px_rgb(var(--acid)/0.6)]'
                       : e.done
                         ? 'border-paper/50 bg-paper/30'
                         : 'border-paper/20 bg-ink'

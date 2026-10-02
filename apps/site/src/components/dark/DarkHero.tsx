@@ -49,7 +49,7 @@ export function DarkHero() {
           <motion.span
             animate={{ opacity: [0.6, 1, 0.6], scale: [1, 1.2, 1] }}
             transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-            className="h-1.5 w-1.5 rounded-full bg-acid shadow-[0_0_14px_rgba(212,255,58,0.9)]"
+            className="h-1.5 w-1.5 rounded-full bg-acid shadow-[0_0_14px_rgb(var(--acid)/0.9)]"
           />
           Shimmer · la plateforme IA pour votre boutique
         </motion.div>

@@ -100,7 +100,7 @@ function PinnedDeck() {
                 >
                   <span
                     className={`h-1.5 w-1.5 shrink-0 rounded-full transition-all duration-200 ${
-                      i === active ? 'scale-125 bg-acid shadow-[0_0_10px_rgba(212,255,58,0.8)]' : 'bg-paper/25'
+                      i === active ? 'scale-125 bg-acid shadow-[0_0_10px_rgb(var(--acid)/0.8)]' : 'bg-paper/25'
                     }`}
                   />
                   <span

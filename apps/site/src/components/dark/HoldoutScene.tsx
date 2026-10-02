@@ -138,7 +138,7 @@ export function HoldoutScene() {
                     {/* Surplus prouvé : ~18 % de la base */}
                     <motion.div
                       style={{ scaleY: surplusT, opacity: surplusT, transformOrigin: 'bottom', height: '11%' }}
-                      className="w-full rounded-t-lg bg-acid shadow-[0_0_28px_rgba(212,255,58,0.35)]"
+                      className="w-full rounded-t-lg bg-acid shadow-[0_0_28px_rgb(var(--acid)/0.35)]"
                     />
                     <motion.div
                       style={{ scaleY: barsT, transformOrigin: 'bottom', height: '62%' }}
