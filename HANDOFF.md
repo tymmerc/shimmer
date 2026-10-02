@@ -140,6 +140,8 @@ Plateforme IA e-commerce : un vendeur conversationnel dans la barre de recherche
       - rendre le dépôt privé ou purger son historique ;
       - poser MISTRAL_API_KEY dans `.env` pour le vendeur rapide (puis redémarrage de l'API) ;
       - **regarder la page démo** https://dev.tymmerc.eu/shimmer/demo/boutiques/ et dire si elle part en prod, avec ou sans les illustrations (`sql/2026-10-01-demo-images.sql`, à lancer après la publication) ;
+      - **Corsica AI Forum** (14/10, 14 h, amphi De Santi à Corte, organisé par l'AEG, contact Wassim El Makrini) : proposer une démo de Shimmer. Brouillon du message donné à Tym le 02/10. Avant la démo : clé Mistral (sinon 20 s par réponse) et page démo en prod ;
+      - à l'achat du domaine Shimmer : passer `LEAD_NOTIFY_FROM` sur ce domaine. Les alertes de demande d'audit partent pour l'instant de `alertes@corsairaventure.com` (clé Resend de Cors'Air). Elles ne vont qu'à Tym, donc ça peut attendre ;
       - désactiver le workflow GitHub « Deploy site to VPS (dev) » (Actions, « … », Disable workflow) : un mail d'échec arrive à chaque commit, et le garde-fou m'interdit de le faire.
     - shimmer-workers arrêté et désactivé (doublon exact des workers de l'API). Unit en 600.
     - État réel (agent, 30/09) : aucune feature sur du vrai trafic, 5 boutiques démo/test, e-mails et SMS simulés (pas de Resend), aucun webhook Shopify/Woo réel reçu, n8n décoratif.
