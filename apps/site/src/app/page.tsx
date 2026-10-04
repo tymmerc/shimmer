@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { DarkPageTheme } from '@/components/dark/DarkPageTheme';
 import { ToxicSpread } from '@/components/v2/ToxicSpread';
+import { ToxicRibbon } from '@/components/v2/ToxicRibbon';
 import { ShimmerHero } from '@/components/v2/ShimmerHero';
 import { Pillars } from '@/components/v2/Pillars';
 import { Satellites } from '@/components/v2/Satellites';
@@ -24,6 +25,10 @@ export default function HomePage() {
 
       {/* Contenu au-dessus de la toxine (fond transparent, elle transparaît). */}
       <main className="relative z-10 min-h-screen overflow-x-clip text-paper">
+        {/* Le ruban de toxine : fixe, dessiné en coordonnées de la page, il sort
+            du hero (au-dessus de son shader et de ses fondus, z-4) et passe
+            sous le texte et les cartes de chaque section (z-10). */}
+        <ToxicRibbon />
         <ShimmerHero />
         <Pillars />
         <Satellites />

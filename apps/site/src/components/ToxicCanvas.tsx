@@ -51,6 +51,20 @@ function shouldSkipCanvas(): boolean {
   return typeof window === 'undefined';
 }
 
+/**
+ * Rendu LOGICIEL (SwiftShader, llvmpipe, Basic Render) : le shader tournerait
+ * sur le CPU et gèlerait la page. `?toxine=force` dans l'adresse passe outre,
+ * pour les captures de vérification (navigateur sans carte graphique).
+ */
+export function isSoftwareRenderer(gl: WebGLRenderingContext): boolean {
+  try {
+    if (new URLSearchParams(window.location.search).get('toxine') === 'force') return false;
+  } catch { /* pas d'URL : on détecte normalement */ }
+  const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+  const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+  return /swiftshader|software|basic render|llvmpipe|microsoft basic/i.test(renderer);
+}
+
 function isTouchDevice(): boolean {
   if (typeof window === 'undefined') return false;
   return (navigator.maxTouchPoints ?? 0) > 0 || 'ontouchstart' in window;
@@ -86,9 +100,7 @@ export function ToxicCanvas({ className }: ToxicCanvasProps) {
     // principal (la page gèle). Dans ce cas on renonce au shader et on laisse
     // la nappe animée CSS (STATIC_BG + .toxic-fluid-drift), légère et fluide.
     // Sur GPU matériel, le vrai shader tourne normalement.
-    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
-    const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
-    if (/swiftshader|software|basic render|llvmpipe|microsoft basic/i.test(renderer)) {
+    if (isSoftwareRenderer(gl)) {
       // Créer le contexte (alpha:false) a déjà rendu le canvas opaque noir :
       // on le démonte, sinon il masque la nappe CSS qu'on veut montrer.
       setActive(false);
