@@ -142,7 +142,7 @@ Plateforme IA e-commerce : un vendeur conversationnel dans la barre de recherche
       - changer le mot de passe n8n (publié dans l'historique du dépôt public, commit f94867d) ;
       - rendre le dépôt privé ou purger son historique ;
       - poser MISTRAL_API_KEY dans `.env` pour le vendeur rapide (puis redémarrage de l'API) ;
-      - **regarder la page démo** https://dev.tymmerc.eu/shimmer/demo/boutiques/ et dire si elle part en prod, avec ou sans les illustrations (`sql/2026-10-01-demo-images.sql`, à lancer après la publication) ;
+      - **choisir la couleur d'accent de la landing** (05/10, en attente, Tym sur téléphone) : la prod est en menthe ; dev est en « toxine » (magenta clair) par défaut, que Tym trouve « violet sur violet » dans le hero. À comparer sur dev : `?accent=duo` (italiques en blanc, magenta sur les petits éléments, recommandé) ou `?accent=os` (tout en blanc chaud). Pour passer en prod : mettre la variante choisie par défaut dans `globals.css` (`:root`) et `layout.tsx` (la valeur exclue de `data-accent`), rebuild, publier ;
       - **Corsica AI Forum** (14/10, 14 h, amphi De Santi à Corte, organisé par l'AEG, contact Wassim El Makrini) : proposer une démo de Shimmer. Brouillon du message donné à Tym le 02/10. Avant la démo : clé Mistral (sinon 20 s par réponse) et page démo en prod ;
       - à l'achat du domaine Shimmer : passer `LEAD_NOTIFY_FROM` sur ce domaine. Les alertes de demande d'audit partent pour l'instant de `alertes@corsairaventure.com` (clé Resend de Cors'Air). Elles ne vont qu'à Tym, donc ça peut attendre ;
       - désactiver le workflow GitHub « Deploy site to VPS (dev) » (Actions, « … », Disable workflow) : un mail d'échec arrive à chaque commit, et le garde-fou m'interdit de le faire.
