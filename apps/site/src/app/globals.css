@@ -85,19 +85,21 @@ html[data-toxine='css'] .toxic-fallback { display: block; }
 /* Boutons : hover à la hauteur du reste du design (sweep de lumière,  */
 /* lift, glow). Uniquement transform/opacity => compositeur.           */
 /* ------------------------------------------------------------------ */
-/* Accent : une seule couleur sur la page, la toxine (choix de Tym, 05/10,
-   après le retour « les couleurs vont pas ») : magenta clair, lisible sur
-   l'encre comme sur la lueur. Les autres teintes ne servent qu'aux essais
-   (?accent=menthe|corail|cyan|ambre|os|lilas, voir layout.tsx). */
-:root { --acid: 236 176 255; --acid-deep: 214 120 255; --acid-display: var(--acid); }
-html[data-accent='menthe'] { --acid: 98 255 184; --acid-deep: 52 214 142; }
-/* duo : italiques en papier, accent magenta réservé aux petits éléments. */
-html[data-accent='duo']    { --acid: 236 176 255; --acid-deep: 214 120 255; --acid-display: 251 249 244; }
-html[data-accent='corail'] { --acid: 255 112 82; --acid-deep: 224 78 48; }
-html[data-accent='cyan']   { --acid: 92 225 255;  --acid-deep: 40 190 224; }
-html[data-accent='ambre']  { --acid: 255 176 46;  --acid-deep: 224 140 14; }
+/* Accent « duo » (choix de Tym, 05/10, après le retour « les couleurs vont
+   pas ») : une seule famille de couleur, la toxine. Le magenta clair ne sert
+   qu'aux petits éléments (surtitres, points, liens) ; les grands mots en
+   italique des titres restent en papier (--acid-display), pour ne jamais
+   poser du violet sur la lueur. Les autres teintes ne servent qu'aux essais
+   (?accent=toxine|menthe|corail|cyan|ambre|os|lilas, voir layout.tsx). */
+:root { --acid: 236 176 255; --acid-deep: 214 120 255; --acid-display: 251 249 244; }
+html[data-accent='toxine'] { --acid-display: var(--acid); }
+html[data-accent='menthe'] { --acid: 98 255 184; --acid-deep: 52 214 142; --acid-display: var(--acid); }
+html[data-accent='duo']    { --acid-display: 251 249 244; }
+html[data-accent='corail'] { --acid: 255 112 82; --acid-deep: 224 78 48; --acid-display: var(--acid); }
+html[data-accent='cyan']   { --acid: 92 225 255;  --acid-deep: 40 190 224; --acid-display: var(--acid); }
+html[data-accent='ambre']  { --acid: 255 176 46;  --acid-deep: 224 140 14; --acid-display: var(--acid); }
 html[data-accent='os']     { --acid: 241 236 224; --acid-deep: 214 207 190; }
-html[data-accent='lilas']  { --acid: 217 184 255; --acid-deep: 186 140 255; }
+html[data-accent='lilas']  { --acid: 217 184 255; --acid-deep: 186 140 255; --acid-display: var(--acid); }
 
 .btn {
   position: relative;
