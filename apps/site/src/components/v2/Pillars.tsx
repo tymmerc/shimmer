@@ -45,7 +45,7 @@ function VendeurDemo() {
         transition={{ duration: 0.4, ease }}
         className="mt-3 rounded-xl border border-acid/25 bg-acid/[0.07] p-3.5"
       >
-        <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-acid">Le vendeur</div>
+        <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-acid">Le vendeur</div>
         <p className="mt-1.5 text-sm leading-snug text-paper/90">
           Un Côtes-du-Rhône bien charpenté, parfait sur les grillades. Je vous en montre trois ?
         </p>
@@ -58,7 +58,7 @@ function VendeurDemo() {
             initial={false}
             animate={phase >= 2 ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
             transition={{ duration: 0.35, ease, delay: phase >= 2 ? i * 0.08 : 0 }}
-            className="rounded-lg border border-paper/12 bg-ink/60 px-2.5 py-1.5 font-mono text-[11px] text-paper/75"
+            className="rounded-lg border border-paper/12 bg-ink/60 px-2.5 py-1.5 font-mono text-[12px] text-paper/75"
           >
             {p}
           </motion.span>
@@ -116,7 +116,7 @@ function SavDemo() {
         <p className="text-sm leading-snug text-paper/90">
           Votre commande #1042 est en route avec Colissimo, elle est partie hier. Voici votre suivi.
         </p>
-        <span className="inline-flex items-center gap-1.5 rounded-md bg-ink/50 px-2 py-1 font-mono text-[10px] text-acid">
+        <span className="inline-flex items-center gap-1.5 rounded-md bg-ink/50 px-2 py-1 font-mono text-[11px] text-acid">
           ↗ suivre mon colis
         </span>
       </motion.div>
@@ -145,7 +145,7 @@ function Pillar({
       />
 
       <div className="relative flex items-center justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-acid">{tag}</span>
+        <span className="font-mono text-[12px] uppercase tracking-[0.16em] text-acid">{tag}</span>
         <span className="font-display text-3xl text-paper/15">{n}</span>
       </div>
 
@@ -155,12 +155,12 @@ function Pillar({
       <p className="relative mt-4 text-pretty text-[15px] leading-relaxed text-paper/70 md:mt-5 md:text-lg">{body}</p>
 
       <div className="relative mt-6 md:mt-8">
-        <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-paper/35">Démo</div>
+        <div className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-paper/35">Démo</div>
         {demo}
       </div>
 
       <div className="relative mt-6 flex md:mt-8">
-        <span className="inline-flex items-center gap-2 rounded-full bg-acid/12 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-acid">
+        <span className="inline-flex items-center gap-2 rounded-full bg-acid/12 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.16em] text-acid">
           <span className="h-1.5 w-1.5 rounded-full bg-acid" />
           {benefit}
         </span>
@@ -174,7 +174,7 @@ export function Pillars() {
     <section id="automatisations" className="relative z-10 w-full scroll-mt-16 px-6 py-16 md:px-12 md:py-40">
       <div className="mx-auto max-w-[1400px]">
         <div className="mb-8 flex items-baseline gap-6 md:mb-12">
-          <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">Ce que Shimmer fait pour vous</span>
+          <span className="font-mono text-[12px] uppercase tracking-[0.18em] text-acid">Ce que Shimmer fait pour vous</span>
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 

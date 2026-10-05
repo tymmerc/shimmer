@@ -39,7 +39,7 @@ export function AutomationsWheel() {
     >
       <div className="mx-auto max-w-[1400px]">
         <div className="mb-14 flex items-baseline gap-6">
-          <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">Ce que ça fait</span>
+          <span className="font-mono text-[12px] uppercase tracking-[0.18em] text-acid">Ce que ça fait</span>
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
@@ -63,12 +63,12 @@ export function AutomationsWheel() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-acid">{current.label}</div>
+                  <div className="font-mono text-[12px] uppercase tracking-[0.16em] text-acid">{current.label}</div>
                   <p className="mt-3 text-pretty text-lg leading-snug text-paper md:text-xl">{current.line}</p>
                 </motion.div>
               ) : (
                 <div>
-                  <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper/45">Un seul cerveau</div>
+                  <div className="font-mono text-[12px] uppercase tracking-[0.16em] text-paper/60">Un seul cerveau</div>
                   <p className="mt-3 text-pretty text-lg leading-snug text-paper/60 md:text-xl">
                     Ce qu&apos;un client cherche, achète ou dit nourrit tous les autres modules.
                   </p>
@@ -116,7 +116,7 @@ export function AutomationsWheel() {
                     style={{ left: `${COORDS[i].x}%`, top: `${COORDS[i].y}%` }}
                   >
                     <span
-                      className={`wheel-counter flex h-full w-full items-center justify-center rounded-full border text-center font-mono text-[10px] uppercase tracking-[0.14em] transition-colors duration-300 md:text-[11px] ${
+                      className={`wheel-counter flex h-full w-full items-center justify-center rounded-full border text-center font-mono text-[11px] uppercase tracking-[0.14em] transition-colors duration-300 md:text-[12px] ${
                         active === i
                           ? 'border-acid/70 bg-acid/15 text-acid shadow-[0_0_30px_rgb(var(--acid)/0.25)]'
                           : 'border-paper/15 bg-ink/60 text-paper/70 group-hover:text-paper'
@@ -133,7 +133,7 @@ export function AutomationsWheel() {
                 <span className="font-display text-2xl text-paper md:text-3xl">
                   S<span className="text-acid">.</span>
                 </span>
-                <span className="mt-1 font-mono text-[8px] uppercase tracking-[0.18em] text-paper/45 md:text-[9px]">
+                <span className="mt-1 font-mono text-[8px] uppercase tracking-[0.18em] text-paper/60 md:text-[9px]">
                   un seul cerveau
                 </span>
               </div>
@@ -143,7 +143,7 @@ export function AutomationsWheel() {
             <ul className="w-full space-y-3 md:hidden">
               {NODES.map((n) => (
                 <li key={n.key} className="rounded-xl border border-paper/12 bg-paper/[0.03] p-4">
-                  <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-acid">{n.label}</div>
+                  <div className="font-mono text-[12px] uppercase tracking-[0.16em] text-acid">{n.label}</div>
                   <p className="mt-2 text-pretty text-base leading-snug text-paper/75">{n.line}</p>
                 </li>
               ))}

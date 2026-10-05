@@ -21,7 +21,7 @@ export function AuditCTA() {
           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
           className="overflow-hidden rounded-3xl border border-acid/30 bg-acid/[0.04] p-6 sm:p-8 md:p-14"
         >
-          <div className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">
+          <div className="font-mono text-[12px] uppercase tracking-[0.18em] text-acid">
             La première étape · offerte
           </div>
           <h2 className="mt-5 max-w-[20ch] font-display text-[clamp(30px,5.5vw,84px)] font-normal leading-[1.02] tracking-tightest text-paper md:mt-6">
@@ -56,7 +56,7 @@ export function AuditCTA() {
 function EmailBlock() {
   return (
     <>
-      <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-paper/50">
+      <div className="font-mono text-[12px] uppercase tracking-[0.16em] text-paper/65">
         Écrivez-moi, réponse sous 24 h
       </div>
       <div className="mt-4 flex flex-col items-start gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:gap-6">

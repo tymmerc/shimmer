@@ -17,7 +17,7 @@ export function SectionMore({
 }) {
   return (
     <details className={`group mt-5 max-w-[60ch] md:mt-7 ${className}`}>
-      <summary className="flex w-fit cursor-pointer select-none list-none items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-paper/50 transition hover:text-paper [&::-webkit-details-marker]:hidden">
+      <summary className="flex w-fit cursor-pointer select-none list-none items-center gap-2.5 font-mono text-[12px] uppercase tracking-[0.18em] text-paper/65 transition hover:text-paper [&::-webkit-details-marker]:hidden">
         <span className="inline-block w-3 text-center text-acid transition-transform duration-300 group-open:rotate-45">+</span>
         {label}
       </summary>

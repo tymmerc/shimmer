@@ -27,7 +27,7 @@ export function ProofSimple() {
     <section id="preuve" className="relative z-10 w-full scroll-mt-16 px-6 py-16 md:px-12 md:py-40">
       <div className="mx-auto max-w-[1400px]">
         <div className="mb-8 flex items-baseline gap-6 md:mb-14">
-          <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">La preuve</span>
+          <span className="font-mono text-[12px] uppercase tracking-[0.18em] text-acid">La preuve</span>
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
@@ -53,7 +53,7 @@ export function ProofSimple() {
             variants={{ hidden: {}, show: { transition: { staggerChildren: 0.012 } } }}
             className="rounded-2xl border border-paper/12 bg-paper/[0.03] p-5 sm:p-7 md:p-9"
           >
-            <div className="mb-7 font-mono text-[10px] uppercase tracking-[0.2em] text-paper/40">
+            <div className="mb-7 font-mono text-[11px] uppercase tracking-[0.16em] text-paper/55">
               Exemple · boutique de démonstration
             </div>
 
@@ -75,7 +75,7 @@ export function ProofSimple() {
                 );
               })}
             </div>
-            <div className="mt-4 flex items-center gap-4 font-mono text-[10px] uppercase tracking-[0.16em] text-paper/45">
+            <div className="mt-4 flex items-center gap-4 font-mono text-[11px] uppercase tracking-[0.16em] text-paper/60">
               <span className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full border-[1.5px] border-toxic-300/80" /> 4 témoins · 10 %
               </span>
@@ -86,12 +86,12 @@ export function ProofSimple() {
 
             {/* Jauges : ce que chaque groupe a acheté sur la période */}
             <div className="mt-9 space-y-6">
-              <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-paper/40">
+              <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-paper/55">
                 Ce qu&apos;ils ont acheté sur le mois
               </div>
               {/* Groupe témoin */}
               <div>
-                <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-paper/55">
+                <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-paper/70">
                   Groupe témoin · sans Shimmer
                 </div>
                 <div className="h-3 overflow-hidden rounded-full bg-paper/10">
@@ -105,7 +105,7 @@ export function ProofSimple() {
 
               {/* Groupe Shimmer */}
               <div>
-                <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-paper/55">
+                <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-paper/70">
                   Groupe Shimmer
                 </div>
                 <div className="relative h-3 rounded-full bg-paper/10">

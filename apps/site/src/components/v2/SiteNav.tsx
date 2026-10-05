@@ -16,23 +16,23 @@ export function SiteNav() {
         </a>
         <a
           href={AUDIT_ANCHOR}
-          className="border-b border-paper/30 pb-px font-mono text-[10px] uppercase tracking-[0.18em] text-paper/80 md:hidden"
+          className="border-b border-paper/30 pb-px font-mono text-[11px] uppercase tracking-[0.18em] text-paper/80 md:hidden"
         >
           Demander un audit
         </a>
         <nav className="hidden items-center gap-8 md:flex">
-          <a href="#automatisations" className="font-mono text-[11px] uppercase tracking-[0.2em] text-paper/55 transition hover:text-paper">
+          <a href="#automatisations" className="font-mono text-[12px] uppercase tracking-[0.16em] text-paper/70 transition hover:text-paper">
             Ce que ça fait
           </a>
-          <a href="#preuve" className="font-mono text-[11px] uppercase tracking-[0.2em] text-paper/55 transition hover:text-paper">
+          <a href="#preuve" className="font-mono text-[12px] uppercase tracking-[0.16em] text-paper/70 transition hover:text-paper">
             La preuve
           </a>
-          <a href="/shimmer/demo/" className="font-mono text-[11px] uppercase tracking-[0.2em] text-paper/55 transition hover:text-paper">
+          <a href="/shimmer/demo/" className="font-mono text-[12px] uppercase tracking-[0.16em] text-paper/70 transition hover:text-paper">
             Démos
           </a>
           <a
             href={AUDIT_ANCHOR}
-            className="ml-2 border-b border-paper/30 pb-px font-mono text-[11px] uppercase tracking-[0.2em] text-paper/85 transition hover:border-paper hover:text-paper"
+            className="ml-2 border-b border-paper/30 pb-px font-mono text-[12px] uppercase tracking-[0.16em] text-paper/85 transition hover:border-paper hover:text-paper"
           >
             Demander un audit
           </a>

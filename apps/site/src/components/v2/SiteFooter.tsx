@@ -14,7 +14,7 @@ export function SiteFooter() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 font-mono text-[11px] uppercase tracking-[0.18em] text-paper/55">
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 font-mono text-[12px] uppercase tracking-[0.18em] text-paper/70">
           <a href="#automatisations" className="transition hover:text-paper">Ce que ça fait</a>
           <a href="#preuve" className="transition hover:text-paper">La preuve</a>
           <a href="/shimmer/demo/" className="transition hover:text-paper">Démos</a>
@@ -22,7 +22,7 @@ export function SiteFooter() {
         </div>
       </div>
 
-      <div className="mx-auto mt-8 max-w-[1400px] border-t border-paper/10 pt-6 font-mono text-[10px] uppercase tracking-[0.2em] text-paper/35 md:mt-10">
+      <div className="mx-auto mt-8 max-w-[1400px] border-t border-paper/10 pt-6 font-mono text-[11px] uppercase tracking-[0.16em] text-paper/35 md:mt-10">
         © 2026 Shimmer · Tym Mercier
       </div>
     </footer>

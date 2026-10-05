@@ -51,7 +51,7 @@ export function HowItWorks() {
     <section id="process" className="relative z-10 w-full scroll-mt-16 px-6 py-16 md:px-12 md:py-40">
       <div className="mx-auto max-w-[1400px]">
         <div className="mb-8 flex items-baseline gap-6 md:mb-14">
-          <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">Comment ça se passe</span>
+          <span className="font-mono text-[12px] uppercase tracking-[0.18em] text-acid">Comment ça se passe</span>
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
@@ -98,7 +98,7 @@ export function HowItWorks() {
                   }`}
                 />
 
-                <div className="flex items-baseline gap-3 font-mono text-[11px] uppercase tracking-[0.18em]">
+                <div className="flex items-baseline gap-3 font-mono text-[12px] uppercase tracking-[0.18em]">
                   <span className="text-acid">{s.n}</span>
                   <span className={s.final ? 'text-acid' : 'text-paper/45'}>{s.when}</span>
                 </div>

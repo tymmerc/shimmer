@@ -61,7 +61,7 @@ export function CopyEmail() {
       type="button"
       onClick={copy}
       aria-live="polite"
-      className="rounded-full border border-paper/25 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-paper/80 transition-colors hover:border-paper/60 hover:text-paper"
+      className="rounded-full border border-paper/25 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.16em] text-paper/80 transition-colors hover:border-paper/60 hover:text-paper"
     >
       {LABELS[state]}
     </button>

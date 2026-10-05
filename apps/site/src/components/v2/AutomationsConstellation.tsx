@@ -266,7 +266,7 @@ export function AutomationsConstellation() {
     <section id="automatisations" className="relative z-10 w-full scroll-mt-16 px-6 py-28 md:px-12 md:py-40">
       <div className="mx-auto max-w-[1400px]">
         <div className="mb-14 flex items-baseline gap-6">
-          <span className="font-mono text-[11px] uppercase tracking-[0.24em] text-acid">Ce que ça fait</span>
+          <span className="font-mono text-[12px] uppercase tracking-[0.18em] text-acid">Ce que ça fait</span>
           <span className="h-px flex-1 bg-paper/10" />
         </div>
 
@@ -284,7 +284,7 @@ export function AutomationsConstellation() {
             <div className="mt-10 min-h-[176px] rounded-2xl border border-paper/12 bg-ink/40 p-6">
               {current ? (
                 <div key={current.key} className="animate-[fadeUp_.35s_ease]">
-                  <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-acid">{current.label}</div>
+                  <div className="font-mono text-[12px] uppercase tracking-[0.16em] text-acid">{current.label}</div>
                   <p className="mt-3 text-pretty text-lg leading-snug text-paper md:text-xl">{current.line}</p>
                   <ul className="mt-4 space-y-1.5">
                     {current.links.map((l) => (
@@ -297,7 +297,7 @@ export function AutomationsConstellation() {
                 </div>
               ) : (
                 <div>
-                  <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper/45">Un seul cerveau</div>
+                  <div className="font-mono text-[12px] uppercase tracking-[0.16em] text-paper/60">Un seul cerveau</div>
                   <p className="mt-3 text-pretty text-lg leading-snug text-paper/60 md:text-xl">
                     Chaque brique partage les mêmes données. Aucune ne travaille dans son coin.
                   </p>
@@ -317,7 +317,7 @@ export function AutomationsConstellation() {
               {/* Cerveau central (net, fixe au centre) */}
               <div className="pointer-events-none absolute left-1/2 top-1/2 flex h-[24%] w-[24%] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-acid/25 bg-ink/70">
                 <span className="font-display text-2xl text-paper md:text-3xl">S<span className="text-acid">.</span></span>
-                <span className="mt-0.5 font-mono text-[8px] uppercase tracking-[0.16em] text-paper/45 md:text-[9px]">un seul cerveau</span>
+                <span className="mt-0.5 font-mono text-[8px] uppercase tracking-[0.16em] text-paper/60 md:text-[9px]">un seul cerveau</span>
               </div>
 
               {/* Noeuds : positionnés par la boucle rAF (transform). */}
@@ -331,7 +331,7 @@ export function AutomationsConstellation() {
                   onFocus={() => { pausedRef.current = true; setActiveBoth(i); }}
                   onMouseLeave={() => { setActiveBoth(null); pausedRef.current = false; }}
                   onBlur={() => { setActiveBoth(null); pausedRef.current = false; }}
-                  className="absolute left-0 top-0 flex h-[19%] w-[19%] items-center justify-center rounded-full text-center font-mono text-[10px] uppercase tracking-[0.12em] md:text-[11px]"
+                  className="absolute left-0 top-0 flex h-[19%] w-[19%] items-center justify-center rounded-full text-center font-mono text-[11px] uppercase tracking-[0.12em] md:text-[12px]"
                   style={{ willChange: 'transform' }}
                   data-node
                 >
@@ -346,7 +346,7 @@ export function AutomationsConstellation() {
             <ul className="w-full space-y-3 md:hidden">
               {NODES.map((n) => (
                 <li key={n.key} className="rounded-xl border border-paper/12 bg-ink/40 p-4">
-                  <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-acid">{n.label}</div>
+                  <div className="font-mono text-[12px] uppercase tracking-[0.16em] text-acid">{n.label}</div>
                   <p className="mt-2 text-pretty text-base leading-snug text-paper/75">{n.line}</p>
                 </li>
               ))}

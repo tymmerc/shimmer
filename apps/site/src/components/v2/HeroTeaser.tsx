@@ -46,7 +46,7 @@ export function HeroTeaser({ className = '' }: { className?: string }) {
       transition={{ duration: 0.8, ease, delay: 0.55 }}
       className={`rounded-2xl border border-paper/12 bg-ink/75 p-3 ${className}`}
     >
-      <div className="mb-2.5 font-mono text-[10px] uppercase tracking-[0.18em] text-paper/45">
+      <div className="mb-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-paper/60">
         Le vendeur IA <span className="text-acid">· en direct</span>
       </div>
 
@@ -76,7 +76,7 @@ export function HeroTeaser({ className = '' }: { className?: string }) {
             initial={false}
             animate={phase >= 2 ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
             transition={{ duration: 0.35, ease, delay: phase >= 2 ? i * 0.08 : 0 }}
-            className="shrink-0 whitespace-nowrap rounded-lg border border-paper/12 bg-ink/60 px-2.5 py-1.5 font-mono text-[11px] text-paper/75"
+            className="shrink-0 whitespace-nowrap rounded-lg border border-paper/12 bg-ink/60 px-2.5 py-1.5 font-mono text-[12px] text-paper/75"
           >
             {p}
           </motion.span>

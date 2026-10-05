@@ -25,7 +25,10 @@ export function ShimmerHero() {
           hero, sinon il laisse une couture là où la toxine continue).
           En portrait mobile le fondu latéral n'a pas de sens (le texte occupe
           toute la largeur) : on le remplace par un voile vertical léger. */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-[3] hidden w-[62%] bg-gradient-to-r from-ink via-ink/80 to-transparent [mask-image:linear-gradient(to_bottom,#000_55%,transparent)] md:block" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-[3] hidden w-[58%] bg-gradient-to-r from-ink/85 via-ink/45 to-transparent [mask-image:linear-gradient(to_bottom,#000_50%,transparent)] md:block" />
+      {/* Sans WebGL (nappe CSS), la toxine s'arrête net au bas du hero : on
+          rétablit le fondu bas dans ce cas seulement. */}
+      <div className="toxic-fallback pointer-events-none absolute inset-x-0 bottom-0 z-[3] h-40 bg-gradient-to-t from-ink to-transparent" />
       <div className="pointer-events-none absolute inset-0 z-[3] bg-gradient-to-b from-ink/35 via-ink/10 to-transparent md:hidden" />
 
       <SiteNav />
@@ -86,7 +89,7 @@ export function ShimmerHero() {
 
       <a
         href="#automatisations"
-        className="absolute bottom-8 left-1/2 z-30 hidden -translate-x-1/2 flex-col items-center gap-3 font-mono text-[10px] uppercase tracking-[0.24em] text-paper/45 transition hover:text-paper/80 md:flex"
+        className="absolute bottom-8 left-1/2 z-30 hidden -translate-x-1/2 flex-col items-center gap-3 font-mono text-[11px] uppercase tracking-[0.18em] text-paper/60 transition hover:text-paper/80 md:flex"
       >
         <span>Découvrir</span>
         <motion.span

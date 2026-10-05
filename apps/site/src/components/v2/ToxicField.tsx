@@ -20,25 +20,29 @@ import { isSoftwareRenderer } from '../ToxicCanvas';
  * Coût : résolution interne basse (le nuage est flou), un seul rendu complet
  * au chargement, puis seule la bande visible (un écran de marge de chaque
  * côté) est ré-animée : 24 images/s dans le hero, 10 ailleurs, rien onglet
- * caché. Téléphone : plus bas encore. Sans WebGL matériel : rien ici, le
- * hero affiche sa nappe CSS (html[data-toxine='css']) et la page garde
- * ToxicSpread.
+ * caché. Téléphone : plus bas encore. Le canvas est réservé 20 % plus haut
+ * que la page : une démo qui s'anime et fait grandir la page de quelques
+ * pixels ne force pas une réallocation (qui efface le canvas). Quand il faut
+ * vraiment réallouer, on redessine tout dans la foulée, jamais d'image vide.
+ * Sans WebGL matériel : rien ici, le hero affiche sa nappe CSS
+ * (html[data-toxine='css']) et la page garde ToxicSpread.
  */
 
 const VS = `attribute vec2 a;void main(){gl_Position=vec4(a,0,1);}`;
 const FS = `precision highp float;
-uniform vec2 R;uniform float S;uniform float HH;uniform float VH;uniform float E;
+uniform vec2 R;uniform vec2 S;uniform float HH;uniform float VH;uniform float E;
 uniform float T;uniform vec2 M;uniform float A;
 float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float n(vec2 p){vec2 i=floor(p),f=fract(p);f*=f*(3.-2.*f);
   return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
 float fb(vec2 p){return n(p)*.5+n(p*2.1)*.28+n(p*4.4)*.14;}
 void main(){
-  // Pixel en coordonnées de la page (px CSS, y depuis le haut), puis dans le
-  // repère du hero (uv : y de 1 en haut du hero à 0 en bas, négatif en dessous).
-  float cx=gl_FragCoord.x/S;
-  float y=(R.y-gl_FragCoord.y)/S;
-  float VW=R.x/S;
+  // Pixel en coordonnées de la page (px CSS, y depuis le haut ; S = px du
+  // canvas par px CSS, en x et en y), puis dans le repère du hero (uv : y de
+  // 1 en haut du hero à 0 en bas, négatif en dessous).
+  float cx=gl_FragCoord.x/S.x;
+  float y=(R.y-gl_FragCoord.y)/S.y;
+  float VW=R.x/S.x;
   vec2 uv=vec2(cx/VW,1.-y/HH);
   float ar=VW/HH;
   // Portrait (téléphone) : on étire l'axe vertical au lieu de compresser
@@ -65,7 +69,8 @@ void main(){
   // Sous le hero : le même nuage, en traînée discrète qui dérive de gauche
   // à droite en descendant, et s'éteint avant la fin (E).
   float xc=.62+.26*sin((y-HH)/(1.35*VH)+.3);
-  float tailMask=exp(-pow((uv.x-xc)/.30,2.))*A*smoothstep(.75*HH,1.35*HH,y)*(1.-smoothstep(E-1.2*VH,E,y));
+  float dxr=(uv.x-xc)/.30;
+  float tailMask=exp(-dxr*dxr)*A*smoothstep(.75*HH,1.35*HH,y)*(1.-smoothstep(E-1.2*VH,E,y));
   vec3 INK=vec3(0.051,0.043,0.078);
   c=mix(INK,c,clamp(heroMask+tailMask,0.,1.));
   gl_FragColor=vec4(c,1.);
@@ -135,23 +140,21 @@ export function ToxicField() {
     const FRAME_IDLE = touch ? 125 : 100;
     const MAX_DIM = Math.max(2048, Math.min(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) as number, (gl.getParameter(gl.MAX_VIEWPORT_DIMS) as Int32Array)[1]!)) - 1;
     const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let W = 0, H = 0, cssW = 0, cssH = 0, scale = 1, heroH = 1, end = 1;
-    let fullPass = true;
-    // Lueur : fixe au centre du hero sur ordinateur (retour Tym : pas besoin
-    // qu'elle suive la souris), elle dérive seule sur tactile.
-    let mx = 0.5, my = 0.5, tmx = 0.5, tmy = 0.5, lastTouch = -1e9;
+    let W = 0, H = 0, cssH = 0, sx = 1, sy = 1, heroH = 1, end = 1;
+    // Lueur : fixe au centre du hero sur ordinateur, elle dérive seule sur
+    // tactile (retour Tym : pas besoin qu'elle suive la souris ni le doigt).
+    let mx = 0.5, my = 0.5;
     const t0 = performance.now();
 
     const draw = (now: number) => {
-      if (touch && now - lastTouch > 2500) {
+      if (touch) {
         const tt = (now - t0) * 0.001;
-        tmx = 0.5 + 0.34 * Math.sin(tt * 0.23);
-        tmy = 0.5 + 0.30 * Math.sin(tt * 0.15 + 1.2);
+        const tx = 0.5 + 0.34 * Math.sin(tt * 0.23), ty = 0.5 + 0.30 * Math.sin(tt * 0.15 + 1.2);
+        mx += (tx - mx) * 0.09;
+        my += (ty - my) * 0.09;
       }
-      mx += (tmx - mx) * 0.09;
-      my += (tmy - my) * 0.09;
       gl.uniform2f(u.R, W, H);
-      gl.uniform1f(u.S, scale);
+      gl.uniform2f(u.S, sx, sy);
       gl.uniform1f(u.HH, heroH);
       gl.uniform1f(u.VH, window.innerHeight);
       gl.uniform1f(u.E, end);
@@ -161,50 +164,44 @@ export function ToxicField() {
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     };
 
+    // Taille du canvas : réservé 20 % plus haut que la page, pour que les
+    // quelques pixels gagnés par une démo qui s'anime ne forcent pas une
+    // réallocation (qui efface le canvas). Quand il faut vraiment réallouer,
+    // on redessine tout dans la foulée : jamais d'image vide à l'écran.
     const layout = () => {
       const w = c.clientWidth, hgt = c.clientHeight;
-      if (w === cssW && Math.abs(hgt - cssH) <= 2 && W > 0) return;
-      cssW = w; cssH = hgt;
+      if (w <= 0 || hgt <= 0) return;
+      ({ hero: heroH, end } = measure());
+      cssH = hgt;
       const dpr = Math.min(window.devicePixelRatio, DPR_CAP);
-      // Le canvas fait toute la page : on reste sous la taille max du GPU.
-      scale = Math.min(dpr * SC, MAX_DIM / Math.max(hgt, 1), MAX_DIM / Math.max(w, 1));
-      W = Math.max(1, Math.round(w * scale));
-      H = Math.max(1, Math.round(hgt * scale));
+      const s0 = Math.min(dpr * SC, MAX_DIM / w, MAX_DIM / hgt);
+      const needW = Math.max(1, Math.round(w * s0));
+      const needH = Math.max(1, Math.round(hgt * s0));
+      const fits = W === needW && needH <= H && needH >= 0.6 * H;
+      sx = (fits ? W : needW) / w;
+      if (fits) { sy = H / hgt; return; }
+      W = needW;
+      H = Math.max(needH, Math.min(MAX_DIM, Math.round(needH * 1.2)));
+      sy = H / hgt;
       c.width = W; c.height = H;
       gl.viewport(0, 0, W, H);
-      ({ hero: heroH, end } = measure());
-      fullPass = true;
-    };
-    const toHeroUv = (clientX: number, clientY: number): [number, number] =>
-      [clientX / Math.max(cssW, 1), 1 - (clientY + window.scrollY) / heroH];
-    const onTouch = (e: TouchEvent) => {
-      lastTouch = performance.now();
-      const t = e.touches[0];
-      if (t) [tmx, tmy] = toHeroUv(t.clientX, t.clientY);
+      gl.disable(gl.SCISSOR_TEST);
+      draw(performance.now());
     };
 
     let raf = 0, last = 0;
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
-      if (document.hidden || W === 0) return;
-      if (fullPass) {
-        // Premier rendu (ou nouvelle taille) : toute la page, une fois.
-        gl.disable(gl.SCISSOR_TEST);
-        draw(now);
-        fullPass = false;
-        last = now;
-        return;
-      }
-      if (still) return;
-      const sy = window.scrollY, vh = window.innerHeight;
-      const inHero = sy < heroH;
+      if (document.hidden || W === 0 || still) return;
+      const sy0 = window.scrollY, vh = window.innerHeight;
+      const inHero = sy0 < heroH;
       if (now - last < (inHero ? FRAME_HERO : FRAME_IDLE)) return;
       last = now;
       // Seule la bande visible (plus un écran de marge de chaque côté) est
       // ré-animée ; le reste garde son dernier rendu, qui ne bouge presque pas.
-      const top = Math.max(0, sy - vh), bottom = Math.min(cssH, sy + 2 * vh);
+      const top = Math.max(0, sy0 - vh), bottom = Math.min(cssH, sy0 + 2 * vh);
       gl.enable(gl.SCISSOR_TEST);
-      gl.scissor(0, Math.max(0, Math.floor(H - bottom * scale)), W, Math.ceil((bottom - top) * scale) + 1);
+      gl.scissor(0, Math.max(0, Math.floor(H - bottom * sy)), W, Math.ceil((bottom - top) * sy) + 1);
       draw(now);
     };
 
@@ -213,11 +210,9 @@ export function ToxicField() {
     const main = c.parentElement;
     const ro = main ? new ResizeObserver(() => layout()) : null;
     if (main && ro) ro.observe(main);
-    window.addEventListener('touchmove', onTouch, { passive: true });
     return () => {
       cancelAnimationFrame(raf);
       ro?.disconnect();
-      window.removeEventListener('touchmove', onTouch);
     };
   }, [active]);
 

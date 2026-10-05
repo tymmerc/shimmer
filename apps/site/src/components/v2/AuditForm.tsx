@@ -23,7 +23,7 @@ type Status = 'idle' | 'sending' | 'error';
 
 const EMPTY_DRAFT: LeadDraft = { shopUrl: '', email: '', platform: null, message: '' };
 
-const LABEL = 'block font-mono text-[11px] uppercase tracking-[0.2em] text-paper/55';
+const LABEL = 'block font-mono text-[12px] uppercase tracking-[0.16em] text-paper/70';
 
 // 16 px minimum sur mobile : en dessous, iOS zoome sur le champ au focus.
 function fieldClass(invalid: boolean): string {
