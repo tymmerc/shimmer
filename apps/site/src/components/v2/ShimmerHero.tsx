@@ -1,7 +1,6 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ToxicCanvas } from '../ToxicCanvas';
 import { AUDIT_ANCHOR } from '@/lib/audit';
 import { SiteNav } from './SiteNav';
 import { HeroTeaser } from './HeroTeaser';
@@ -15,16 +14,19 @@ const ease = [0.22, 1, 0.36, 1] as const;
 export function ShimmerHero() {
   return (
     <section id="top" className="relative min-h-[100svh] w-full overflow-hidden md:min-h-screen">
-      <div className="pointer-events-none absolute inset-0 z-0">
-        <ToxicCanvas className="h-full w-full" />
+      {/* La toxine est dessinée par ToxicField (fond de page, hero compris).
+          Sans WebGL matériel, ToxicField pose html[data-toxine='css'] et cette
+          nappe CSS prend le relais dans le hero. */}
+      <div className="toxic-fallback toxic-static pointer-events-none absolute inset-0 z-0" aria-hidden>
+        <div className="toxic-fluid-drift" />
       </div>
 
-      {/* Fondus ink : lisibilité du texte à gauche, raccord haut/bas.
+      {/* Fondus ink : lisibilité du texte à gauche (estompé vers le bas du
+          hero, sinon il laisse une couture là où la toxine continue).
           En portrait mobile le fondu latéral n'a pas de sens (le texte occupe
           toute la largeur) : on le remplace par un voile vertical léger. */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-[3] hidden w-[62%] bg-gradient-to-r from-ink via-ink/80 to-transparent md:block" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-[3] hidden w-[62%] bg-gradient-to-r from-ink via-ink/80 to-transparent [mask-image:linear-gradient(to_bottom,#000_55%,transparent)] md:block" />
       <div className="pointer-events-none absolute inset-0 z-[3] bg-gradient-to-b from-ink/35 via-ink/10 to-transparent md:hidden" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[3] h-40 bg-gradient-to-t from-ink to-transparent" />
 
       <SiteNav />
 
@@ -65,10 +67,10 @@ export function ShimmerHero() {
         >
           <a
             href={AUDIT_ANCHOR}
-            className="group inline-flex items-center justify-center gap-3 whitespace-nowrap rounded-full bg-paper px-7 py-3.5 font-sans text-[15px] font-medium text-ink transition-colors duration-300 hover:bg-bone sm:py-4"
+            className="group inline-flex items-center justify-center gap-3 whitespace-nowrap rounded-full bg-paper px-7 py-3.5 font-sans text-[15px] font-medium text-ink transition-colors duration-300 hover:bg-toxic-500 hover:text-paper sm:py-4"
           >
             Demander un audit
-            <span className="text-ink/50 transition-transform duration-300 group-hover:translate-x-1">→</span>
+            <span className="text-ink/50 transition-[transform,color] duration-300 group-hover:translate-x-1 group-hover:text-paper/80">→</span>
           </a>
           <a
             href="/shimmer/demo/"

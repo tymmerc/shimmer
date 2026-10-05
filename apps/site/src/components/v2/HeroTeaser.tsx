@@ -44,7 +44,7 @@ export function HeroTeaser({ className = '' }: { className?: string }) {
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.8, ease, delay: 0.55 }}
-      className={`rounded-2xl border border-paper/12 bg-ink/55 p-3 backdrop-blur-md ${className}`}
+      className={`rounded-2xl border border-paper/12 bg-ink/75 p-3 ${className}`}
     >
       <div className="mb-2.5 font-mono text-[10px] uppercase tracking-[0.18em] text-paper/45">
         Le vendeur IA <span className="text-acid">· en direct</span>

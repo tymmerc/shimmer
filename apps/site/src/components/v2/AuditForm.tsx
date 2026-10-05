@@ -295,7 +295,7 @@ export function AuditForm() {
             <button
               type="submit"
               disabled={status === 'sending'}
-              className="group inline-flex w-full items-center justify-center gap-3 whitespace-nowrap rounded-full bg-paper px-7 py-3.5 font-sans text-[15px] font-medium text-ink transition-colors duration-300 hover:bg-bone disabled:cursor-wait disabled:opacity-70 disabled:hover:bg-paper sm:w-auto sm:min-w-[14.5rem] sm:py-4"
+              className="group inline-flex w-full items-center justify-center gap-3 whitespace-nowrap rounded-full bg-paper px-7 py-3.5 font-sans text-[15px] font-medium text-ink transition-colors duration-300 hover:bg-toxic-500 hover:text-paper disabled:cursor-wait disabled:opacity-70 disabled:hover:bg-paper sm:w-auto sm:min-w-[14.5rem] sm:py-4"
             >
               {status === 'sending' ? (
                 'Envoi…'

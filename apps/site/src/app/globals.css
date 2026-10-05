@@ -37,6 +37,10 @@ html, body {
 /* acide discret, lueur profonde en bas — au lieu d'une bande rose     */
 /* écrasée sur le bord droit.                                          */
 /* ------------------------------------------------------------------ */
+/* Nappe de secours du hero : cachée tant que le shader tourne. */
+.toxic-fallback { display: none; }
+html[data-toxine='css'] .toxic-fallback { display: block; }
+
 .toxic-static {
   background:
     radial-gradient(42% 55% at 78% 26%, rgba(255, 102, 236, 0.8), rgba(255, 102, 236, 0) 70%),

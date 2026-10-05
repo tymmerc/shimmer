@@ -26,10 +26,10 @@ export default function SignupPage() {
         <div className="mt-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
           <a
             href={AUDIT_ANCHOR}
-            className="group inline-flex items-center gap-3 rounded-full bg-paper px-7 py-3.5 font-sans text-[15px] font-medium text-ink transition-colors duration-300 hover:bg-bone"
+            className="group inline-flex items-center gap-3 rounded-full bg-paper px-7 py-3.5 font-sans text-[15px] font-medium text-ink transition-colors duration-300 hover:bg-toxic-500 hover:text-paper"
           >
             Demander un audit
-            <span className="text-ink/50 transition-transform duration-300 group-hover:translate-x-1">→</span>
+            <span className="text-ink/50 transition-[transform,color] duration-300 group-hover:translate-x-1 group-hover:text-paper/80">→</span>
           </a>
           <a href={AUDIT_MAILTO} className="text-[15px] text-paper/70 underline decoration-paper/30 underline-offset-4 hover:text-paper">
             {AUDIT_EMAIL}
