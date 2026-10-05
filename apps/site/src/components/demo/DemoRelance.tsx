@@ -100,7 +100,7 @@ export function DemoRelance() {
 
       <div className="mt-6 rounded-2xl border border-acid/25 bg-acid/5 p-6">
         <div className="font-display text-2xl tracking-editorial text-paper">
-          1 panier sur 3 récupéré, c'est <span className="italic text-acid">5 400 €/mois</span> en moyenne.
+          1 panier sur 3 récupéré, c'est <span className="italic text-acid-display">5 400 €/mois</span> en moyenne.
         </div>
         <p className="mt-3 max-w-[60ch] text-sm leading-relaxed text-paper/70">
           Sur une boutique qui faisait 420 paniers abandonnés par mois (paniers moyens 50€). Et personne

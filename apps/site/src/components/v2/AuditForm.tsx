@@ -161,7 +161,7 @@ export function AuditForm() {
           >
             <p className="max-w-[26ch] font-display text-[clamp(26px,3.4vw,46px)] leading-[1.1] tracking-tightest text-paper">
               C’est noté. Je vous réponds sous 24&nbsp;h, à{' '}
-              <span className="italic text-acid [overflow-wrap:anywhere]">{sentTo}</span>.
+              <span className="italic text-acid-display [overflow-wrap:anywhere]">{sentTo}</span>.
             </p>
           </motion.div>
         ) : null}

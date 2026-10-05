@@ -25,7 +25,7 @@ export function AuditCTA() {
             La première étape · offerte
           </div>
           <h2 className="mt-5 max-w-[20ch] font-display text-[clamp(30px,5.5vw,84px)] font-normal leading-[1.02] tracking-tightest text-paper md:mt-6">
-            Un audit gratuit qui montre <span className="italic text-acid">ce qui fuit</span>.
+            Un audit gratuit qui montre <span className="italic text-acid-display">ce qui fuit</span>.
           </h2>
 
           <div className="mt-8 border-t border-paper/15 pt-7 md:mt-12 md:pt-9">

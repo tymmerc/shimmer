@@ -274,7 +274,7 @@ export function AutomationsConstellation() {
           {/* Texte + détail vivant */}
           <div className="order-2 lg:order-1">
             <h2 className="max-w-[15ch] font-display text-[clamp(34px,5vw,72px)] font-normal leading-[1.02] tracking-tightest text-paper">
-              Six automatisations, <span className="italic text-acid">un seul cerveau</span>.
+              Six automatisations, <span className="italic text-acid-display">un seul cerveau</span>.
             </h2>
             <p className="mt-8 max-w-[42ch] text-pretty text-lg leading-relaxed text-paper/70 md:text-xl">
               Ce qu&apos;un client cherche, achète ou dit circule entre toutes les briques. Survolez un

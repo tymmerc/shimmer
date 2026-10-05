@@ -35,7 +35,7 @@ export function ProofSimple() {
           {/* Texte (inchangé, honnête) */}
           <div>
             <h2 className="max-w-[18ch] font-display text-[clamp(30px,5vw,72px)] font-normal leading-[1.02] tracking-tightest text-paper">
-              On prouve, à l&apos;euro, ce que ça vous <span className="italic text-acid">rapporte</span>.
+              On prouve, à l&apos;euro, ce que ça vous <span className="italic text-acid-display">rapporte</span>.
             </h2>
             <SectionMore label="Comment on mesure">
               10 % de vos visiteurs ne voient jamais Shimmer. On compare ce qu&apos;ils dépensent à ceux

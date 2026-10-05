@@ -56,7 +56,7 @@ export function DemoHub() {
           </div>
           <h1 className="mt-3 font-display text-[clamp(32px,4vw,56px)] font-normal leading-[1.02] tracking-tightest text-paper">
             Promenez-vous d'un côté à l'autre du{' '}
-            <span className="italic text-acid">comptoir</span>.
+            <span className="italic text-acid-display">comptoir</span>.
           </h1>
           <p className="mt-5 text-base leading-relaxed text-paper/70">
             À gauche, ce que vivent vos clients. À droite, ce que vous voyez en back-office. Les

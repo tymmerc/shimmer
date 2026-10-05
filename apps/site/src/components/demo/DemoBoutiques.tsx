@@ -224,7 +224,7 @@ export function DemoBoutiques() {
           </div>
           <h1 className="mt-3 font-display text-[clamp(30px,4vw,52px)] font-normal leading-[1.04] tracking-tightest text-paper">
             Le même vendeur, chez trois marchands qui ne se{' '}
-            <span className="italic text-acid">ressemblent</span> pas.
+            <span className="italic text-acid-display">ressemblent</span> pas.
           </h1>
           <p className="mt-5 text-base leading-relaxed text-paper/70">
             Chaque page charge la même ligne de script, et le widget lit les couleurs, la police et

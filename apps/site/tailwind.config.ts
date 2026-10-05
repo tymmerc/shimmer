@@ -33,6 +33,10 @@ const config: Config = {
         acid: {
           DEFAULT: 'rgb(var(--acid) / <alpha-value>)',
           deep: 'rgb(var(--acid-deep) / <alpha-value>)',
+          // Les grands mots en italique des titres : même teinte que l'accent
+          // par défaut, mais la variante « duo » les repasse en papier pour ne
+          // jamais poser du violet sur la lueur de la toxine.
+          display: 'rgb(var(--acid-display) / <alpha-value>)',
         },
         bone: '#f1ece0',
       },

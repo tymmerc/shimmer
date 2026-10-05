@@ -47,7 +47,7 @@ export function AutomationsWheel() {
           {/* Colonne texte */}
           <div className="order-2 lg:order-1">
             <h2 className="max-w-[16ch] font-display text-[clamp(34px,5vw,72px)] font-normal leading-[1.02] tracking-tightest text-paper">
-              Six automatisations, <span className="italic text-acid">un seul cerveau</span>.
+              Six automatisations, <span className="italic text-acid-display">un seul cerveau</span>.
             </h2>
             <p className="mt-8 max-w-[44ch] text-pretty text-lg leading-relaxed text-paper/70 md:text-xl">
               Chaque brique partage les mêmes données. Survolez la roue pour voir laquelle fait quoi,

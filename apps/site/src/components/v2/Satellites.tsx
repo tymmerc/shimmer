@@ -113,7 +113,7 @@ export function Satellites() {
           transition={{ duration: 0.8, ease }}
           className="max-w-[22ch] font-display text-[clamp(27px,4.5vw,64px)] font-normal leading-[1.02] tracking-tightest text-paper"
         >
-          Quatre automatisations qui <span className="italic text-acid">récupèrent chaque client</span>.
+          Quatre automatisations qui <span className="italic text-acid-display">récupèrent chaque client</span>.
         </motion.h2>
 
         <div className="mt-10 grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2 md:mt-16 md:gap-y-12 lg:grid-cols-4">

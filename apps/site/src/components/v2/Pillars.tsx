@@ -179,7 +179,7 @@ export function Pillars() {
         </div>
 
         <h2 className="max-w-[20ch] font-display text-[clamp(30px,5.5vw,80px)] font-normal leading-[1.02] tracking-tightest text-paper">
-          Vous faire gagner du temps. Et <span className="italic text-acid">gagner des clients</span>.
+          Vous faire gagner du temps. Et <span className="italic text-acid-display">gagner des clients</span>.
         </h2>
         <SectionMore>
           Deux automatisations au cœur, un vendeur en ligne et un SAV qui répond à votre place, et tout

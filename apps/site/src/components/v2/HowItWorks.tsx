@@ -56,7 +56,7 @@ export function HowItWorks() {
         </div>
 
         <h2 className="mb-10 max-w-[22ch] font-display text-[clamp(30px,5vw,72px)] font-normal leading-[1.02] tracking-tightest text-paper md:mb-16">
-          Branché en 30 minutes. <span className="italic text-acid">Prouvé</span> sur vos propres chiffres.
+          Branché en 30 minutes. <span className="italic text-acid-display">Prouvé</span> sur vos propres chiffres.
         </h2>
 
         <div ref={ref} className="relative">

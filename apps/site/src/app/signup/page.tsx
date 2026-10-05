@@ -17,7 +17,7 @@ export default function SignupPage() {
           Shimmer<span className="text-acid">.</span>
         </a>
         <h1 className="mt-12 font-display text-[clamp(34px,6vw,72px)] font-normal leading-[1.02] tracking-tightest">
-          Les inscriptions se font <span className="italic text-acid">avec nous</span>, pour l&apos;instant.
+          Les inscriptions se font <span className="italic text-acid-display">avec nous</span>, pour l&apos;instant.
         </h1>
         <p className="mt-6 max-w-[52ch] text-pretty text-[15px] leading-relaxed text-paper/65 md:text-lg">
           On branche chaque boutique à la main pendant le pilote : catalogue, ton du vendeur, mesure.

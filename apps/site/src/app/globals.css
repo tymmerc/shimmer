@@ -89,8 +89,10 @@ html[data-toxine='css'] .toxic-fallback { display: block; }
    après le retour « les couleurs vont pas ») : magenta clair, lisible sur
    l'encre comme sur la lueur. Les autres teintes ne servent qu'aux essais
    (?accent=menthe|corail|cyan|ambre|os|lilas, voir layout.tsx). */
-:root { --acid: 236 176 255; --acid-deep: 214 120 255; }
+:root { --acid: 236 176 255; --acid-deep: 214 120 255; --acid-display: var(--acid); }
 html[data-accent='menthe'] { --acid: 98 255 184; --acid-deep: 52 214 142; }
+/* duo : italiques en papier, accent magenta réservé aux petits éléments. */
+html[data-accent='duo']    { --acid: 236 176 255; --acid-deep: 214 120 255; --acid-display: 251 249 244; }
 html[data-accent='corail'] { --acid: 255 112 82; --acid-deep: 224 78 48; }
 html[data-accent='cyan']   { --acid: 92 225 255;  --acid-deep: 40 190 224; }
 html[data-accent='ambre']  { --acid: 255 176 46;  --acid-deep: 224 140 14; }

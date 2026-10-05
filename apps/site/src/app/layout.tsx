@@ -38,13 +38,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr" className={`${fraunces.variable} ${interTight.variable} ${jetbrains.variable}`} suppressHydrationWarning>
       <head>
-        {/* Essais de couleur d'accent : ?accent=menthe|corail|cyan|ambre|os|lilas, gardé
+        {/* Essais de couleur d'accent : ?accent=menthe|corail|cyan|ambre|os|lilas|duo, gardé
             pour la session ; la toxine (magenta clair) est la teinte par défaut. Liste fixe, aucune
             valeur de l'URL n'est écrite telle quelle. */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "try{var A=['corail','cyan','ambre','os','lilas','menthe','toxine'],q=new URLSearchParams(location.search).get('accent'),v=A.indexOf(q)>-1?q:sessionStorage.getItem('shimmer-accent');if(A.indexOf(q)>-1)sessionStorage.setItem('shimmer-accent',q);if(v&&A.indexOf(v)>-1&&v!=='toxine')document.documentElement.setAttribute('data-accent',v)}catch(e){}",
+              "try{var A=['corail','cyan','ambre','os','lilas','menthe','duo','toxine'],q=new URLSearchParams(location.search).get('accent'),v=A.indexOf(q)>-1?q:sessionStorage.getItem('shimmer-accent');if(A.indexOf(q)>-1)sessionStorage.setItem('shimmer-accent',q);if(v&&A.indexOf(v)>-1&&v!=='toxine')document.documentElement.setAttribute('data-accent',v)}catch(e){}",
           }}
         />
       </head>

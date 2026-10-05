@@ -48,7 +48,7 @@ export function ShimmerHero() {
           className="max-w-[18ch] font-display text-balance text-[clamp(34px,8.5vw,128px)] font-normal leading-[1.02] tracking-tightest text-paper"
         >
           Votre boutique{' '}
-          <span className="italic text-acid">vend, répond et relance</span>{' '}
+          <span className="italic text-acid-display">vend, répond et relance</span>{' '}
           toute seule.
         </motion.h1>
 
