@@ -36,3 +36,6 @@ video/out/
 video/vo/in/
 video/node_modules/
 .secrets.local
+
+# Dossier de prospection (noms, contacts, constats sur des sites tiers) : reste local tant que le dépôt est public
+pilot/prospection.md

@@ -100,4 +100,5 @@ Relance unique après 5 jours si silence (règle outreach.md) : "Hello [Prénom]
 | Date | Action | Résultat |
 |---|---|---|
 | 07/08/2026 | Fiche créée, audit technique brouillon.store | Candidat validé (pilote produit/référence) |
-| | Message 1 envoyé par Tym | |
+| avant le 06/10/2026 | Message 1 envoyé par Tym lui-même (canal non visible depuis les chats, date exacte à compléter par Tym) | **Vu, aucune réponse** (constat remonté par le standup le 06/10) |
+| 06/10/2026 | Relance préparée : pas un « t'as vu mon message ? », on lui offre le mini-audit de SON site (requête réelle tapée dans sa recherche, ce qu'elle répond, ce que Shimmer répondrait). Texte dans `pilot/prospection.md`, section Brouillon | À envoyer par Tym, une seule fois (règle outreach.md) |
