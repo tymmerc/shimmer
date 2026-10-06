@@ -1,6 +1,14 @@
 import React from "react";
 import { ArtView, ASPECT, fitHeight } from "./Art";
+import { useTextWidth } from "./type";
 import { useVariant, type HeroItem, type Shop } from "./variant";
+
+/**
+ * Largeur max du logo (px CSS) : au-delà, il dépasse au bord gauche des plans
+ * serrés (zoom 2,6 centré sur la barre : bord du cadre à x ≈ 323). Le logo est
+ * réduit pour tenir ; Caves Forty-Two (≈ 230 px) n'est pas touché.
+ */
+const LOGO_MAX = 255;
 
 /**
  * Le site du MARCHAND (boutique fictive de la variante). Rendu du viewport
@@ -97,18 +105,7 @@ const Header: React.FC<{ shop: Shop; top: number; bar: NativeState }> = ({
     }}
   >
     <div>
-      <div
-        style={{
-          fontFamily: shop.fonts.title,
-          fontWeight: shop.fonts.logoWeight,
-          fontSize: 34,
-          lineHeight: 1,
-          letterSpacing: "0.01em",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {shop.name}
-      </div>
+      <Logo shop={shop} />
       <div
         style={{
           fontFamily: shop.fonts.italic ? shop.fonts.title : shop.fonts.text,
@@ -137,6 +134,33 @@ const Header: React.FC<{ shop: Shop; top: number; bar: NativeState }> = ({
     </div>
   </div>
 );
+
+const Logo: React.FC<{ shop: Shop }> = ({ shop }) => {
+  const base: React.CSSProperties = {
+    fontFamily: shop.fonts.title,
+    fontWeight: shop.fonts.logoWeight,
+    fontSize: 34,
+    lineHeight: 1,
+    letterSpacing: "0.01em",
+    whiteSpace: "nowrap",
+  };
+  const [ref, w] = useTextWidth(shop.name, base);
+  const size = w > LOGO_MAX ? (34 * LOGO_MAX) / w : 34;
+  return (
+    <>
+      <span
+        ref={ref}
+        aria-hidden
+        style={{ ...base, position: "absolute", left: -9999, top: 0, visibility: "hidden" }}
+      >
+        {shop.name}
+      </span>
+      <div style={{ ...base, fontSize: size, height: 34, display: "flex", alignItems: "flex-end" }}>
+        {shop.name}
+      </div>
+    </>
+  );
+};
 
 /** <form role="search"><input type="search"> du thème, avec sa loupe. */
 const NativeSearch: React.FC<{ shop: Shop; s: NativeState }> = ({

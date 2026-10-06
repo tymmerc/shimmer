@@ -24,7 +24,7 @@ Ce qui reste vrai pour toutes : les chaînes du dock et de l'encart « épuisé 
 - `src/pov2/variants/*.ts` : une fiche par métier (boutique, produits, texto, requêtes, réponses, sous-titres, scène du soir). Les garde-fous de `variants/index.ts` cassent le rendu si une fiche sort des clous (tiret long, frappe trop longue, redirection hors catégorie…).
 - `src/pov2/variant.ts` : le type, la frappe générée (`typeQ1/2/3`), la question du SDK (`refineQuestion`), le gabarit « épuisé », l'email de retour de stock.
 - `src/pov2/Art.tsx` : les dessins de produits (pots, meule, charcuterie, pulls, robe, doudou, bijoux sur buste, flacons…), dans le style des bouteilles.
-- `src/pov2/ShopPage.tsx` : la page boutique générique (géométrie identique pour toutes, la caméra en dépend).
+- `src/pov2/ShopPage.tsx` : la page boutique générique (géométrie identique pour toutes, la caméra en dépend). Le logo est plafonné à 255 px de large : au-delà, sa fin dépassait au bord gauche des gros plans (vu sur l'épicerie au premier rendu, refaite).
 - `src/pov2/targets.tsx` : le curseur vise des positions MESURÉES sur le dock (puce choisie, champ email, bouton), les libellés changeant d'un métier à l'autre. La cave garde les cibles du film 1 au pixel près (la mesure retombe à 3 px près).
 - Planches de contrôle : compositions `ProbeArt` (tous les dessins) et `ProbeTargets` (positions mesurées).
 
@@ -33,10 +33,13 @@ Ce qui reste vrai pour toutes : les chaînes du dock et de l'encart « épuisé 
 ```bash
 cd /opt/shimmer/video
 heavy node tools/stills.mjs POV-mode /tmp/stills-mode "200,330,560,1000,1320,1800" 0.5   # contrôle
-heavy node tools/render.mjs POV-mode out/shimmer-pov-mode-silent.mp4 300 1              # environ 8 min
+rm -rf out/chunks-shimmer-pov-mode-silent   # sinon les tranches déjà rendues sont reprises telles quelles
+heavy node tools/render.mjs POV-mode out/shimmer-pov-mode-silent.mp4 300 1              # 5 à 8 min
 bash tools/mux.sh out/shimmer-pov-mode-silent.mp4 out/music/music.wav out/shimmer-pov-mode.mp4
 bash tools/publish-metiers.sh                                                            # page de visionnage dev
 ```
+
+Rendus du 06/10 : six films de 61,97 s, 15 à 17 Mo, publiés sur https://dev.tymmerc.eu/shimmer/film/metiers/ (planche des affiches : `out/films-metiers-planche.jpg`). La page https://dev.tymmerc.eu/shimmer/film/ montre désormais la cave en « duo » (l'ancienne version jaune reste dans `out/shimmer-pov.mp4`).
 
 La musique est la même pour toutes : la ligne de temps (`timeline.ts`) n'a pas bougé, donc ses repères tombent juste. Toujours via `heavy`, un rendu à la fois (règles VPS).
 
