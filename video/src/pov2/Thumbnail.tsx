@@ -79,7 +79,7 @@ const Headline: React.FC<{
         key={t}
         style={{
           fontStyle: em ? "italic" : "normal",
-          color: em ? S.acid : S.paper,
+          color: em ? S.display : S.paper,
           whiteSpace: "nowrap",
         }}
       >

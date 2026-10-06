@@ -16,13 +16,13 @@ function maskEdge(p: number): string {
 export interface Unit {
   w: string;
   at: number;
-  /** italique acide (Fraunces) */
+  /** italique (Fraunces), en papier avec l'accent « duo » */
   em?: boolean;
 }
 
 /**
  * Ligne display Fraunces à la ligne de base (x, baseline). Chaque unité monte
- * dans son masque. L'unité accentuée : italique acide + resserrement
+ * dans son masque. L'unité accentuée : italique + resserrement
  * d'interlettrage 0.04em → −0.01em. Titres desserrés : −0.022em.
  */
 export const Line: React.FC<{
@@ -103,7 +103,7 @@ export const Line: React.FC<{
               transform: `translateY(${(1 - p) * 140}%) skewX(${u.em && skewEm ? -6 * (1 - p) : 0}deg)`,
               fontStyle: u.em ? "italic" : "normal",
               visibility: p <= 0.001 ? "hidden" : "visible",
-              color: u.em ? S.acid : color,
+              color: u.em ? S.display : color,
               letterSpacing: `${ls}em`,
             }}
           >

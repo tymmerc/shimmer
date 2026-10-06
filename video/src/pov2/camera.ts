@@ -41,11 +41,33 @@ function follower(start: number, end: number, frames: number[]): number[] {
   return out;
 }
 
-import { TYPE_Q2, TYPE_Q3 } from "./timeline";
-const F1 = follower(FOLLOW_START_1, FOLLOW_END_1, TYPE_Q2);
-const F2 = follower(FOLLOW_START_2, FOLLOW_END_2, TYPE_Q3);
+import type { Variant } from "./variant";
 
-const KEYS: Key[] = [
+/** Suiveurs de caret par variante (la frappe change avec le texte tapé). */
+const FOLLOWERS = new Map<string, [number[], number[]]>();
+function followersOf(v: Variant): [number[], number[]] {
+  let f = FOLLOWERS.get(v.id);
+  if (!f) {
+    f = [
+      follower(FOLLOW_START_1, FOLLOW_END_1, v.typing.q2),
+      follower(FOLLOW_START_2, FOLLOW_END_2, v.typing.q3),
+    ];
+    FOLLOWERS.set(v.id, f);
+  }
+  return f;
+}
+
+const keysCache = new Map<string, Key[]>();
+function keysOf(v: Variant): Key[] {
+  const hit = keysCache.get(v.id);
+  if (hit) return hit;
+  const [F1, F2] = followersOf(v);
+  const keys = makeKeys(F1, F2);
+  keysCache.set(v.id, keys);
+  return keys;
+}
+
+const makeKeys = (F1: number[], F2: number[]): Key[] => [
   { f: 120, z: 1.0, fx: 720, fy: 336.5 },
   { f: 150, z: 1.0, fx: 720, fy: 336.5 },
   { f: 186, z: 1.5, fx: 480, fy: 448.7, e: EZ.INOUT },
@@ -91,7 +113,7 @@ export interface Cam {
 
 const r05 = (v: number) => Math.round(v * 2) / 2;
 
-export function camAt(f: number): Cam {
+export function camAt(v: Variant, f: number): Cam {
   // Récap S10 : plan fixe, pas de dérive.
   if (f >= 1290) {
     // Récap S10 : plan fixe puis légère poussée vers la barre et le dock.
@@ -101,6 +123,8 @@ export function camAt(f: number): Cam {
     return { z: zz, fx: 720, fy: fyy, dx: 0, dy: 0, m: K * zz };
   }
 
+  const KEYS = keysOf(v);
+  const [F1, F2] = followersOf(v);
   let z: number;
   let fx: number;
   let fy: number;

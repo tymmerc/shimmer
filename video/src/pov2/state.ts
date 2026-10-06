@@ -1,6 +1,6 @@
 import { cursorAt } from "../pov/Cursor";
-import type { NativeState } from "./CavesPage";
-import { REPLY1, REPLY2, REPLY3, SDK, TYPED } from "./script";
+import type { NativeState } from "./ShopPage";
+import { SDK } from "./script";
 import type { DockUI } from "./ShimmerDock";
 import {
   DOCK_T as T,
@@ -8,14 +8,10 @@ import {
   SCROLL,
   seg,
   TYPE_EMAIL_START,
-  TYPE_Q1,
-  TYPE_Q2,
-  TYPE_Q3,
   typed,
 } from "./timeline";
-import { W } from "./wines";
+import { soldOutReply, type Variant } from "./variant";
 
-const P0 = "Rechercher un vin, une appellation…";
 const P1 = SDK.placeholderConv;
 
 /** Caret : plein pendant la frappe et 10 f après, puis clignote (16 f, 50 %). */
@@ -31,38 +27,41 @@ const lastKey = (f: number, frames: number[], fallback: number) => {
 };
 
 /** Barre de recherche native du thème. */
-export function barAt(f: number): NativeState {
+export function barAt(v: Variant, f: number): NativeState {
+  const P0 = v.shop.placeholder;
+  const { q1, q2, q3 } = v.typed;
+  const { q1: K1, q2: K2, q3: K3 } = v.typing;
   if (f >= 1290)
     return { value: "", placeholder: P1, focus: false, caret: false };
   if (f < 246)
     return { value: "", placeholder: P0, focus: false, caret: false };
   if (f < T.chipClick) {
-    const v = typed(f, TYPED.q1, TYPE_Q1);
+    const val = typed(f, q1, K1);
     return {
-      value: v,
+      value: val,
       placeholder: P0,
       focus: true,
-      caret: caretOn(f, lastKey(f, TYPE_Q1, 246)),
+      caret: caretOn(f, lastKey(f, K1, 246)),
     };
   }
   if (f < T.reply1)
-    return { value: TYPED.q1, placeholder: P0, focus: false, caret: false };
+    return { value: q1, placeholder: P0, focus: false, caret: false };
   if (f < T.reply2) {
-    const v = typed(f, TYPED.q2, TYPE_Q2);
+    const val = typed(f, q2, K2);
     return {
-      value: v,
+      value: val,
       placeholder: P1,
       focus: true,
-      caret: caretOn(f, lastKey(f, TYPE_Q2, T.reply1)),
+      caret: caretOn(f, lastKey(f, K2, T.reply1)),
     };
   }
   if (f < T.soldout) {
-    const v = f >= TYPE_Q3[0] ? typed(f, TYPED.q3, TYPE_Q3) : "";
+    const val = f >= K3[0] ? typed(f, q3, K3) : "";
     return {
-      value: v,
+      value: val,
       placeholder: P1,
       focus: true,
-      caret: caretOn(f, lastKey(f, TYPE_Q3, T.reply2)),
+      caret: caretOn(f, lastKey(f, K3, T.reply2)),
     };
   }
   if (f < T.emailClick)
@@ -77,49 +76,63 @@ export function barAt(f: number): NativeState {
 
 const FOOTER: [string, string] = [SDK.footerNative, SDK.footerClose];
 
-/** Dock (null avant l'ouverture). */
-export function dockAt(f: number): DockUI | null {
+/** Dock (null avant l'ouverture). `enterOverride` : 1 pour les sondes de mesure. */
+export function dockAt(v: Variant, f: number): DockUI | null {
   // Récap S10 : le dock tel que le client l’a laissé (confirmation verte).
-  if (f >= 1290) return dockAt(1091);
+  if (f >= 1290) return dockAt(v, 1091);
   if (f < T.open) return null;
   const enter = seg(f, T.open, T.open + 6, EZ.CSS);
+  const { guided, replies, typed: ty } = v;
   if (f < T.chipClick) {
     const hover = seg(f, 394, 399, EZ.CSS);
     return {
       enter,
       rows: [],
-      question: SDK.refineQ(TYPED.q1),
-      chips: { labels: SDK.refineChips, fill: [0, hover, 0, 0, 0] },
+      question: guided.question(ty.q1),
+      chips: {
+        labels: guided.chips,
+        fill: guided.chips.map((_, i) => (i === guided.pick ? hover : 0)),
+      },
       footer: FOOTER,
     };
   }
   if (f < T.reply1)
     return { enter, rows: [], question: SDK.thinking, footer: FOOTER };
-  const r1 = [W.beaujolais, W.brouilly];
   if (f < T.enter2)
-    return { enter, rows: r1, question: REPLY1, footer: FOOTER };
+    return { enter, rows: replies.rows1, question: replies.r1, footer: FOOTER };
   if (f < T.reply2)
-    return { enter, rows: r1, question: SDK.thinking, footer: FOOTER };
-  const r2 = [W.vacqueyras, W.corbieres];
+    return {
+      enter,
+      rows: replies.rows1,
+      question: SDK.thinking,
+      footer: FOOTER,
+    };
   // Pas de survol de ligne : dans le SDK, une ligne du dock n’est pas un lien.
-  if (f < T.enter3) return { enter, rows: r2, question: REPLY2, footer: FOOTER };
+  if (f < T.enter3)
+    return { enter, rows: replies.rows2, question: replies.r2, footer: FOOTER };
   if (f < T.soldout)
-    return { enter, rows: r2, question: SDK.thinking, footer: FOOTER };
-  const n = Math.max(0, Math.min(TYPED.email.length, f - TYPE_EMAIL_START + 1));
+    return {
+      enter,
+      rows: replies.rows2,
+      question: SDK.thinking,
+      footer: FOOTER,
+    };
+  const n = Math.max(0, Math.min(ty.email.length, f - TYPE_EMAIL_START + 1));
   const inputFocus = f >= T.emailClick;
+  const name = replies.soldOut.name;
   return {
     enter,
-    rows: [W.vacqueyras, W.corbieres],
-    question: REPLY3,
+    rows: replies.rows3,
+    question: soldOutReply(replies.soldOut, replies.alt),
     footer: FOOTER,
     restock: {
-      name: W.crozes.name,
-      title: SDK.restockTitle(W.crozes.name),
+      name,
+      title: SDK.restockTitle(name),
       placeholder: SDK.restockPh,
       btn: SDK.restockBtn,
-      doneText: SDK.restockDone(W.crozes.name),
+      doneText: SDK.restockDone(name),
       done: f >= T.done,
-      email: f >= TYPE_EMAIL_START ? TYPED.email.slice(0, n) : "",
+      email: f >= TYPE_EMAIL_START ? ty.email.slice(0, n) : "",
       inputFocus,
       caret:
         inputFocus &&
@@ -143,9 +156,28 @@ export interface CursorState {
   ring: number; // frames depuis le dernier clic, −1 si aucun
 }
 
+/**
+ * Cibles du curseur, mesurées sur le dock rendu (puce choisie, champ email,
+ * bouton) : les libellés changent d'une variante à l'autre. Valeurs de repli =
+ * mesures du film 1.
+ */
+export interface DockTargets {
+  chip: [number, number];
+  input: [number, number];
+  button: [number, number];
+  /** bas du dock dans l'état du récap (confirmation), px viewport */
+  recapBottom: number;
+}
+export const FILM1_TARGETS: DockTargets = {
+  chip: [611, 161],
+  input: [661, 173],
+  button: [891, 173],
+  recapBottom: 430,
+};
+
 const CLICKS = [246, 404, 1002, 1036];
 
-export function cursorState(f: number): CursorState | null {
+export function cursorState(f: number, tg: DockTargets): CursorState | null {
   const press = CLICKS.reduce(
     (p, c) =>
       Math.max(p, f >= c - 3 && f <= c + 3 ? 1 - Math.abs(f - c) / 3 : 0),
@@ -161,7 +193,7 @@ export function cursorState(f: number): CursorState | null {
       { f: 252, x: 540, y: 51 },
       { f: 270, x: 1030, y: 200 },
       { f: 376, x: 1030, y: 200 },
-      { f: 396, x: 611, y: 161 },
+      { f: 396, x: tg.chip[0], y: tg.chip[1] },
     ]);
     const shape: CursorShape =
       f < 238 ? "arrow" : f < 252 ? "ibeam" : f < 390 ? "arrow" : "pointer";
@@ -170,9 +202,9 @@ export function cursorState(f: number): CursorState | null {
   if (f >= 986 && f < 1060) {
     const p = cursorAt(f, [
       { f: 986, x: 1060, y: 300 },
-      { f: 1000, x: 661, y: 173 },
-      { f: 1026, x: 661, y: 173 },
-      { f: 1034, x: 891, y: 173 },
+      { f: 1000, x: tg.input[0], y: tg.input[1] },
+      { f: 1026, x: tg.input[0], y: tg.input[1] },
+      { f: 1034, x: tg.button[0], y: tg.button[1] },
     ]);
     const shape: CursorShape =
       f < 996 ? "arrow" : f < 1028 ? "ibeam" : "pointer";

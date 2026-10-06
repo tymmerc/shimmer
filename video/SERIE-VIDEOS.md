@@ -1,5 +1,7 @@
 # Série vidéo Shimmer : plan final
 
+> **06/10/2026 :** le film 1 existe maintenant en six métiers (cave, épicerie, prêt-à-porter, enfant, bijoux, cosmétiques), voir `VARIANTES.md`. Les couleurs Shimmer du film suivent l'accent « duo » du site.
+
 30/09/2026. Remplace le plan de travail du matin et ses deux relectures (honnêteté, commercial). Tout a été revérifié en lecture seule dans le code, les chemins sont relatifs à `/opt/shimmer` sauf mention contraire. Aucun rendu, aucun appel LLM, rien touché dans `video/music` ni `video/out`.
 
 Le film 1 (POV cave à vin, 62 s, `video/src/pov2`) est validé par Tym. Il en veut d'autres pour le reste des fonctions (HANDOFF.md:80). Ce document dit lesquelles on peut filmer sans mentir, dans quel ordre, et ce qu'il faut régler avant.

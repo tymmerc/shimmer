@@ -1,17 +1,16 @@
 import React from "react";
-import { Bottle } from "../pov/Bottle";
-import { FONT } from "../pov/brand";
-import type { FilmWine } from "./wines";
+import { ArtView, ASPECT } from "./Art";
+import { rgba, useVariant, type Product } from "./variant";
 
 /**
  * Dock Shimmer, fidèle à buildStyles / createOverlay (sdk/src/shimmer.ts
- * 442-491) avec le thème de la boutique (primary #7a1f2b, DM Sans, 12 px).
+ * 442-491) avec le thème de la boutique (couleur principale et police du site,
+ * reprises par le widget ; arrondi 12 px).
  * AUCUNE animation inventée : seuls l'entrée (0,18 s), le remplissage des
  * puces (.15 s), le survol des lignes (.15 s) et le caret bougent. Le reste
  * est une bascule d'état instantanée, comme le innerHTML du SDK.
  */
 
-const PRIMARY = "#7a1f2b";
 export const DOCK_BOX = { x: 460, y: 80, w: 520, maxH: 403.8 };
 
 export interface RestockUI {
@@ -31,7 +30,7 @@ export interface RestockUI {
 export interface DockUI {
   /** 0..1 entrée (opacité + translateY −4 → 0) */
   enter: number;
-  rows: FilmWine[];
+  rows: Product[];
   /** index de la ligne survolée et progression 0..1 */
   rowHover?: { i: number; p: number };
   restock?: RestockUI;
@@ -40,10 +39,17 @@ export interface DockUI {
   footer: [string, string];
 }
 
-export const ShimmerDock: React.FC<{ ui: DockUI }> = ({ ui }) => {
+export const ShimmerDock: React.FC<{ ui: DockUI; probe?: string }> = ({
+  ui,
+  probe,
+}) => {
+  const { shop } = useVariant();
+  const PRIMARY = shop.theme.primary;
   const hasResults = ui.rows.length > 0 || !!ui.restock;
   return (
     <div
+      data-probe={probe}
+      data-dock="1"
       style={{
         position: "absolute",
         left: DOCK_BOX.x,
@@ -58,7 +64,7 @@ export const ShimmerDock: React.FC<{ ui: DockUI }> = ({ ui }) => {
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
-        fontFamily: FONT.shopSans,
+        fontFamily: shop.fonts.text,
         fontSize: 14,
         lineHeight: 1.5,
         color: "#1f2937",
@@ -80,6 +86,7 @@ export const ShimmerDock: React.FC<{ ui: DockUI }> = ({ ui }) => {
             <Row
               key={w.id}
               w={w}
+              primary={PRIMARY}
               hover={ui.rowHover && ui.rowHover.i === i ? ui.rowHover.p : 0}
             />
           ))}
@@ -117,9 +124,10 @@ export const ShimmerDock: React.FC<{ ui: DockUI }> = ({ ui }) => {
               return (
                 <div
                   key={c}
+                  data-chip={i}
                   style={{
                     border: `1px solid ${PRIMARY}`,
-                    background: `rgba(122,31,43,${f})`,
+                    background: rgba(PRIMARY, f),
                     color: f > 0.5 ? "#fff" : PRIMARY,
                     borderRadius: 999,
                     padding: "8px 14px",
@@ -156,7 +164,11 @@ export const ShimmerDock: React.FC<{ ui: DockUI }> = ({ ui }) => {
   );
 };
 
-const Row: React.FC<{ w: FilmWine; hover: number }> = ({ w, hover }) => (
+const Row: React.FC<{ w: Product; hover: number; primary: string }> = ({
+  w,
+  hover,
+  primary,
+}) => (
   <div
     style={{
       display: "flex",
@@ -179,7 +191,11 @@ const Row: React.FC<{ w: FilmWine; hover: number }> = ({ w, hover }) => (
         overflow: "hidden",
       }}
     >
-      <Bottle look={w.look} size={50} id={`dock-${w.id}`} />
+      <ArtView
+        art={w.art}
+        size={w.art.kind === "bottle" ? 50 : 46 / Math.max(1, ASPECT_OF(w))}
+        id={`dock-${w.id}`}
+      />
     </div>
     <div style={{ flex: 1, minWidth: 0 }}>
       <div
@@ -204,7 +220,7 @@ const Row: React.FC<{ w: FilmWine; hover: number }> = ({ w, hover }) => (
         {w.desc}
       </div>
     </div>
-    <div style={{ fontWeight: 700, color: PRIMARY, whiteSpace: "nowrap" }}>
+    <div style={{ fontWeight: 700, color: primary, whiteSpace: "nowrap" }}>
       {w.price} €
     </div>
   </div>
@@ -230,6 +246,7 @@ const Restock: React.FC<{ r: RestockUI }> = ({ r }) => (
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <div
+            data-restock-input="1"
             style={{
               flex: 1,
               minWidth: 0,
@@ -264,6 +281,7 @@ const Restock: React.FC<{ r: RestockUI }> = ({ r }) => (
             )}
           </div>
           <div
+            data-restock-btn="1"
             style={{
               padding: "9px 14px",
               borderRadius: 999,
@@ -297,3 +315,6 @@ const Bold: React.FC<{ text: string }> = ({ text }) => (
     )}
   </>
 );
+
+/** Rapport largeur/hauteur du dessin (vignette 56 px du dock). */
+const ASPECT_OF = (p: Product) => ASPECT[p.art.kind];

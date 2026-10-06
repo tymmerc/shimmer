@@ -1,14 +1,17 @@
 import React from "react";
-import { CavesPage } from "./CavesPage";
 import { camAt, toWin, WIN } from "./camera";
 import { ShimmerDock } from "./ShimmerDock";
+import { ShopPage } from "./ShopPage";
 import {
   barAt,
   cursorState,
   dockAt,
+  FILM1_TARGETS,
   scrollAt,
   type CursorShape,
+  type DockTargets,
 } from "./state";
+import { useVariant } from "./variant";
 
 /**
  * La fenêtre de la boutique (40,40, 1840×860, sans barre de navigateur : aucun
@@ -16,13 +19,15 @@ import {
  * curseur. Le site reste en 2D (pas de will-change, pas de translateZ) pour
  * un texte net même zoomé ×2,7.
  */
-export const ShopTake: React.FC<{ f: number; style?: React.CSSProperties }> = ({
-  f,
-  style,
-}) => {
-  const cam = camAt(f);
-  const dock = dockAt(f);
-  const cur = cursorState(f);
+export const ShopTake: React.FC<{
+  f: number;
+  style?: React.CSSProperties;
+  targets?: DockTargets;
+}> = ({ f, style, targets = FILM1_TARGETS }) => {
+  const v = useVariant();
+  const cam = camAt(v, f);
+  const dock = dockAt(v, f);
+  const cur = cursorState(f, targets);
   const tx = WIN.w / 2 - cam.fx * cam.m + cam.dx;
   const ty = WIN.h / 2 - cam.fy * cam.m + cam.dy;
   return (
@@ -37,7 +42,7 @@ export const ShopTake: React.FC<{ f: number; style?: React.CSSProperties }> = ({
         overflow: "hidden",
         border: "1px solid rgba(251,249,244,0.10)",
         boxShadow: "0 30px 80px rgba(0,0,0,0.5)",
-        background: "#f7f3ec",
+        background: v.shop.theme.bg,
         boxSizing: "border-box",
         ...style,
       }}
@@ -53,9 +58,9 @@ export const ShopTake: React.FC<{ f: number; style?: React.CSSProperties }> = ({
           transform: `translate(${tx}px, ${ty}px) scale(${cam.m})`,
         }}
       >
-        <CavesPage scrollY={scrollAt(f)} bar={barAt(f)}>
+        <ShopPage scrollY={scrollAt(f)} bar={barAt(v, f)}>
           {dock && <ShimmerDock ui={dock} />}
-        </CavesPage>
+        </ShopPage>
       </div>
       {cur && cur.opacity > 0 && <CursorView c={cur} cam={cam} />}
     </div>

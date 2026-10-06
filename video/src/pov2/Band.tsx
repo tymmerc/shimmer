@@ -1,23 +1,28 @@
 import React from "react";
 import { FONT, S } from "../pov/brand";
-import { FILM } from "./script";
+import { BRAND } from "./script";
 import { EZ, lerp, seg, storyAt } from "./timeline";
 import { MonoLabel, Subtitle } from "./type";
+import { useVariant } from "./variant";
 
 // Bande de pensée (y 900-1080, ink plat) : la seule couche de sous-titres.
 // Lisible sur un téléphone (LinkedIn affiche la vidéo en pleine largeur) :
 // 72 px, textes courts, jamais pendant que l'écran demande de lire.
 export const CAPTION_SIZE = 72;
 export const CAPTION_BASELINE = 1030;
-const LINES: Array<[string, number, number]> = FILM.captions.map(
-  ([t, a, b]) => [t, storyAt(a * 30), storyAt(b * 30)],
-);
 
 /** subtitles=false : version voix off, sans les pensées (surtitre et touche Entrée restent). */
 export const Band: React.FC<{ f: number; subtitles?: boolean }> = ({
   f,
   subtitles = true,
 }) => {
+  const v = useVariant();
+  // Sous-titres en SECONDES DU FILM (calés sur la voix off), convertis en frames histoire.
+  const LINES: Array<[string, number, number]> = v.captions.map(([t, a, b]) => [
+    t,
+    storyAt(a * 30),
+    storyAt(b * 30),
+  ]);
   // L1 : après le crossfade (géré par S01Line2), tenu puis sorti 160-166.
   const l1 = subtitles && f >= 138 && f < 167;
   const l1out = seg(f, 160, 166, EZ.IN);
@@ -30,7 +35,7 @@ export const Band: React.FC<{ f: number; subtitles?: boolean }> = ({
     <>
       {f < 105 && (
         <MonoLabel
-          text={FILM.kicker}
+          text={BRAND.kicker}
           x={80}
           baseline={1012}
           size={34}
@@ -57,7 +62,7 @@ export const Band: React.FC<{ f: number; subtitles?: boolean }> = ({
             transform: `translateY(${-10 * l1out}px)`,
           }}
         >
-          {FILM.band.L1}
+          {v.thought.line}
         </div>
       )}
       {subtitles &&
@@ -74,7 +79,7 @@ export const Band: React.FC<{ f: number; subtitles?: boolean }> = ({
         ))}
       {f >= 140 && f < 252 && (
         <MonoLabel
-          text={FILM.kicker}
+          text={BRAND.kicker}
           x={80}
           baseline={936}
           size={28}

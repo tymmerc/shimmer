@@ -6,7 +6,10 @@ import { Band } from "./Band";
 import { Annotation, Brand, EndCard } from "./Brand";
 import { LifeGradients, S01, S01Line2, S01Thought, S08, S09 } from "./Life";
 import { ShopTake } from "./ShopTake";
+import { useDockTargets } from "./targets";
 import { curtainY, EZ, keyed, lerp, seg, storyAt, toxinVeil } from "./timeline";
+import { useVariant as useVariantFromContext, VariantContext } from "./variant";
+import { variantById } from "./variants";
 
 /**
  * « Ce soir, c'est moi qui ramène le vin » : la POV d'un client sur une
@@ -19,10 +22,23 @@ import { curtainY, EZ, keyed, lerp, seg, storyAt, toxinVeil } from "./timeline";
  * 4. Bande (sous-titres, surtitres, touche Entrée) + transition de S01
  * 5. Marque (mot « Shimmer. », révélation, carton final)
  */
-/** subtitles=false : version voix off (composition ShimmerPOV-VO). */
-export const ShimmerPOV: React.FC<{ subtitles?: boolean }> = ({
+/**
+ * subtitles=false : version voix off (composition ShimmerPOV-VO).
+ * variant : boutique du film (cave, epicerie, mode, enfant, bijoux, cosmetique).
+ */
+export const ShimmerPOV: React.FC<{ subtitles?: boolean; variant?: string }> = ({
   subtitles = true,
+  variant = "cave",
 }) => {
+  const v = variantById(variant);
+  return (
+    <VariantContext.Provider value={v}>
+      <Film subtitles={subtitles} />
+    </VariantContext.Provider>
+  );
+};
+
+const Film: React.FC<{ subtitles: boolean }> = ({ subtitles }) => {
   const F = useCurrentFrame();
   const f = storyAt(F);
   const { fps } = useVideoConfig();
@@ -31,6 +47,8 @@ export const ShimmerPOV: React.FC<{ subtitles?: boolean }> = ({
 
   // Lueur de la toxine (coordonnées composition).
   const glow = glowAt(f);
+  // Cibles du curseur et bas du dock, lus sur le dock de la variante.
+  const [probe, targets] = useDockTargets(useVariantFromContext());
 
   // Fenêtre : montée à l'ouverture (T1), réduction + bascule (T6), sortie (T7).
   const rise = seg(f, 120, 144, EZ.OUT);
@@ -53,6 +71,7 @@ export const ShimmerPOV: React.FC<{ subtitles?: boolean }> = ({
 
   return (
     <AbsoluteFill style={{ background: S.ink, overflow: "hidden" }}>
+      {probe}
       {/* 1. Scène */}
       {O < 0.999 && <Toxic intensity={1} glow={glow} speed={1.4} />}
       <AbsoluteFill style={{ background: S.ink, opacity: O }} />
@@ -70,9 +89,9 @@ export const ShimmerPOV: React.FC<{ subtitles?: boolean }> = ({
               opacity: 1 - vanish,
             }}
           >
-            <ShopTake f={f} />
+            <ShopTake f={f} targets={targets} />
             <div style={{ position: "absolute", left: 40, top: 40 }}>
-              <Annotation f={f} />
+              <Annotation f={f} dockBottom={targets.recapBottom} />
             </div>
           </AbsoluteFill>
           {Y > 0 && Y < 1080 && Y !== 900 && (

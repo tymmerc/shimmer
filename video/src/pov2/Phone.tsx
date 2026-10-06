@@ -1,8 +1,8 @@
 import React from "react";
 import { spring } from "remotion";
 import { loadFont as loadInter } from "@remotion/google-fonts/Inter";
-import { FILM } from "./script";
 import { EZ, lerp, seg, typed } from "./timeline";
+import { useVariant, type Variant } from "./variant";
 
 /**
  * S01 : la conversation de Camille avec Julien, dans une messagerie de
@@ -59,9 +59,10 @@ const PAD_Y = 14;
 const PAD_X = 24;
 const bubbleH = (lines: number) => lines * LH + 2 * PAD_Y;
 
-const msgLines = FILM.msgBody.split(/(?<=\.) /);
+const linesOf = (v: Variant) => v.chat.msg.split(/(?<=\.) /);
 
 export const PhoneChat: React.FC<{ f: number; fps: number }> = ({ f, fps }) => {
+  const v = useVariant();
   const T = PHONE_T;
   const enter = spring({
     frame: f - T.enter,
@@ -119,10 +120,10 @@ export const PhoneChat: React.FC<{ f: number; fps: number }> = ({ f, fps }) => {
             color: C.text,
           }}
         >
-          <Thread f={f} fps={fps} />
-          <Header />
-          <StatusBar />
-          <InputBar f={f} />
+          <Thread v={v} f={f} fps={fps} />
+          <Header v={v} />
+          <StatusBar v={v} />
+          <InputBar v={v} f={f} />
           <Keyboard />
           {/* capteur photo */}
           <div
@@ -156,7 +157,7 @@ const Frame: React.FC = () => (
   />
 );
 
-const StatusBar: React.FC = () => (
+const StatusBar: React.FC<{ v: Variant }> = ({ v }) => (
   <div
     style={{
       position: "absolute",
@@ -174,7 +175,7 @@ const StatusBar: React.FC = () => (
       letterSpacing: "-0.01em",
     }}
   >
-    <span>{FILM.msgTime}</span>
+    <span>{v.chat.time}</span>
     <svg width="150" height="30" viewBox="0 0 150 30">
       {[0, 1, 2, 3].map((i) => (
         <rect
@@ -225,7 +226,7 @@ const StatusBar: React.FC = () => (
   </div>
 );
 
-const Header: React.FC = () => (
+const Header: React.FC<{ v: Variant }> = ({ v }) => (
   <div
     style={{
       position: "absolute",
@@ -280,7 +281,7 @@ const Header: React.FC = () => (
         justifyContent: "center",
       }}
     >
-      {FILM.msgFrom[0]}
+      {v.chat.from[0]}
     </div>
     <div
       style={{
@@ -294,7 +295,7 @@ const Header: React.FC = () => (
         color: C.text,
       }}
     >
-      {FILM.msgFrom}
+      {v.chat.from}
       <span style={{ color: C.mute, marginLeft: 6, fontSize: 20 }}>›</span>
     </div>
   </div>
@@ -311,8 +312,9 @@ interface Item {
   node: React.ReactNode;
 }
 
-const Thread: React.FC<{ f: number; fps: number }> = ({ f, fps }) => {
+const Thread: React.FC<{ v: Variant; f: number; fps: number }> = ({ v, f, fps }) => {
   const T = PHONE_T;
+  const msgLines = linesOf(v);
   const sp = (at: number, stiff = 170) =>
     spring({
       frame: f - at,
@@ -352,13 +354,13 @@ const Thread: React.FC<{ f: number; fps: number }> = ({ f, fps }) => {
     ),
   });
   const items: Item[] = [
-    dateSep("yday", FILM.chat.ydayDay, FILM.chat.ydayTime, 0),
+    dateSep("yday", v.chat.ydayDay, v.chat.ydayTime, 0),
     {
       key: "out0",
       h: bubbleH(1),
       grow: 1,
       gapTop: 20,
-      node: <Bubble side="out" lines={[FILM.chat.out0]} />,
+      node: <Bubble side="out" lines={[v.chat.out0]} />,
     },
     {
       key: "date",
@@ -374,8 +376,8 @@ const Thread: React.FC<{ f: number; fps: number }> = ({ f, fps }) => {
             lineHeight: "40px",
           }}
         >
-          <span style={{ fontWeight: 600 }}>{FILM.chat.day}</span>{" "}
-          {FILM.chat.time}
+          <span style={{ fontWeight: 600 }}>{v.chat.day}</span>{" "}
+          {v.chat.dayTime}
         </div>
       ),
     },
@@ -384,14 +386,14 @@ const Thread: React.FC<{ f: number; fps: number }> = ({ f, fps }) => {
       h: bubbleH(1),
       grow: 1,
       gapTop: 20,
-      node: <Bubble side="in" lines={[FILM.chat.in1]} />,
+      node: <Bubble side="in" lines={[v.chat.in1]} />,
     },
     {
       key: "out1",
       h: bubbleH(1),
       grow: 1,
       gapTop: 20,
-      node: <Bubble side="out" lines={[FILM.chat.out1]} />,
+      node: <Bubble side="out" lines={[v.chat.out1]} />,
     },
     {
       key: "in2",
@@ -410,7 +412,7 @@ const Thread: React.FC<{ f: number; fps: number }> = ({ f, fps }) => {
       h: bubbleH(1),
       grow: replyIn,
       gapTop: 20,
-      node: <Bubble side="out" lines={[FILM.chat.reply]} pop={replyIn} />,
+      node: <Bubble side="out" lines={[v.chat.reply]} pop={replyIn} />,
     },
     {
       key: "delivered",
@@ -427,7 +429,7 @@ const Thread: React.FC<{ f: number; fps: number }> = ({ f, fps }) => {
             lineHeight: "30px",
           }}
         >
-          {FILM.chat.delivered}
+          {v.chat.delivered}
         </div>
       ),
     },
@@ -546,9 +548,9 @@ const Typing: React.FC<{ f: number; pop: number }> = ({ f, pop }) => (
   </div>
 );
 
-const InputBar: React.FC<{ f: number }> = ({ f }) => {
+const InputBar: React.FC<{ v: Variant; f: number }> = ({ v, f }) => {
   const T = PHONE_T;
-  const text = f < T.send ? typed(f, FILM.chat.reply, T.reply) : "";
+  const text = f < T.send ? typed(f, v.chat.reply, T.reply) : "";
   const focused = f >= T.focus;
   const caretOn = focused && Math.floor((f - T.focus) / 8) % 2 === 0;
   const hasText = text.length > 0;

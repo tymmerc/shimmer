@@ -1,16 +1,15 @@
 import React from "react";
 import { spring } from "remotion";
 import { FONT, S } from "../pov/brand";
-import { FILM } from "./script";
+import { BRAND } from "./script";
 import { EZ, lerp, seg } from "./timeline";
 import { Line, useTextWidth } from "./type";
 import { camAt, toWin } from "./camera";
+import { useVariant } from "./variant";
 
-/** Bas du dock dans l’état du récap (confirmation), px viewport. */
-// Bas réel du dock pendant le récap (confirmation + 2 lignes + réponse sur 3
-// lignes), mesuré sur l’image rendue le 30/09 : 429,7 px. Avant : 484 (hauteur
-// max du dock), le cadre descendait 54 px sous le dock (retour de Tym).
-const DOCK_BOTTOM_D5 = 430;
+// Bas du dock pendant le récap : mesuré sur le dock rendu (targets.tsx). Film 1 :
+// 429,7 px sur l’image du 30/09 ; avant, 484 (hauteur max) faisait descendre le
+// cadre 54 px sous le dock (retour de Tym).
 
 const BIG = 110;
 
@@ -67,7 +66,7 @@ export const Brand: React.FC<{ f: number; fps: number }> = ({ f, fps }) => {
         }}
       >
         <span ref={refC} style={{ ...measure, fontWeight: 400 }}>
-          {FILM.reveal}
+          {BRAND.reveal}
         </span>
         <span ref={refS} style={{ ...measure, fontWeight: 500 }}>
           Shimmer.
@@ -95,7 +94,7 @@ export const Brand: React.FC<{ f: number; fps: number }> = ({ f, fps }) => {
               transform: `translateY(${(1 - cetait) * 110}%)`,
             }}
           >
-            {FILM.reveal}
+            {BRAND.reveal}
           </div>
         </div>
       )}
@@ -138,9 +137,13 @@ export const Brand: React.FC<{ f: number; fps: number }> = ({ f, fps }) => {
  * avec un projecteur : le reste de la page s'assombrit. Annotation vidéo,
  * après la fin de l'histoire, jamais dans le dock. Suit la caméra.
  */
-export const Annotation: React.FC<{ f: number }> = ({ f }) => {
+export const Annotation: React.FC<{ f: number; dockBottom: number }> = ({
+  f,
+  dockBottom,
+}) => {
+  const v = useVariant();
   if (f < 1310 || f > 1424) return null;
-  const cam = camAt(f);
+  const cam = camAt(v, f);
   const draw = seg(f, 1310, 1332, EZ.INOUT);
   const glow = seg(f, 1332, 1340);
   const grow = seg(f, 1336, 1356, EZ.INOUT);
@@ -149,7 +152,7 @@ export const Annotation: React.FC<{ f: number }> = ({ f }) => {
   // Rectangle en px viewport : barre (460-980, 28-74) + 4 px, puis jusqu'au bas du dock (D5).
   const [x0, y0] = toWin(cam, 456, 24);
   const [x1, yBar] = toWin(cam, 984, 78);
-  const [, yDock] = toWin(cam, 984, DOCK_BOTTOM_D5 + 4);
+  const [, yDock] = toWin(cam, 984, dockBottom + 4);
   const y1 = lerp(yBar, yDock, grow);
   const rx = lerp(27 * cam.m, 16 * cam.m, grow);
   return (
@@ -193,7 +196,7 @@ export const Annotation: React.FC<{ f: number }> = ({ f }) => {
         strokeDashoffset={1 - draw}
         opacity={1 - out}
         style={{
-          filter: `drop-shadow(0 0 ${14 * glow}px rgba(98,255,184,${0.45 * glow}))`,
+          filter: `drop-shadow(0 0 ${14 * glow}px rgba(${S.acidRgb},${0.45 * glow}))`,
         }}
       />
     </svg>
@@ -206,9 +209,10 @@ export const Annotation: React.FC<{ f: number }> = ({ f }) => {
  * d'autre : retour de Tym du 30/09, l'ancien carton était trop chargé.
  */
 export const EndCard: React.FC<{ f: number }> = ({ f }) => {
+  const v = useVariant();
   if (f < 1455) return null;
   const grad = seg(f, 1455, 1475, EZ.OUT);
-  const tl = FILM.tagline;
+  const tl = BRAND.tagline;
   const l1 = tl[0].map((w, i) => ({ w, at: 1486 + i * 3 }));
   const l2at = [1494, 1500, 1506, 1509];
   const l2 = tl[1].map((w, i) => ({
@@ -219,7 +223,7 @@ export const EndCard: React.FC<{ f: number }> = ({ f }) => {
   const l3 = tl[2].map((w, i) => ({ w, at: 1516 + i * 3 }));
   const url = seg(f, 1534, 1548, EZ.OUT);
   const ul = seg(f, 1540, 1558, EZ.SITE);
-  const hasUrl = FILM.url.length > 0;
+  const hasUrl = BRAND.url.length > 0;
   // Sans adresse, la mention prend son créneau : lisible près de 3 s avant la fin.
   const disc = hasUrl ? seg(f, 1546, 1560) : seg(f, 1534, 1548);
   return (
@@ -270,7 +274,7 @@ export const EndCard: React.FC<{ f: number }> = ({ f }) => {
             whiteSpace: "nowrap",
           }}
         >
-          {FILM.url}
+          {BRAND.url}
           <div
             style={{
               height: 2,
@@ -296,7 +300,7 @@ export const EndCard: React.FC<{ f: number }> = ({ f }) => {
           whiteSpace: "nowrap",
         }}
       >
-        {FILM.disclosure}
+        {v.disclosure}
       </div>
     </>
   );
